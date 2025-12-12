@@ -1,6 +1,6 @@
 # SimpleLink™ WIFI SDK Examples
 
-This repository contains Core SDK examples for TI devices supported by the
+This repository contains SDK examples for TI devices supported by the
 SimpleLink WIFI SDK. To learn which devices are supported
 by each SDK, refer to the [SDK Device Association section](#sdk-association).
 
