@@ -1,0 +1,3 @@
+[submodule "Simplelink-wifi-sdk"]
+	path = Simplelink-wifi-sdk
+	url = https://github.com/TexasInstruments/simplelink-wifi-sdk.git
