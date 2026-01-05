@@ -24,7 +24,7 @@ one step like this:
 
 ```bash
 # To initialize and update the WIFI SDK
-.../simplelink-coresdk_wifi-examples$ git submodule update --init simplelink-wifi-sdk
+.../simplelink-coresdk_wifi-examples$ git submodule update --init Simplelink-wifi-sdk
 ```
 
 Alternatively you can initialize/update _all_ submodules when cloning a repo
@@ -122,4 +122,4 @@ are provided for. Note that TI does not provide boards for every device, so in
 some cases you may need to SysConfig-migrate an example from a similar board to
 your specific device.
 
-* [SimpleLink WIFI boards](images/simplelink_wifi_f3_sdk.md)
+* [SimpleLink WIFI boards](images/simplelink_wifi_sdk.md)
