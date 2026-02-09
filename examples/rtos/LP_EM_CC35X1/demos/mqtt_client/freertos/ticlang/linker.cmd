@@ -34,6 +34,7 @@
 #include "ti_build_linker.cmd.toolbox"
 
 --retain=".resetVecs"
+
 -stack 0x2FF0
 -heap  0x0
 
@@ -62,7 +63,6 @@ MEMORY
      * ARM memory map: https://developer.arm.com/documentation/ddi0337/e/memory-map/about-the-memory-map*/
     LOG_DATA (R) : origin = 0x90000000,                          length = 0x40000        /* 256 KB */
     LOG_PTR  (R) : origin = 0x94000008,                          length = 0x40000        /* 256 KB */
-
 }
 
 SECTIONS
@@ -77,6 +77,9 @@ SECTIONS
         .cram:   {} palign(4)
         .text:   {} palign(4)   /* This is where code resides */
         .rodata: {} palign(4)   /* This is where const's go */
+    } > FLASH_NON_SECURE
+
+    GROUP {
         .binit:  {} palign(4)
         .cinit:  {} palign(4)
     } > FLASH_NON_SECURE
@@ -94,6 +97,10 @@ SECTIONS
     } > DRAM_NON_SECURE | TCM_DRAM_NON_SECURE
 
     GROUP {
+        .ramVecs: {} palign(512) (NOLOAD)
+    } > TCM_CRAM_NON_SECURE
+
+    GROUP {
         .connectivity_shared_status_section: {} palign(4) (NOLOAD)
     } > CONNECTIVITY_SHARED_MEM
 
@@ -102,6 +109,4 @@ SECTIONS
     } > BOOT_REPORT_SHARED_MEM
 
     .log_data       :   > LOG_DATA, type = COPY
-    .log_ptr        : { *(.log_ptr*) } > LOG_PTR align 4, type = COPY
 }
-

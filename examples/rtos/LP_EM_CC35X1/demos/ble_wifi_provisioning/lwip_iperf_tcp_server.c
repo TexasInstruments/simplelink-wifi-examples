@@ -59,7 +59,6 @@
 
 
 extern session_conn_t iperf_session[];
-extern int32_t canSend;
 
 // Forward declarations
 static err_t iperflwip_tcp_accept(void *arg, struct tcp_pcb *newpcb, err_t err);
@@ -208,26 +207,28 @@ static err_t iperflwip_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
 
     session_con->poll_count = 0;
 
-    struct pbuf *q = p;
-    while (q != NULL) {
-            session_con->total_bytes += q->len;
-            session_con->bytes_per_period += q->len;;
-            q = q->next;
-        }
-
     //Ack that data received
     tcp_recved(tpcb, p->tot_len);
+
+    session_con->total_bytes += p->tot_len;
+    session_con->bytes_per_period += p->tot_len;
     pbuf_free(p);
 
+    //for fairness, verify if there is client which has something to send
     for(i=1; i<IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS+1; i++)
     {
         if(iperf_session[i].is_running &&
                 !iperf_session[i].is_server &&
-                !iperf_session[i].is_udp &&
                 iperf_session[i].conn_pcb_tcp)
         {
-            canSend = 1;
-            iperflwip_tcp_client_tx(&iperf_session[i]);
+            if(iperf_session[i].is_udp)
+            {
+                iperflwip_udp_client_tx(&iperf_session[i]);
+            }
+            else
+            {
+                iperflwip_tcp_client_tx(&iperf_session[i]);
+            }
         }
     }
     return ERR_OK;

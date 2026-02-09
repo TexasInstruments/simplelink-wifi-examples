@@ -24,8 +24,6 @@
             -I${PROJECT_ROOT}/${ConfigName}
             -Ofast
             -DCC35XX
-            -DRAM_CONTAINER
-            -DSNTP_SUPPORT
             -DNVOCMP_POSIX_MUTEX
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/mbedtls/include
@@ -41,7 +39,6 @@
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/wifi_stack/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt
-            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/tools/TI_Containers
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-stack/src/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/ti_config/lwip-port/osi/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-contrib
@@ -128,6 +125,10 @@
         <file path="../../network_mbedtls.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../network_lwip.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../date_time_service.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../date_time_service.h" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../nimble_host_provisioning.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>

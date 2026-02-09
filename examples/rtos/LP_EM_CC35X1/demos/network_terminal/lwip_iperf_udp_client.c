@@ -65,7 +65,7 @@ extern session_conn_t iperf_session[];
 
 // Forward declarations
 static void iperflwip_client_udp_init(void *param);
-static void  iperflwip_udp_client_tx(void* arg);
+void  iperflwip_udp_client_tx(void* arg);
 int32_t iperflwip_udp_client_start(void* args);
 
 extern void format_bps(double bps, char *output, size_t size);
@@ -161,7 +161,21 @@ void udp_client_task(void *arg) {
     uint32_t now;
     uint32 Bandwidth_byte_per_100_mili;
     uint64_t number_of_bytes_send_from_last_mili;
+    uint32_t packetLength;
 
+    if (session_con->lwipConfig.packetLength > 0)
+    {
+        packetLength = session_con->lwipConfig.packetLength;
+
+        if (packetLength > SEND_BUFFER_SIZE_UDP_CLIENT)
+        {
+            packetLength = SEND_BUFFER_SIZE_UDP_CLIENT;
+        }
+    } 
+    else 
+    {
+        packetLength = SEND_BUFFER_SIZE_UDP_CLIENT;
+    }
 
     session_con->total_bytes =0;
     session_con->bytes_per_period =0;
@@ -170,7 +184,8 @@ void udp_client_task(void *arg) {
     Bandwidth_byte_per_100_mili =  (uint32_t)((uint64_t)session_con->target_Bps/10);//bytes per 100 mili
     //Report("\n\r Bandwidth_byte_per_100_mili:%d bytes ",
     //        Bandwidth_byte_per_100_mili);
-
+    session_con->previous_time = osi_GetTimeMS();
+    session_con->start_time = osi_GetTimeMS();
     throughput_timer = osi_GetTimeMS();
 
     while (session_con->is_running)
@@ -199,7 +214,7 @@ void udp_client_task(void *arg) {
             {
                 session_con->number_of_bytes_to_send_on_current_tx =
                         MIN(Bandwidth_byte_per_100_mili - number_of_bytes_send_from_last_mili,
-                                SEND_BUFFER_SIZE_UDP_CLIENT);
+                                packetLength);
                 //Report("\n\r number_of_bytes_to_send_on_current_tx:%d ",
                 //      session_con->number_of_bytes_to_send_on_current_tx);
                 tcpip_callback(iperflwip_udp_client_tx,(void *) session_con);
@@ -211,7 +226,7 @@ void udp_client_task(void *arg) {
         {
             if(osi_GetFreeHeapSize() > HEAP_THRESHOLD_FOR_TX)
             {
-                session_con->number_of_bytes_to_send_on_current_tx = SEND_BUFFER_SIZE_UDP_CLIENT;
+                session_con->number_of_bytes_to_send_on_current_tx = packetLength;
                 tcpip_callback(iperflwip_udp_client_tx,(void *) session_con);
             }
         }
@@ -274,7 +289,7 @@ static void  lwiperf_udp_client_recv(void *arg, struct udp_pcb *pcb,
 
 
 // Send function: chunked sending as fast as possible
-static void  iperflwip_udp_client_tx(void* arg)
+void  iperflwip_udp_client_tx(void* arg)
 {
     struct pbuf *p;
     session_conn_t* session_con = arg;
@@ -282,6 +297,10 @@ static void  iperflwip_udp_client_tx(void* arg)
     uint32_t len = session_con->number_of_bytes_to_send_on_current_tx;
 
     // Allocate a pbuf
+    if(len == 0){
+        return;
+    }
+
     p = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_POOL);
     if (!p) {
         Report("\n\rFailed to allocate pbuf\n");
@@ -341,10 +360,11 @@ static void iperflwip_send_udp_client_iperf_fin(session_conn_t* session_con)
 // Timer expired -> test done
 static void iperflwip_report(void* arg)
 {
-    uint64_t secondsFromStart, durationInSecond;
-    float bps;
     char ratestr[IPERF_LWIP_MAX_FORMAT_RATE_LENGTH];
     session_conn_t* session_con = (session_conn_t*)arg;
+    double secondsFromStart, durationInSecond;
+    uint32_t current_time;
+    double bps = 0.0;
 
 
     if (session_con->is_running && session_con->conn_pcb_udp != NULL)
@@ -354,14 +374,18 @@ static void iperflwip_report(void* arg)
 
         if(session_con->lwipConfig.period)
         {
-            durationInSecond = session_con->actualTestdurationMs / 1000.0f;
-
-            bps = (session_con->bytes_per_period * 8)/durationInSecond;
+            current_time = osi_GetTimeMS();
+            uint32_t delta_ms = current_time - session_con->previous_time;
+            durationInSecond = (double)delta_ms / 1000.0;
+            if(durationInSecond){
+                bps = ((double)session_con->bytes_per_period * 8.0) / durationInSecond;
+            }
 
             format_bps(bps,ratestr, sizeof(ratestr));
             Report("\n\r[%d] %s",session_con->process_num,ratestr);
         }
 
+        session_con->previous_time = osi_GetTimeMS();
         session_con->bytes_per_period = 0;
 
         if (!session_con->is_req_to_abort_test && ((session_con->lwipConfig.timeout >= 99999) ||
@@ -375,14 +399,24 @@ static void iperflwip_report(void* arg)
         }
         else
         {
-            secondsFromStart = (session_con->actualTestdurationMs* session_con->actualNumOfDurations)/1000;
+            uint32_t  curr_time = osi_GetTimeMS();
+            secondsFromStart = ((double)(curr_time - session_con->start_time));
+            Report("\n\riperflwip: [%d] UDP client Test finished",session_con->process_num);
+            if(secondsFromStart > 0)
+            {
+                secondsFromStart=secondsFromStart/1000.0;
+                bps = ((session_con->total_bytes * 8.0)/secondsFromStart);
+                format_bps(bps,ratestr, sizeof(ratestr));
+            }
+            else
+            {
+                bps = 0;
+                snprintf(ratestr, sizeof(ratestr), "0 bps");
+            }
+            Report("\n\riperf UDP client :  %lu total bytes duration :%lu sec", (unsigned long )session_con->total_bytes,(unsigned long )secondsFromStart);
+            Report("\t %s \n", ratestr);
 
             Report("\n\riperflwip: [%d] UDP client Test finished, udp fin send to the server",session_con->process_num);
-
-            bps = (session_con->total_bytes * 8)/secondsFromStart;
-            format_bps(bps,ratestr, sizeof(ratestr));
-            Report("\n\riperf UDP client :  %lu total bytes duration :%lu sec", (unsigned long )session_con->total_bytes,secondsFromStart);
-            Report("\t %s \n", ratestr);
             iperflwip_send_udp_client_iperf_fin(session_con);
             iperflwip_udp_client_close(session_con);
         }

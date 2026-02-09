@@ -34,6 +34,7 @@ Power.policyFunction = "PowerWFF3_doWFI";
 
 UART21.$name                     = "CONFIG_UART2_0";
 UART21.$hardware                 = system.deviceData.board.components.XDS110UART;
+UART21.rxRingBufferSize          = 128;
 UART21.uart.dmaTxChannel.$assign = "DMA_CH2";
 UART21.uart.dmaRxChannel.$assign = "DMA_CH3";
 

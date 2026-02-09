@@ -104,6 +104,8 @@ typedef struct appControlBlock_t
     uint32_t Role;
      /* This field keeps the device's role (STA, P2P or AP) */
     uint32_t ConnectedStations;
+    /* This field keeps the P2P Group Type */
+    uint32_t P2pGroupType;
     /* This flag lets the application to exit */
     uint32_t Exit;
     /* Sets the number of Ping attempts to send */

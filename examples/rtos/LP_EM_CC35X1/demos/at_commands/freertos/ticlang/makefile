@@ -32,8 +32,6 @@ CFLAGS += -I../.. \
     -I../../atcmd/utils \
     -Ofast \
     -DCC35XX \
-    -DRAM_CONTAINER \
-    -DSNTP_SUPPORT \
     -DNVOCMP_POSIX_MUTEX \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/mbedtls/include" \
@@ -49,7 +47,6 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt" \
-    "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/tools/TI_Containers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-stack/src/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/ti_config/lwip-port/osi/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-contrib" \

@@ -60,6 +60,7 @@ SECTIONS
 {
     /* Reserved for bootloader metadata - application starts at 0x2000 */
     .reserved (0x14000000) (NOLOAD) : {
+        __image_start = .;
         . += 0x2000;
     } > FLASH_INT_VEC
     
@@ -67,7 +68,7 @@ SECTIONS
     .resetVecs : {
         KEEP (*(.resetVecs))
     } > FLASH_INT_VEC
-    
+
     /* Code sections */
     .text : {
         CREATE_OBJECT_SYMBOLS

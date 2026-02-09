@@ -8,7 +8,7 @@
  $Target Device: DEVICES $
 
  ******************************************************************************
- $License: BSD3 2025 $
+ $License: BSD3 2018-2025 $
  ******************************************************************************
  $Release Name: PACKAGE NAME $
  $Release Date: PACKAGE RELEASE DATE $
@@ -22,8 +22,11 @@
     #include <stddef.h>
 #endif
 
+#include <ti/devices/DeviceFamily.h>
+#if (DeviceFamily_PARENT == DeviceFamily_PARENT_CC35XX)
 /* Driver configuration */
 #include "ti_drivers_config.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -99,9 +102,10 @@ status = nvFps.readItem(id, 0, len, buf);
 #define NVINTF_NO_SIG     14
 
 #ifdef ENABLE_SPS
-#define NVINTF_AESOPEN_FAIL     15
+#define NVINTF_PSAINIT_FAIL     15
 #define NVINTF_ENCRYPTION_FAIL  16
 #define NVINTF_DECRYPTION_FAIL  17
+#define NVINTF_PSAKEY_DER_FAIL  18
 #endif
 
 // doNext flag options

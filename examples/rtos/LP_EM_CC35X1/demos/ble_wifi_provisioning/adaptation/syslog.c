@@ -39,7 +39,7 @@
 
 UART2_Handle logger = NULL;
 
-#define SYSLOG_STRING_LIMIT  500
+#define SYSLOG_STRING_LIMIT  256
 
 
 int32 logger_write(char *buf, uint32 len);

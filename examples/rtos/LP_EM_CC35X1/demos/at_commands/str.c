@@ -63,6 +63,11 @@ const char *wlan_role_up_ap_t_optionDetailsStr    = "\n\r\t-t\tType of security 
 const char *wlan_role_up_ap_w_optionDetailsStr    = "\n\r\t-w\tSAE PWE Type "
                                           "(SAE PWE = "
                                           "0 - hunting-and-pecking, 1 - hash-to-element, 2 - both)\n\r";
+const char *wlan_role_up_ap_a_optionDetailsStr    = "\n\r\t-a\tSAE anti clogging threshold \n\r"
+                                                    "\t\t(anti clogging threshold = [DEFAULT, ALWAYS, LOW])\n\r";
+const char *wlan_role_up_ap_b_optionDetailsStr    = "\n\r\t-b\tTransition disable \n\r"
+                                                    "\t\t(Transition disable = 0 - Default, 1 - Enabled)\n\r";
+
 #endif // CC35XX	
 const char *wlan_role_up_ap_DetailsStr    = "Role up device as AP.\n\r\t"
                                             "Note: CC350X devices do not support 5Ghz, therefore choosing a 5GHz operating channel will fail.\n\r";
@@ -213,6 +218,13 @@ const char *wlanSetPmModeDetailsStrAlwaysActive  = "Set power management mode:\n
 const char *wlanSetPmModeDetailsStrPowerDown     = "\t1 - Power down mode (light / fast sleep)\n\r\t";
 const char *wlanSetPmModeDetailsStrELP           = "\t2 - ELP mode (Deep / Max sleep)\n\r";
 const char *wlanSetPmMode_m_optionDetailsStr     = "\n\r\t-m\tMode, if device not started error is return\n\r";
+
+#ifdef CC33XX
+/* Set Channel List */
+const char SetChListStr[]                        = "wlan_set_channels";
+const char SetChListUsageStr[]                   = " [-help] [-n <number of channels>], [-l <channels list>]\n\r";
+const char *wlanSetChListStr                     = "Set Channel list to be used for scan/connect \n\r";
+#endif
 
 /* Set Interface Ip mode     */
 const char SetInterfaceIpStr[]                   ="wlan_set_if_ip";
@@ -380,7 +392,7 @@ const char iperf_t_optionDetailsStr[]   = "\n\r\t-t\t time in second to run, def
 
 const char TestIperf[]           = "iperf";
 const char recvTestIperfDetailsStr[]    = "To receive/send iperf packets over network.\n\r";
-const char recvTestIperfUsage2Str[]     = " [-help] [-s] [-c <server ip address>] [-p <port number>] [-i <number>] [-t <time in sec> >99999 endless>][-B <server ip>] \n\r";
+const char recvTestIperfUsage2Str[]     = " [-help] [-s] [-c <server ip address>] [-p <port number>] [-i <number>] [-t <time in sec> >99999 endless>][-B <server ip>] [-l <packet length>] \n\r";
 const char *recvTestIperf_s_optionDetailsStr   = send_s_optionDetailsStr;
 const char *recvTestIperf_c_optionDetailsStr   = send_c_optionDetailsStr;
 const char *recvTestIperf_p_optionDetailsStr   = send_p_optionDetailsStr;
@@ -388,7 +400,8 @@ const char *recvTestIperf_u_optionDetailsStr   = send_u_optionDetailsStr;
 const char recvTestIperf_i_optionDetailsStr[]   = "\n\r\t-i\t set the interval in second , 1 means sec\n\r";
 const char *recvTestIperf_t_optionDetailsStr   = iperf_t_optionDetailsStr;
 const char *recvTestIperf_b_optionDetailsStr   = "\n\r\t-b\t set the max udp client bandwidth in Mbps , 0 means no limit\n\r";
-const char *recvTestIperf_B_optionDetailsStr   = "\n\r\t-B\t binds the server to a specific local IP";
+const char *recvTestIperf_B_optionDetailsStr   = "\n\r\t-B\t binds the server to a specific local IP\n\r";
+const char *recvTestIperf_l_optionDetailsStr   = "\n\r\t-l\t length in bytes of packet to send";
 
 
 const char StopTestIperf[]           = "iperf_stop";
@@ -493,9 +506,12 @@ const char wlanP2PCancelStr[]       =  "p2p_cancel";
 
 const char *wlan_p2p_connect_DetailsStr    = "P2P connect .\n\r";
 const char wlan_p2p_connect_UsageStr_first[]   =   " [-help]\n\r";
-const char wlan_p2p_connect_UsageStr_second[]  =   "[-m <peer_macAdress>]\n\r"
-                                             "[-w <wps_method [0 1 2]>] 0=PBC 1=PIN DISPLAY 2= PIN keypad\n\r"
-                                             "[-p <pin_code>]\n\r";
+const char wlan_p2p_connect_UsageStr_second[]  =   "[-m <peer_macAdress>] "
+                                             "[-w <wps_method [0/1/2]>] "
+                                             "[-p \"<pin_code>]\" -t [timeout in seconds]\n\r";
+const char wlan_p2p_connect_w_optionDetailsStr[] = "\n\r\t-w\t WPS Method : 0=PBC 1=PIN DISPLAY 2= PIN keypad \n\r";
+const char wlan_p2p_connect_p_optionDetailsStr[] = "\n\r\t-p\t PIN : 8 digit \n\r";
+const char wlan_p2p_connect_t_optionDetailsStr[] = "\n\r\t-t\t timeout in seconds \n\r";   
 
 const char *wlan_p2p_find_stop_DetailsStr =   "P2P stop find .\n\r";
 
@@ -522,6 +538,12 @@ const char startApWpsDetailsStr[]               = "Start an AP WPS session \n\r"
 const char startApWps_w_optionDetailsStr[]      = "\n\r\t-w\tWPS method (0=PBC, 1=PIN) \n\r";
 const char startApWps_p_optionDetailsStr[]      = "\n\r\t-p\t8-digit PIN code, required for WPS PIN method \n\r";
 
+/* Set WPS AP PIN */
+const char setWpsApPinStr[]                      = "set_wps_ap_pin";
+const char setWpsApPinUsageStr[]                 = " [-help] [-p <pin_code>] [-t <timeout>]\n\r";
+const char setWpsApPinDetailsStr[]               = "Set WPS AP PIN \n\r";
+const char setWpsApPin_t_optionDetailsStr[]      = "\n\r\t-t\ttimeout (0 - permanent)\n\r";
+const char setWpsApPin_p_optionDetailsStr[]      = "\n\r\t-p\t8-digit PIN code \n\r";
 
 const char SetWsocPrimaryStr[]        = "set_wsoc_primary";
 const char SetWsocPrimaryUsageStr[]   = " [-help] [-i <SlotNumber>] \n\r";
@@ -723,6 +745,10 @@ const  char PEAP0_MSCHAP_str[]       = "PEAP0_MSCHAP";
 const  char PEAP0_GTC_str[]          = "PEAP0_GTC";
 const  char PEAP2_MSCHAP_str[]       = "PEAP2_MSCHAP";
 const  char PEAP2_GTC_str[]          = "PEAP2_GTC";
+
+const char DEFAULT_str[]             = "DEFAULT";
+const char ALWAYS_str[]              = "ALWAYS";
+const char LOW_str[]                 = "LOW";
 
 const char *MangmentFrames_str[]    =
 {"ASSOCIATION REQ", "ASSOCIATION RESPONSE", "REASSOCIATION REQ" ,

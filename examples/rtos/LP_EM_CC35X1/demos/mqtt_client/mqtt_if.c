@@ -33,6 +33,7 @@
 #include "lwip/apps/mqtt.h"
 #include "osi_kernel.h"
 #include "dns_if.h"
+#include "lwip/apps/mqtt_priv.h"
 
 
 #ifdef MQTT_LED_INDEX
@@ -128,10 +129,14 @@ static void LwipCB_mqttConnectComplete(mqtt_client_t *pMqttClient, void *arg, mq
 static void LwipCB_mqttIncomingData(void *arg, const u8_t *data, u16_t len, u8_t flags)                   //updated
 {
     mqttIfClient_t *pClient = (mqttIfClient_t*)arg;
+    mqtt_client_t *lwipClient = (mqtt_client_t*)pClient->hLWIPClient;
+    uint8_t qos_msg = (lwipClient->rx_buffer[0] >> 1) & 0x03;
 
-    UART_PRINT("IncomingData: %s, len=%d\n\r\n", pClient->pTopicFound->pTopic, len);
+    UART_PRINT("IncomingData: %s, len=%d , qos = %d\n\r\n", pClient->pTopicFound->pTopic, len, qos_msg);
+
     if(pClient->pTopicFound && pClient->pTopicFound->fUserCB)
     {
+        flags = qos_msg;
         pClient->pTopicFound->fUserCB(pClient->pTopicFound->pTopic, (uint8_t *)data, len, flags);
     }
     pClient->pTopicFound = NULL;
@@ -391,6 +396,7 @@ int MQTT_IF_subscribe(MQTTClient_Handle hClient, char* pTopic, unsigned int qos,
         pSub->pNext = pClient->pSubFirst;
         pClient->pSubFirst = pSub;
         LOCK_TCPIP_CORE();
+
         rc = mqtt_sub_unsub(pClient->hLWIPClient, pTopic, qos, LwipCB_mqttSubAck, pClient, 1);
         UNLOCK_TCPIP_CORE();
     }

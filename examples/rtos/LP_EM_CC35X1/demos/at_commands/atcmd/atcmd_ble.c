@@ -127,7 +127,7 @@ int32_t bleInit()
     }
     else
     {
-        ATCmd_errorResult(ATCmd_errorBleOperationStr, ret);
+        ATCmd_okResult();
     }
 
     return ret;
@@ -137,7 +137,25 @@ int32_t bleDeinit()
 {
     int32_t ret = 0;
 
-    ret = nimble_host_stop();
+    //Check if host was previously enabled
+    if (nimble_host_is_enabled())
+    {
+        ret = nimble_host_stop();
+
+        if (!nimble_host_is_enabled() && ret == 0)
+        {
+            ATCmd_okResult();
+        }
+        else
+        {
+            ATCmd_errorResult(ATCmd_errorBleOperationStr, ret);
+            ret = -1;
+        }
+    }
+    else
+    {
+        ATCmd_okResult();
+    }
 
     BleIf_CloseTransport();
 

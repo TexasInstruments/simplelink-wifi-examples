@@ -9,7 +9,7 @@
  $Target Device: DEVICES $
 
  ******************************************************************************
- $License: BSD3 2023 $
+ $License: BSD3 2023-2025 $
  ******************************************************************************
  $Release Name: PACKAGE NAME $
  $Release Date: PACKAGE RELEASE DATE $

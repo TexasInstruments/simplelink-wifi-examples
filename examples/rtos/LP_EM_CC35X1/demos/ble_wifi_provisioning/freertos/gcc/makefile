@@ -20,7 +20,7 @@ ifeq ($(VERBOSE), 1)
   V :=
 endif
 
-OBJECTS = ble_cmd.obj ble_wifi_provisioning.obj dhcpserver.obj cmd_parser.obj lwip_ping.obj lwip_iperf_examples.obj lwip_iperf_tcp_client.obj lwip_iperf_tcp_server.obj lwip_iperf_udp_client.obj lwip_iperf_udp_server.obj network_lwip.obj network_mbedtls.obj nimble_host_provisioning.obj socket_examples.obj str.obj wlan_cmd.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscalls_stubs.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
+OBJECTS = ble_cmd.obj ble_wifi_provisioning.obj dhcpserver.obj cmd_parser.obj lwip_ping.obj lwip_iperf_examples.obj lwip_iperf_tcp_client.obj lwip_iperf_tcp_server.obj lwip_iperf_udp_client.obj lwip_iperf_udp_server.obj network_lwip.obj network_mbedtls.obj date_time_service.obj nimble_host_provisioning.obj socket_examples.obj str.obj wlan_cmd.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscalls_stubs.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
 
 NAME = ble_wifi_provisioning
 
@@ -30,8 +30,6 @@ CFLAGS += -I../.. \
     $(addprefix @,$(SYSCFG_OPT_FILES)) \
     -O3 \
     -DCC35XX \
-    -DRAM_CONTAINER \
-    -DSNTP_SUPPORT \
     -DNVOCMP_POSIX_MUTEX \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     -D_REENT_SMALL \
@@ -48,7 +46,6 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt" \
-    "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/tools/TI_Containers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-stack/src/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/ti_config/lwip-port/osi/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-contrib" \
@@ -178,6 +175,10 @@ network_lwip.obj: ../../network_lwip.c $(SYSCFG_H_FILES)
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
 network_mbedtls.obj: ../../network_mbedtls.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+date_time_service.obj: ../../date_time_service.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 

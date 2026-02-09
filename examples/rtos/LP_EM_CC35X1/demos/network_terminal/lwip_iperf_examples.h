@@ -85,7 +85,6 @@ typedef struct
 
 #define IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS 5
 #define LOCAL_UDP_CLIENT_PORT  5006
-#define LOCAL_TCP_CLIENT_PORT  5006
 
 //FreeRtos provides only pdMS_TO_TICK
 #ifndef pdUS_TO_TICKS
@@ -105,6 +104,11 @@ int32_t printStopTestIperfUsage(void *arg);
 void iperflwip_tcp_close(void *arg);
 
 int8_t is_ip_addr_in_net_list(const ip_addr_t *addr);
+
+void  iperflwip_udp_client_tx(void* arg);
+err_t iperflwip_tcp_client_tx(session_conn_t* session_con);
+
+
 
 
 #endif

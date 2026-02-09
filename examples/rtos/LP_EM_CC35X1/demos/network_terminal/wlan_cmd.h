@@ -110,6 +110,12 @@ int32_t cmdSetPsModeCallback(void *arg);
 
 int32_t cmdGetPmModeCallback(void *arg);
 
+#ifdef CC33XX
+int32_t printSetChListUsage(void *arg);
+
+int32_t cmdSetSelectedScanChannelsCallback(void *arg);
+#endif
+
 int32_t printSetPmModeUsage(void *arg);
 
 int32_t cmdSetPmModeCallback(void *arg);
@@ -197,6 +203,10 @@ int32_t cmdStartApWpsCallback(void *arg);
 
 int32_t printStartApWpsUsage(void *arg);
 
+int32_t printSetWpsApPinUsage(void *arg);
+
+int32_t cmdSetWpsApPinCallback(void *arg);
+
 int32_t cmdSetWsocPrimaryCallback(void *arg);
 
 int32_t printSetWsocPrimaryUsage(void *arg);
@@ -225,6 +235,15 @@ int32_t cmdWlanGetRegDomainEntryCallback(void *arg);
 int32_t printWlanGetRegDomainEntryUsage(void *arg);
 
 #endif // CC35XX
+
+#ifdef SNTP_SUPPORT
+int32_t cmdSntpConfigServers(void *arg);
+int32_t printSntpConfigServersUsage(void *arg);
+int32_t cmdSntpUpdateDateTime(void *arg);
+int32_t printSntpUpdateDateTimeUsage(void *arg);
+int32_t ParseSntpConfigServersCmd(void *arg, uint32_t *pNumOfServers,char* serverIp[]);
+#endif
+
 
 int32_t printWlanStartUsage(void *arg);
 
@@ -371,8 +390,16 @@ int32_t isNetIFActive(void);
 
 void printFrameSubTyps(void);
 
+int32_t ParseSetDateTimeCmd(void *arg, uint32_t* pYear, uint32_t* pMonth,
+        uint32_t* pDay, uint32_t* pHour, uint32_t* pMinute,
+        uint32_t* pSecond);
+int32_t printSetDateTimeUsage(void *arg);
+
+
+#ifdef CC35XX_INDIGO_APP
 //Indigo 
-int32_t cmdloadCartificateCallback(void *arg);
-int32_t printloadCartificateUsage(void *arg);
+int32_t cmdloadCertificateCallback(void *arg);
+int32_t printloadCertificateUsage(void *arg);
+#endif
 
 #endif /* __WLAN_CMD_H__ */

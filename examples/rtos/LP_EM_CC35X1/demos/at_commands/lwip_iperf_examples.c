@@ -61,7 +61,6 @@ extern void udp_server_stop(session_conn_t* session_con);
 
 int32_t iperflwip_stop(void* args);
 
-int32_t canSend = 1;
 
 #define MAX_SEND_BUFFER_SIZE (TCP_MSS)
 session_conn_t iperf_session[IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS] = {0};
@@ -134,13 +133,12 @@ int32_t cmdStopTestIperfCallback(void *arg)
     memset(&stopCmd, 0x0, sizeof(stopCmd_t));
     ret = ParseStopTestIperfCmd(arg, &stopCmd);
 
-    Report("\r\nRequest to Stop iperf process number :%d", stopCmd.processNum );
-
     if (ret < 0)
     {
         return (-1);
     }
 
+    Report("\r\nRequest to Stop iperf process number :%d", stopCmd.processNum );
     ret = iperflwip_stop(&stopCmd.processNum);
     return ret;
 
@@ -230,6 +228,7 @@ int32_t printTestIperfUsage(void *arg)
     Report(recvTestIperf_t_optionDetailsStr);
     Report(recvTestIperf_b_optionDetailsStr);
     Report(recvTestIperf_B_optionDetailsStr);
+    Report(recvTestIperf_l_optionDetailsStr);
     Report(lineBreak);
     return (0);
 }
@@ -265,7 +264,6 @@ err_t lwiperf_tcp_poll(void *arg, struct tcp_pcb *tpcb)
     }
 
     if (!session_con->lwipConfig.server) {
-        canSend =1;
         iperflwip_tcp_client_tx(session_con);
     }
 

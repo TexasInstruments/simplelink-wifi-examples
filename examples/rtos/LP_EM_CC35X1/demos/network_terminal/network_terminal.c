@@ -69,6 +69,8 @@
 
 //LWIP
 #include "network_lwip.h"
+#include "date_time_service.h"
+
 
 //ERRORS
 #include "errors.h"
@@ -76,10 +78,6 @@
 #include "osi_kernel.h"
 #include "network_terminal.h"
 
-#include "date_time_service.h"
-#ifdef SNTP_SUPPORT
-#include "sntp_wrapper.h"
-#endif
 // Debug for total allocation
 #ifdef PRINT_DBG_TOTAL_MALLOC_FREE
 extern volatile UINT32 totalloc;
@@ -110,21 +108,9 @@ int32_t printClearUsage(void *arg);
 int32_t cmdHelpCallback(void *arg);
 int32_t printHelpUsage(void *arg);
 int32_t initAppVariables();
-#ifdef SNTP_SUPPORT
-int32_t cmdSntpConfigServers(void *arg);
-int32_t printSntpConfigServersUsage(void *arg);
-int32_t cmdSntpUpdateDateTime(void *arg);
-int32_t printSntpUpdateDateTimeUsage(void *arg);
-int32_t ParseSntpConfigServersCmd(void *arg, uint32_t *pNumOfServers,char* serverIp[]);
-#endif
 int32_t cmdSetDateTime(void *arg);
 int32_t cmdGetDateTime(void *arg);
-int32_t printSetDateTimeUsage(void *arg);
 int32_t printGetDateTimeUsage(void *arg);
-int32_t ParseSetDateTimeCmd(void *arg, uint32_t* pYear, uint32_t* pMonth,
-        uint32_t* pDay, uint32_t* pHour, uint32_t* pMinute,
-        uint32_t* pSecond);
-int32_t DisplayAppBanner(char* appName, char* appVersion);
 
 extern uint32_t ActiveNetIfBitMap;
 
@@ -190,6 +176,11 @@ cmdAction_t gCmdList[] =
 
 /* Set Power management  mode     */
 { SetPmModeStr,         cmdSetPmModeCallback,       printSetPmModeUsage         },
+
+#ifdef CC33XX
+/*Set Channel List*/
+{ SetChListStr, cmdSetSelectedScanChannelsCallback,  printSetChListUsage         },
+#endif
 
 /* Set Interface IP mode */
 { SetInterfaceIpStr,     cmdSetInterfaceIpCallback, printSetInterfaceIpUsage    },
@@ -816,6 +807,13 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED);
     }
     break;
+    case WLAN_EVENT_P2P_PEER_NOT_FOUND:
+    {
+        Report("\n\r[WLAN EVENT HANDLER][ERROR] WLAN_EVENT_P2P_PEER_NOT_FOUND\n\r");
+        osi_SyncObjSignal(&(app_CB.CON_CB.connectEventSyncObj));
+        CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED);
+    }
+    break;
 
 #endif
 
@@ -1335,60 +1333,3 @@ void *mainThread(void *args)
 }
 #endif // CC35XX
 
-#ifdef SNTP_SUPPORT
-int32_t cmdSntpConfigServers(void *arg)
-{
-    int32_t ret  = 0;
-    char  *serverIp[3];
-    uint32_t numOfServers;
-    int i;
-    ret = ParseSntpConfigServersCmd(arg, &numOfServers,serverIp);
-    if(ret < 0)
-    {
-        printSntpConfigServersUsage(arg);
-        return(0);
-    }
-    sntpWrapper_store_servers(numOfServers,serverIp[0],serverIp[1], serverIp[2]);
-    for(i=0; i<numOfServers; i++)
-    {
-        os_free(serverIp[i]);
-    }
-    return ret;
-}
-int32_t cmdSntpUpdateDateTime(void *arg)
-{
-    int32_t ret  = 0;
-
-    if (((!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT)) || (!IS_STA_CONNECTED(app_CB.Status)))
-            && (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_AP_BIT)))
-    {
-        Report("\n\rSTA/AP role is not up or connected.\n\r");
-        return -1;
-    }
-
-    ret = sntpWrapper_updateDateTime();
-    return ret;
-}
-#endif
-int32_t cmdSetDateTime(void *arg)
-{
-    int32_t ret  = 0;
-    uint32_t epochTime;
-    uint32_t year,month,day,hour, minute, second;
-
-    ret = ParseSetDateTimeCmd(arg, &year,&month,&day,&hour, &minute, &second);
-    if(ret < 0)
-    {
-        printSetDateTimeUsage(arg);
-        return(0);
-    }
-    epochTime =  datetime_to_epoch(year,month,day,hour, minute, second);
-    datetime_SecondsSet( epochTime);
-    return ret;
-}
-int32_t cmdGetDateTime(void *arg)
-{
-    int32_t ret  = 0;
-    datetime_printCurTime();
-    return ret;
-}

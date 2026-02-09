@@ -544,7 +544,7 @@ int32_t cmdBleStartCallback(void *arg)
         //Start NimBLE host (also enable the controller)
         ret = nimble_host_start();
 
-        if (nimble_host_is_enabled())
+        if (nimble_host_is_enabled() && ret == 0)
         {
             Report("\n\rBLE start success!\n\r");
         }
@@ -598,8 +598,24 @@ int32_t cmdBleStopCallback(void *arg)
 {
     int ret = 0;
 
-    //Stop the BLE Host
-    ret = nimble_host_stop();
+    //Check if host was previously enabled
+    if (nimble_host_is_enabled())
+    {
+        ret = nimble_host_stop();
+
+        if (!nimble_host_is_enabled() && ret == 0)
+        {
+            Report("\n\rBLE stop success!\n\r");
+        }
+        else
+        {
+            Report("\n\rBLE failed to stop, error: %d\n\r",ret);
+        }
+    }
+    else
+    {
+        Report("\n\rBLE is not currently running\n\r");
+    }
 
     //Close the BLE transport
     BleIf_CloseTransport();

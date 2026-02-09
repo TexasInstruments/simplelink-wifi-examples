@@ -177,6 +177,8 @@ typedef struct RecvCmd
     uint32_t timeout;
     /* limit udp client  bandwidth */
     uint32_t bandwidth; //Mbps
+    /* packet length bytes udp client */
+    uint32_t packetLength;
 }RecvCmd_t;
 
 typedef struct stopCmd
@@ -237,15 +239,27 @@ typedef struct DhcpParams_t {
     uint32_t    endAddress;
 } DhcpParams_t;
 
+#ifdef CC35XX_INDIGO_APP
 typedef struct LoadCertiCmd
 {
     uint8_t fileType;
     uint32_t size;
-    char* certi;
+    char* pEntCert;
 
 }LoadCertiCmd_t;
 
 
+typedef enum
+{
+    LOAD_CLIENT_CERTIFICATE,
+    LOAD_SERVER_CERTIFICATE,
+    LOAD_KEY_CERTIFICATE,
+    CLEAR_ALL_CERTIFICATES // used for clearing all certificate
+}certificate_load_type_t;
+
+void releaseLoadedCertificate(certificate_load_type_t type);
+
+#endif
 /* Function prototypes */
 int32_t ParseScanCmd
     (void *arg, ScanCmd_t *scanParams);
@@ -293,7 +307,7 @@ int32_t ParseSetDhcpServerCmd(char *arg,uint32_t *leaseTime,uint32_t *startAddre
 int32_t ParseRoleUpP2PCmd(void *arg, RoleUpStaCmd_t *RoleUpDeviceParams);
 int32_t ParseSetChannelCmd(void *arg, WlanP2pCmd_t *P2PParams);
 
-int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,char* pin);
+int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,char* pin, uint32_t* timeout);
 
 int32_t ParseConnPolicySetCmd(void *arg, WlanPolicySetGet_t *ConnPolicySetParams);
 int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams);
@@ -320,6 +334,9 @@ int32_t macAddressParse(char *str,
 
 #ifdef CC35XX
 int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession);
+
+int32_t ParseSetWpsApPinCmd(void *arg, WlanSetWpsApPinParam_t *wpsApPin);
+
 int32_t ParsePingCmd(void *arg,
                      PingParams_t *pingParams);
 int32_t ParsePingStopCmd(void *arg, int8_t *session_id);
@@ -327,7 +344,9 @@ int32_t ParseRegDomEntrySetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryPa
 int32_t ParseRegDomEntryGetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryParams);
 #endif
 
+#ifdef CC35XX_INDIGO_APP
 //Indigo 
 int32_t ParseLoadCartificateCmd(void *arg, LoadCertiCmd_t *loadCertificate);
+#endif
 
 #endif /* __CMD_PARSER_H__ */

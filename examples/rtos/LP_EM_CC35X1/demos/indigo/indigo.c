@@ -65,6 +65,7 @@
 #include "ble_cmd.h"
 #include "wlan_if.h"
 #include "uart_term.h"
+#include "date_time_service.h"
 
 //LWIP
 #include "network_lwip.h"
@@ -75,10 +76,6 @@
 #include "osi_kernel.h"
 #include "network_terminal.h"
 
-#include "date_time_service.h"
-#ifdef SNTP_SUPPORT
-#include "sntp_wrapper.h"
-#endif
 // Debug for total allocation
 #ifdef PRINT_DBG_TOTAL_MALLOC_FREE
 extern volatile UINT32 totalloc;
@@ -99,7 +96,6 @@ void initialize_mbedtls_threading(); //define prototype
 #define APP_MCSPI_MSGSIZE       (100U)
 #define CC33XX_MAX_FW_LOGS_BUFFER_SIZE    (4096U)
 
-#define APPLICATION_NAME        ("Quick Track")
 /****************************************************************************
                       LOCAL FUNCTION PROTOTYPES
 ****************************************************************************/
@@ -110,20 +106,10 @@ int32_t printClearUsage(void *arg);
 int32_t cmdHelpCallback(void *arg);
 int32_t printHelpUsage(void *arg);
 int32_t initAppVariables();
-#ifdef SNTP_SUPPORT
-int32_t cmdSntpConfigServers(void *arg);
-int32_t printSntpConfigServersUsage(void *arg);
-int32_t cmdSntpUpdateDateTime(void *arg);
-int32_t printSntpUpdateDateTimeUsage(void *arg);
-int32_t ParseSntpConfigServersCmd(void *arg, uint32_t *pNumOfServers,char* serverIp[]);
-#endif
 int32_t cmdSetDateTime(void *arg);
 int32_t cmdGetDateTime(void *arg);
 int32_t printSetDateTimeUsage(void *arg);
 int32_t printGetDateTimeUsage(void *arg);
-int32_t ParseSetDateTimeCmd(void *arg, uint32_t* pYear, uint32_t* pMonth,
-        uint32_t* pDay, uint32_t* pHour, uint32_t* pMinute,
-        uint32_t* pSecond);
 
 extern uint32_t ActiveNetIfBitMap;
 
@@ -343,6 +329,10 @@ cmdAction_t gCmdList[] =
 /*------------------ p2p end ---------------------------*/
 /* Start AP WPS */
 {startApWpsStr, cmdStartApWpsCallback, printStartApWpsUsage },
+
+/* Set WPS AP Pin */
+{setWpsApPinStr, cmdSetWpsApPinCallback, printSetWpsApPinUsage },
+
 /*------------------ WSOC ---------------------------*/
 // {SetWsocPrimaryStr, cmdSetWsocPrimaryCallback, printSetWsocPrimaryUsage },
 /*------------------ WSOC end ---------------------------*/
@@ -381,7 +371,7 @@ cmdAction_t gCmdList[] =
 //{ wlanGetRegDomEntryStr,  cmdWlanGetRegDomainEntryCallback, printWlanGetRegDomainEntryUsage },
 
 #endif // CC35XX
-{ loadCertificate,              cmdloadCartificateCallback,            printloadCartificateUsage      },
+{ loadCertificate,              cmdloadCertificateCallback,            printloadCertificateUsage      },
 
 #ifdef TEST_CMD
 /* test */
@@ -430,8 +420,8 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
         if( pWlanEvent->Data.Connect.Status <0 )
         {
             UART_PRINT(
-                        "\n\r\n\r[WLAN EVENT HANDLER] connection failed(probably due to FW crash), reovery action required");
-            osi_SyncObjSignal(&app_CB.CON_CB.connectEventSyncObj);
+                        "\n\r\n\r[WLAN EVENT HANDLER] connection failed (probably due to Timeout)");
+            osi_SyncObjSignal(&(app_CB.CON_CB.connectEventSyncObj));
             break;
         }
         SET_STATUS_BIT(app_CB.Status, STATUS_BIT_STA_CONNECTION);
@@ -716,11 +706,11 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
         Report("[WLAN EVENT HANDLER] P2P GROUP STARTED \n\r");
 
         SET_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED);
-
         if (pWlanEvent->Data.FormationComplete.P2pRoleGo == TRUE)
         {
             void* apif;
             SET_BIT_IN_BITMAP(ActiveNetIfBitMap,NET_IF_AP_BIT);
+            app_CB.P2pGroupType = P2P_GROUP_TYPE_GO;
             network_stack_add_if_ap();
             apif = network_get_ap_if();
             if(apif != NULL)
@@ -738,6 +728,7 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
             void* staif;
             network_stack_add_if_sta();//send callback to tcp
             SET_BIT_IN_BITMAP(ActiveNetIfBitMap,NET_IF_STA_BIT);
+            app_CB.P2pGroupType = P2P_GROUP_TYPE_CLIENT;
 
             staif = network_get_sta_if();
             if(staif != NULL)
@@ -775,6 +766,7 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
             pWlanEvent->Data.GroupRemoved.RoleType);
 
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED);
+        app_CB.P2pGroupType = P2P_GROUP_TYPE_NONE;
 
         if (pWlanEvent->Data.GroupRemoved.RoleType == WLAN_ROLE_P2P_GO)
         {
@@ -817,6 +809,7 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
     {
         Report("\n\r[WLAN EVENT HANDLER][ERROR] WLAN_EVENT_P2P_GROUP_FORMATION_FAILED\n\r");
         osi_SyncObjSignal(&(app_CB.CON_CB.connectEventSyncObj));
+        app_CB.P2pGroupType = P2P_GROUP_TYPE_NONE;
 
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED);
     }
@@ -1167,6 +1160,7 @@ int32_t    initAppVariables(void)
     app_CB.Status = 0 ;
     app_CB.Role = WLAN_ROLE_RESERVED;
     app_CB.Exit = FALSE;
+    app_CB.P2pGroupType = P2P_GROUP_TYPE_NONE;
 
     memset(&app_CB.CmdBuffer, 0x0, CMD_BUFFER_LEN);
     memset(&app_CB.gDataBuffer, 0x0, sizeof(app_CB.gDataBuffer));
@@ -1340,60 +1334,3 @@ void *mainThread(void *args)
 }
 #endif // CC35XX
 
-#ifdef SNTP_SUPPORT
-int32_t cmdSntpConfigServers(void *arg)
-{
-    int32_t ret  = 0;
-    char  *serverIp[3];
-    uint32_t numOfServers;
-    int i;
-    ret = ParseSntpConfigServersCmd(arg, &numOfServers,serverIp);
-    if(ret < 0)
-    {
-        printSntpConfigServersUsage(arg);
-        return(0);
-    }
-    sntpWrapper_store_servers(numOfServers,serverIp[0],serverIp[1], serverIp[2]);
-    for(i=0; i<numOfServers; i++)
-    {
-        os_free(serverIp[i]);
-    }
-    return ret;
-}
-int32_t cmdSntpUpdateDateTime(void *arg)
-{
-    int32_t ret  = 0;
-
-    if (((!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT)) || (!IS_STA_CONNECTED(app_CB.Status)))
-            && (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_AP_BIT)))
-    {
-        Report("\n\rSTA/AP role is not up or connected.\n\r");
-        return -1;
-    }
-
-    ret = sntpWrapper_updateDateTime();
-    return ret;
-}
-#endif
-int32_t cmdSetDateTime(void *arg)
-{
-    int32_t ret  = 0;
-    uint32_t epochTime;
-    uint32_t year,month,day,hour, minute, second;
-
-    ret = ParseSetDateTimeCmd(arg, &year,&month,&day,&hour, &minute, &second);
-    if(ret < 0)
-    {
-        printSetDateTimeUsage(arg);
-        return(0);
-    }
-    epochTime =  datetime_to_epoch(year,month,day,hour, minute, second);
-    datetime_SecondsSet( epochTime);
-    return ret;
-}
-int32_t cmdGetDateTime(void *arg)
-{
-    int32_t ret  = 0;
-    datetime_printCurTime();
-    return ret;
-}

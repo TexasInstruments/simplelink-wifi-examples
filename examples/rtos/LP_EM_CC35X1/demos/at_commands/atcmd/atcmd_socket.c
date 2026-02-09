@@ -1546,19 +1546,27 @@ int32_t ATCmdSock_sendParse(char *buff, ATCmdSock_tcp_t *params)
     uint16_t outputLen;
     
     /* sd */
-    if ((ret = StrMpl_getVal(&buff, &params->sd, ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16)) < 0)
+    ret = StrMpl_getVal(&buff, &params->sd, ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16);
+    if (ret < 0)
     {
 	    return ret;
     }
 
     /* data format */
-    if ((ret = StrMpl_getVal(&buff, &params->format , ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_8)) < 0)
+    ret = StrMpl_getVal(&buff, &params->format , ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_8);
+    if (ret < 0)
     {
         return ret;
     }
+    if ((params->format != ATCMD_DATA_FORMAT_BINARY) &&
+        (params->format != ATCMD_DATA_FORMAT_BASE64))
+    {
+        return -1;
+    }
     
     /* data length */
-    if ((ret = StrMpl_getVal(&buff, &params->len, ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16)) < 0)
+    ret = StrMpl_getVal(&buff, &params->len, ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16);
+    if (ret < 0)
     {
 	    return ret;
     }
@@ -1684,7 +1692,7 @@ int32_t ATCmdSock_recvParse(char *buff, ATCmdSock_tcp_t *params)
     
     /* sd */
     ret = StrMpl_getVal(&buff, &params->sd,
-                        ATCMD_DELIM_ARG,STRMPL_FLAG_PARAM_SIZE_16);
+                        ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16);
     if (ret < 0)
     {
 	    return ret;
@@ -1692,15 +1700,20 @@ int32_t ATCmdSock_recvParse(char *buff, ATCmdSock_tcp_t *params)
 
     /* data format */
     ret = StrMpl_getVal(&buff, &params->format,
-                        ATCMD_DELIM_ARG,STRMPL_FLAG_PARAM_SIZE_8);
+                        ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_8);
     if (ret < 0)
     {
         return ret;
     }
+    if ((params->format != ATCMD_DATA_FORMAT_BINARY) &&
+        (params->format != ATCMD_DATA_FORMAT_BASE64))
+    {
+        return -1;
+    }
     
     /* data length */
     ret = StrMpl_getVal(&buff, &params->len,
-                        ATCMD_DELIM_TRM,STRMPL_FLAG_PARAM_SIZE_16);
+                        ATCMD_DELIM_TRM, STRMPL_FLAG_PARAM_SIZE_16);
     if (ret < 0)
     {
 	    return ret;
@@ -1716,6 +1729,7 @@ int32_t ATCmdSock_recvParse(char *buff, ATCmdSock_tcp_t *params)
     {
         return -1;
     }
+
     return ret;
 }
 
@@ -1883,6 +1897,11 @@ int32_t ATCmdSock_sendToParse(char *buff, ATCmdSock_udp_t *params)
     {
         return ret;
     }
+    if ((params->format != ATCMD_DATA_FORMAT_BINARY) &&
+        (params->format != ATCMD_DATA_FORMAT_BASE64))
+    {
+        return -1;
+    }
     
     /* data length */
     ret = StrMpl_getVal(&buff, &params->len,
@@ -1896,7 +1915,7 @@ int32_t ATCmdSock_sendToParse(char *buff, ATCmdSock_udp_t *params)
     if (params->format == ATCMD_DATA_FORMAT_BASE64)
     {
         /* convert length to binary length */
-        outputLen = StrMpl_getBase64DecBufSize((uint8_t *)buff,params->len);
+        outputLen = StrMpl_getBase64DecBufSize((uint8_t *)buff, params->len);
         params->data = malloc(outputLen);
         if (params->data == NULL)
         {
@@ -2014,9 +2033,10 @@ int32_t ATCmdSock_recvFromFree(ATCmdSock_udp_t *params)
 int32_t ATCmdSock_recvFromParse(char *buff, ATCmdSock_udp_t *params)
 {
     int32_t ret = 0;
-    
-    /* parse the sd and the addr */
-    ret = ATCmdSock_parse(&buff, &params->target, ATCMD_DELIM_ARG);
+
+    /* sd */
+    ret = StrMpl_getVal(&buff, &params->target.sd,
+                        ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_16);
     if (ret < 0)
     {
 	    return ret;
@@ -2024,15 +2044,20 @@ int32_t ATCmdSock_recvFromParse(char *buff, ATCmdSock_udp_t *params)
 
     /* data format */
     ret = StrMpl_getVal(&buff, &params->format,
-                        ATCMD_DELIM_ARG,STRMPL_FLAG_PARAM_SIZE_8);
+                        ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_8);
     if (ret < 0)
     {
         return ret;
     }
+    if ((params->format != ATCMD_DATA_FORMAT_BINARY) &&
+        (params->format != ATCMD_DATA_FORMAT_BASE64))
+    {
+        return -1;
+    }
     
-    /* data length */
+    /* data length - always in bytes units!!! */
     ret = StrMpl_getVal(&buff, &params->len,
-                        ATCMD_DELIM_TRM,STRMPL_FLAG_PARAM_SIZE_16);
+                        ATCMD_DELIM_TRM, STRMPL_FLAG_PARAM_SIZE_16);
     if (ret < 0)
     {
 	    return ret;
@@ -2078,7 +2103,10 @@ int32_t ATCmdSock_recvFromResult(void *args, int32_t num, char *buff)
     outputLen = params->len;
     if (params->format == ATCMD_DATA_FORMAT_BASE64)
     {
-        /* convert length from binary to base64 */
+        /* convert length from binary to base64
+         * length will be in base64 length even though the input
+         * parameter to recv is in bytes unit.
+         */
         outputLen = StrMpl_getBase64EncBufSize(params->len);
     }
     StrMpl_setVal(&outputLen, &buff, ATCMD_DELIM_ARG, STRMPL_FLAG_PARAM_SIZE_32 | STRMPL_FLAG_PARAM_UNSIGNED | STRMPL_FLAG_PARAM_DEC);
@@ -2113,13 +2141,14 @@ int32_t ATCmdSock_recvFromCallback(void *arg)
 {
     int32_t ret = 0;
     ATCmdSock_udp_t *params;
-    int16_t fromlen = sizeof(struct sockaddr);
+    struct sockaddr_storage from;
+    int16_t fromlen = sizeof(from);
 
     params = malloc(sizeof(ATCmdSock_udp_t));
     if (params == NULL)
     {
         ATCmd_errorResult(ATCmd_errorAllocStr, 0);
-        return -1;     
+        return -1;
     }
     
     memset(params, 0x0, sizeof(ATCmdSock_udp_t));
@@ -2136,7 +2165,7 @@ int32_t ATCmdSock_recvFromCallback(void *arg)
     /* return command complete for blocked command */
     ATCmd_okResult();
 
-    if (!IS_IP_ACQUIRED(app_CB.Status)   && 
+    if (!IS_IP_ACQUIRED(app_CB.Status)   &&
         !IS_STA_CONNECTED(app_CB.Status) &&
         !IS_AP_CONNECTED(app_CB.Status))
     {
@@ -2145,9 +2174,8 @@ int32_t ATCmdSock_recvFromCallback(void *arg)
 	    return -1;
     }
 
-    /* recv from */
     params->len = lwip_recvfrom(params->target.sd, params->data, params->len,
-                                params->flags, (struct sockaddr *)&params->target.sa,
+                                params->flags, (struct sockaddr *)&from,
                                 (socklen_t *)&fromlen);
 
     if (params->len < 0)

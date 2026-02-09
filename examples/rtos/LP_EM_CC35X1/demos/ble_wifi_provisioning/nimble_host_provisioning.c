@@ -755,8 +755,13 @@ int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type)
 int nimble_host_start(void)
 {
     int rc = 0;
+    int status = 0;
 
-    BleIf_EnableBLE();
+    rc = BleIf_EnableBLE();
+    if(OSI_OK != rc)
+    {
+        return rc;
+    }
 
     ble_example_init();
 
@@ -780,24 +785,29 @@ int nimble_host_start(void)
     rc = ble_npl_task_init(&s_task_host, "nimble_host", nimble_host_task,
                       NULL, NIMBLE_THRD_PRIORITY, BLE_NPL_TIME_FOREVER,
                       NIMBLE_THRD_DEFAULT_STACK, NIMBLE_THRD_STACK_SIZE);
+    if(OSI_OK != rc)
+    {
+        Report("\n\rnimble_host_start: Failed to init host task. error number %d", rc);
+        ASSERT_GENERAL(0);
+    }
 
     Report("\n\r-------------- Wait for BLE Host\n\r");
 
     rc = osi_SyncObjWait(&hostInitEventSyncObj, OSI_WAIT_FOR_SECOND);
     if(OSI_OK != rc)
     {
-        Report("\n\rBleIf_EnableBLE: Failed to receive Host Init Done. error number %d", rc);
-        ASSERT_GENERAL(0);
+        Report("\n\rnimble_host_start: Failed to start the BLE host. error number %d", rc);
+        status = -1;
     }
 
     rc = osi_SyncObjDelete(&hostInitEventSyncObj);
     if(OSI_OK != rc)
     {
-        Report("\n\rBleIf_EnableBLE: Failed to delete sync object. error number %d", rc);
+        Report("\n\rnimble_host_start: Failed to delete sync object. error number %d", rc);
         ASSERT_GENERAL(0);
     }
 
-    return rc;
+    return status;
 }
 
 int nimble_host_stop(void)

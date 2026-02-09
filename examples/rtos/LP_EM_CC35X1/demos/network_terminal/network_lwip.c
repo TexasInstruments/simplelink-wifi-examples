@@ -350,6 +350,8 @@ void network_recv(WlanRole_e roleId, uint8_t *inBuf, uint32_t inLen)
 {
     struct netif *pIf = NULL;
     struct pbuf *packet;    
+    err_t err;
+
 
     if(roleId == WLAN_ROLE_STA)
     {
@@ -376,7 +378,11 @@ void network_recv(WlanRole_e roleId, uint8_t *inBuf, uint32_t inLen)
     packet->tot_len = inLen;
 
 
-    tcpip_input(packet, pIf);
+    if ((err = tcpip_input(packet, pIf)) != 0) {
+        //Report("\n\rRx pbuf_queue is full: err:%d, DROP", err);
+        pbuf_free(packet);
+        return;
+    }
 }
 
 void link_callback(struct netif *state_netif)
@@ -632,7 +638,8 @@ void tcpip_network_stack_add_if_sta(void *ctx)
 void tcpip_network_stack_remove_if_sta(void *ctx)
 {
     struct netif *pNetIf = &staif;
-    tcpinternal_network_set_down(pNetIf);
+    tcpinternal_network_set_down(pNetIf); 
+    etharp_cleanup_netif(pNetIf);
     netif_remove(pNetIf);
     osi_SyncObjSignal(&app_CB.CON_CB.staRoledownSyncObj);
 }
@@ -825,9 +832,7 @@ void network_stack_set_static_ip_if_ap(uint32_t ip, uint32_t netmask, uint32_t g
         LOCK_TCPIP_CORE();
 
         netif_set_addr(pNetIf, &ip_addr, &netmask_addr, &gw_addr);
-        
-        network_stack_set_ap_ip_mode(IP_STATIC);
-        
+                
         UNLOCK_TCPIP_CORE();
     }
 }

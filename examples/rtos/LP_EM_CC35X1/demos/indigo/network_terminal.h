@@ -46,7 +46,11 @@
 #endif // CC33XX
 #define CMD_BUFFER_LEN          (256)
 #define MAX_CMD_NAME_LEN        (32)
+#ifdef CC35XX_INDIGO_APP
+#define APPLICATION_NAME        ("Quick Track")
+#else
 #define APPLICATION_NAME        ("Network Terminal")
+#endif
 #define APPLICATION_VERSION     (version_upper_mac)
 #define TASK_STACK_SIZE         (2048)
 #define SPAWN_TASK_PRIORITY     (9)
@@ -131,6 +135,8 @@ typedef struct appControlBlock_t
     uint32_t Role;
      /* This field keeps the device's role (STA, P2P or AP) */
     uint32_t ConnectedStations;
+    /* This field keeps the P2P Group Type */
+    uint32_t P2pGroupType;
     /* This flag lets the application to exit */
     uint32_t Exit;
     /* Sets the number of Ping attempts to send */
@@ -198,6 +204,16 @@ typedef enum
 
 }e_StatusBits;
 
+typedef enum
+{
+    /* No p2p group */
+    P2P_GROUP_TYPE_NONE = 0,
+    /* P2P Client */
+    P2P_GROUP_TYPE_CLIENT = 1,
+    /* P2P GO */
+    P2P_GROUP_TYPE_GO = 2
+
+}e_P2pGroupType;
 
 /* Status keeping MACROS */
 

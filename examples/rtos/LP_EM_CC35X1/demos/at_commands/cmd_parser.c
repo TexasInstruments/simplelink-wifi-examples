@@ -45,15 +45,20 @@
 #include "network_terminal.h"
 #include "cmd_parser.h"
 #include "osi_kernel.h"
+#include "cmd_parser.h"
 
 void* os_zalloc(size_t size);
 void  os_free(void *ptr);
 int32_t printSendUsage(void *arg);
 int32_t printRecvUsage(void *arg);
 
-LoadCertiCmd_t client_certi;
-LoadCertiCmd_t ca_certi;
-LoadCertiCmd_t private_key_certi;
+#ifdef CC35XX_INDIGO_APP
+LoadCertiCmd_t g_client_indigo_cert = {0};
+LoadCertiCmd_t g_ca_indigo_cert = {0};
+LoadCertiCmd_t g_private_key_indigo_cert = {0};
+
+
+#endif
 
 #define DATE_TIME_STR_SIZE (22)
 
@@ -375,6 +380,7 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     else
     {
         // By default, the profile is hidden
+        ProfileParams->hidden = (uint32_t *)os_zalloc(4);
         *(ProfileParams->hidden) = 1;
     }
 
@@ -424,7 +430,8 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
 
     ProfileParams->secParams.KeyLen = 0;
 
-    if((password != NULL) && (strlen(password) <= PASSWD_LEN_MAX))
+    if((password != NULL) &&
+        ((strlen(password) <= PASSWD_LEN_MAX) && (strlen(password) >= PASSWD_LEN_MIN)))
     {
         ProfileParams->secParams.KeyLen = strlen(password);
         ProfileParams->secParams.Key = (signed char *)os_zalloc(
@@ -1209,6 +1216,11 @@ void FreeProfileCmd(ProfileCmd_t *ProfileParams)
         ProfileParams->secParams.Key = NULL;
     }
 
+    if(ProfileParams->hidden != NULL)
+    {
+        os_free(ProfileParams->hidden);
+        ProfileParams->hidden = NULL;
+    }
 
     return;
 }
@@ -1368,6 +1380,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
     uint8_t help = FALSE;
 #ifdef CC35XX
     uint8_t sae_pwe = 2; 
+    char    *sae_anti_clogging_threshold = NULL;
 #elif defined (CC33XX)
     uint8_t AllowedChannelsFor5GhzAP [4] = {36,40,44,48};
     uint8_t isSupportedChannel = FALSE;
@@ -1392,6 +1405,9 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
 #endif // CC33XX	
 #ifdef CC35XX
     RoleUpApParams->sae_pwe = 2;
+    RoleUpApParams->sae_anticlogging_threshold = SAE_ANTI_CLOGGING_DEFAULT;
+    RoleUpApParams->transitionDisable = 0;
+
     RoleUpApParams->countryDomain[0] = '0';
     RoleUpApParams->countryDomain[1] = '0';
     RoleUpApParams->countryDomain[2] = '\0';
@@ -1491,7 +1507,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
             }
 
             if((RoleUpApParams->sta_limit < 1) ||
-            (RoleUpApParams->sta_limit > 4))
+            (RoleUpApParams->sta_limit > 16))
             {
                 Report(
                     "\r\n [Cmd Parser] : invalid Parameter for station limit "
@@ -1527,6 +1543,38 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
             RoleUpApParams->sae_pwe = sae_pwe;
 
         }
+        else if(!strcmp(token, a_optionStr))
+        {
+            sae_anti_clogging_threshold = strtok(NULL, space_str);
+
+            if (sae_anti_clogging_threshold != NULL)
+            {
+                if(!strcmp(sae_anti_clogging_threshold, DEFAULT_str))
+                {
+                    RoleUpApParams->sae_anticlogging_threshold = SAE_ANTI_CLOGGING_DEFAULT;
+                }
+                else if(!strcmp(sae_anti_clogging_threshold, ALWAYS_str))
+                {       
+                    RoleUpApParams->sae_anticlogging_threshold = SAE_ANTI_CLOGGING_ALWAYS;
+                }
+                else if (!strcmp(sae_anti_clogging_threshold, LOW_str))
+                {
+                    RoleUpApParams->sae_anticlogging_threshold = SAE_ANTI_CLOGGING_LOW;
+                }
+                else
+                {
+                    Report("\n\r Unsupported SAE Anti Clogging Threshold.\n\r");
+                }
+            }
+        }
+        else if (!strcmp(token, b_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                RoleUpApParams->transitionDisable = atoi(token);
+            }
+        }
 #endif
         else
         {
@@ -1555,11 +1603,11 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
         return(-1);
     }
 
-    if((NULL == ssid) || (strlen(ssid) >= WLAN_SSID_MAX_LENGTH))
+    if((NULL == ssid) || (strlen(ssid) > WLAN_SSID_MAX_LENGTH))
     {
         Report(
             "\r\n [Cmd Parser] : invalid Parameter for SSID - Should be max"
-            " 31 characters.\n\r");
+            " 32 characters.\n\r");
         return(-1);
     }
     else
@@ -1570,14 +1618,14 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
 
     if(password != NULL)
     {
-        RoleUpApParams->secParams.KeyLen = strlen(password)+1;
+        RoleUpApParams->secParams.KeyLen = strlen(password);
 
         if((RoleUpApParams->secParams.KeyLen >= KEY_LEN_MAX) ||
            (RoleUpApParams->secParams.KeyLen < PASSWD_LEN_MIN))
         {
             Report(
                 "\r\n [Cmd Parser] : Key length invalid - "
-                "Should be in range: [8,63].\n\r");
+                "Should be in range: [8,63]. Key len = %d\n\r", RoleUpApParams->secParams.KeyLen);
             return(-1);
         }
 
@@ -1944,24 +1992,20 @@ int32_t ParseSetChannelCmd(void *arg, WlanP2pCmd_t *P2PParams)
 
     \sa             cmdWlanRoleUpP2PCallback
  */
-int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,char* pin)
+int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,char* pin, uint32_t* timeout)
 {
     char    cmdStr[CMD_BUFFER_LEN + 1];
     char    *token = NULL;
     uint8_t help = FALSE;
-    char    *pPin, *pMacAddress;
+    char    *pPin = NULL;
+    char    *pMacAddress;
 
-    /*
-    char *wlan_p2p_connect_DetailsStr    = "P2P connect .\n\r";
-    char wlan_p2p_connect_UsageStr_first[]   =   " [-help]";
-    char wlan_p2p_connect_UsageStr_second[]  =   "[-m <peer_macAdress>]"
-                                                 "[-w <wps_method [0 1 2]>] 0=PBC 1=PIN DISPLAY 2= PIN keypad"
-                                                 "[-p <pin_code>]\n\r";
-
-    */
     strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
     cmdStr[CMD_BUFFER_LEN] = '\0';
     token = strtok(cmdStr, space_str);
+
+    //default
+    *timeout = 60;
 
     if(token == NULL)
     {
@@ -1993,8 +2037,38 @@ int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,cha
         /*--------  p ----------------------*/
         else if(!strcmp(token, p_optionStr))
         {
-            pPin = strtok(NULL, "\"");
+            size_t pin_len = 0;
+            pPin = strtok(NULL, space_str);
+            if (pPin == NULL)
+            {
+                Report("\r\n [Cmd Parser] : PIN not provided !!!" );
+                return(-1);
+            }
+            pin_len =  strlen(pin);
+            if (pin_len > 8)
+            {
+                Report("\r\n [Cmd Parser] : PIN length should be less than 8 !!!" );
+                return(-1);
+            }
+            // Validate all characters are digits
+            for (size_t i = 0; i < pin_len; i++) 
+            {
+                if (pPin[i] < '0' || pPin[i] > '9') 
+                {
+                    Report("\r\n[Cmd Parser] : Invalid PIN. Must contain only digits 0-9\n\r");
+                    return -1;
+                }
+            }
             strcpy(pin,pPin);
+        }
+        /*--------- t ----------------------*/
+        else if(!strcmp(token, t_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                *timeout = atoi(token);
+            }
         }
 
         else
@@ -3697,6 +3771,7 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
     IperfCmdParams->period = 0;
     IperfCmdParams->timeout = 99999;//endless
     IperfCmdParams->bandwidth =0;
+    IperfCmdParams->packetLength = 0;
 
 
     strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
@@ -3783,6 +3858,14 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
             if(token)
             {
                 IperfCmdParams->timeout = (uint32_t)atol(token);
+            }
+        }
+        else if(!strcmp(token, l_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if(token)
+            {
+                IperfCmdParams->packetLength = (uint32_t)atol(token);
             }
         }
         else if(!strcmp(token, u_optionStr))
@@ -3931,6 +4014,7 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
     return(0);
 }
 
+#ifdef CC35XX
 /*!
     \brief          Parse Set Country Code command.
 
@@ -3951,7 +4035,6 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
 
     \sa             ParseCountycodeCmd
  */
-
 int32_t ParseStopTestIperfCmd(void *arg, stopCmd_t *stopCmd)
 {
     char               *token = NULL;
@@ -3980,7 +4063,11 @@ int32_t ParseStopTestIperfCmd(void *arg, stopCmd_t *stopCmd)
             token = strtok(NULL, space_str);
             if(token)
             {
-                stopCmd->processNum = (uint32_t)atoi(token);;
+                stopCmd->processNum = (uint32_t)atoi(token);
+                if ((stopCmd->processNum >= IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS) || (stopCmd->processNum < 0))
+                {
+                    help = TRUE;
+                }
             }
         }
         else
@@ -4000,7 +4087,7 @@ int32_t ParseStopTestIperfCmd(void *arg, stopCmd_t *stopCmd)
 
     return(0);
 }
-
+#endif
 
 
 
@@ -4330,7 +4417,7 @@ int32_t ParseGetInterfaceIpCmd(void *arg, WlanRole_e *RoleId)
     *RoleId = atoi((const char*) strRoleId);
 
     //check if role id valid
-    if ((*RoleId != WLAN_ROLE_STA) && (*RoleId != WLAN_ROLE_AP))
+    if ((*RoleId != WLAN_ROLE_STA) && (*RoleId != WLAN_ROLE_AP) && (*RoleId != WLAN_ROLE_DEVICE))
     {
         Report("\r\n[Cmd Parser] : Invalid RoleId\n\r");
         return (-1);
@@ -5639,11 +5726,30 @@ int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession)
         }
         else if(!strcmp(token, p_optionStr))
         {
+            size_t pin_len = 0;
             pin = strtok(NULL, "\"");
-            if(strlen(pin) != 8)
+            if (pin == NULL)
             {
-                Report("\r\n[Cmd Parser] : Invalid PIN. Expected 8 digits\n\r");
-                return(-1);
+                Report("\r\n[Cmd Parser] : PIN not provided\n\r");
+                return -1;
+            }
+            pin_len =  strlen(pin);
+
+            // Validate length: must be 4 or 8 digits
+            if (pin_len != 4 && pin_len != 8) 
+            {
+                Report("\r\n[Cmd Parser] : Invalid PIN length. Expected 4 or 8 digits, got %zu\n\r", pin_len);
+                return -1;
+            }
+
+            // Validate all characters are digits
+            for (size_t i = 0; i < pin_len; i++) 
+            {
+                if (pin[i] < '0' || pin[i] > '9') 
+                {
+                    Report("\r\n[Cmd Parser] : Invalid PIN. Must contain only digits 0-9\n\r");
+                    return -1;
+                }
             }
         }
         else
@@ -5677,6 +5783,86 @@ int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession)
     {
         Report("\r\n[Cmd Parser] : Parser expected PIN code\n\r");
         return(-1);
+    }
+
+    return(0);
+}
+/*!
+    \brief          Parse set WPS AP Pin command.
+
+
+    \param          arg            -   Points to command line buffer.
+                                       Contains the command line typed by user.
+    \param          wpsApPin     -   Points to command structure provided
+                                       by the SetWpsApPin callback.
+                                       This structure will later be read
+                                       by the SetWpsApPin callback.
+
+    \return         Upon successful completion, the function shall return success status.
+                    In case of failure,this function would print error.
+
+    \sa             cmdSetWpsApPinCallback
+ */
+int32_t ParseSetWpsApPinCmd(void *arg, WlanSetWpsApPinParam_t *wpsApPin)
+{
+    char    cmdStr[CMD_BUFFER_LEN + 1];
+    char    *token = NULL;
+    uint8_t  help = FALSE;
+    uint32_t timeout = 0;
+    char    *pin = NULL;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if (token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, t_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if(token)
+            {
+                timeout = atoi(token);
+            }
+        }
+        else if(!strcmp(token, p_optionStr))
+        {
+            pin = strtok(NULL, "\"");
+            if(strlen(pin) != 8)
+            {
+                Report("\r\n[Cmd Parser] : Invalid PIN. Expected 8 digits\n\r");
+                return(-1);
+            }
+        }
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        return(-1);
+    }
+
+    wpsApPin->timeout = timeout;
+    
+
+    if (pin == NULL)
+    {
+        Report("\r\n[Cmd Parser] : Parser expected PIN code\n\r");
+        return(-1);
+    }
+    else
+    {
+        strcpy(wpsApPin->pin, pin);
     }
 
     return(0);
@@ -5925,6 +6111,8 @@ int32_t printGetDateTimeUsage(void *arg)
     return (0);
 }
 
+#ifdef CC35XX_INDIGO_APP
+
 int32_t ParseLoadCartificateCmd(void *arg, LoadCertiCmd_t *loadCertificate)
 {
     char    cmdStr[CMD_BUFFER_LEN + 1];
@@ -5969,64 +6157,96 @@ int32_t ParseLoadCartificateCmd(void *arg, LoadCertiCmd_t *loadCertificate)
 
     if(help)
     {
-        return(-1);
+        return(1);
     }
 
-    if (type == 0){
-        client_certi.fileType = type;
-        client_certi.size = size;
-        //craet malloc for client_certi global variable
-        client_certi.certi = os_malloc(client_certi.size);
-        if (client_certi.certi != NULL){
-            // send ACK
-            UART_PRINT("ACK\n\r");
-            // Get certi to client_certi global variable
-            getstr(client_certi.size, client_certi.certi);
+    releaseLoadedCertificate((certificate_load_type_t)type);
 
-            UART_PRINT("client certificate Load successfully\n\r");
+    if (type == LOAD_CLIENT_CERTIFICATE){
+        g_client_indigo_cert.fileType = type;
+        g_client_indigo_cert.size = size;
+
+        if(size != 0)
+        {
+            //craet malloc for g_client_indigo_cert global variable
+            g_client_indigo_cert.pEntCert = os_malloc(g_client_indigo_cert.size);
+            if (g_client_indigo_cert.pEntCert != NULL){
+                // send ACK
+                UART_PRINT("ACK\n\r");
+                // Get certi to g_client_indigo_cert global variable
+                getstr(g_client_indigo_cert.size, g_client_indigo_cert.pEntCert);
+
+                UART_PRINT("\n\rClient certificate Load successfully\n\r");
+            }
+            else
+            {
+                Report("\n\rMemory allocation failed for client certificate");
+                return -1;
+            }
         }
+        UART_PRINT("\n\rClient certificate size %d\n\r", size);
         
     }
-    else if (type == 1) {
-        ca_certi.fileType = type;
-        ca_certi.size = size;
-        //craet malloc for ca_certi global variable
-        ca_certi.certi = os_malloc(ca_certi.size);
-        if(ca_certi.certi != NULL){
-            // send ACK
-            UART_PRINT("ACK\n\r");
-            // Get certi to ca_certi global variable
-            getstr(ca_certi.size, ca_certi.certi);
+    else if (type == LOAD_SERVER_CERTIFICATE) {
+        g_ca_indigo_cert.fileType = type;
+        g_ca_indigo_cert.size = size;
 
-            UART_PRINT("ca certificate Load successfully\n\r");
+        if(size != 0)
+        {
+            //craet malloc for g_ca_indigo_cert global variable
+            g_ca_indigo_cert.pEntCert = os_malloc(g_ca_indigo_cert.size);
+            if(g_ca_indigo_cert.pEntCert != NULL){
+                // send ACK
+                UART_PRINT("ACK\n\r");
+                // Get certi to g_ca_indigo_cert global variable
+                getstr(g_ca_indigo_cert.size, g_ca_indigo_cert.pEntCert);
+
+                UART_PRINT("\n\rCA certificate Load successfully\n\r");
+            }
+            else
+            {
+                Report("\n\rMemory allocation failed for ca certificate");
+                return -1;
+            }
         }
+        UART_PRINT("CA certificate size %d\n\r", size);
         
     }
-    else if (type == 2) {
-        private_key_certi.fileType = type;
-        private_key_certi.size = size;
-        //craet malloc for private_key_certi global variable
-        private_key_certi.certi = os_malloc(private_key_certi.size);
-        if(private_key_certi.certi != NULL){
-            // send ACK
-            UART_PRINT("ACK\n\r");
-            // Get certi to ca_certi global variable
-            getstr(private_key_certi.size, private_key_certi.certi);
+    else if (type == LOAD_KEY_CERTIFICATE) {
+        g_private_key_indigo_cert.fileType = type;
+        g_private_key_indigo_cert.size = size;
 
-            UART_PRINT("private key certificate Load successfully\n\r");
+        if(size != 0)
+        {
+            //craet malloc for g_private_key_indigo_cert global variable
+            g_private_key_indigo_cert.pEntCert = os_malloc(g_private_key_indigo_cert.size);
+            if(g_private_key_indigo_cert.pEntCert != NULL){
+                // send ACK
+                UART_PRINT("ACK\n\r");
+                // Get certi to g_ca_indigo_cert global variable
+                getstr(g_private_key_indigo_cert.size, g_private_key_indigo_cert.pEntCert);
+
+                UART_PRINT("\n\rPrivate key certificate Load successfully\n\r");
+            }
+            else
+            {
+                Report("\n\rMemory allocation failed for key certificate");
+                return -1;
+            }
         }
+        UART_PRINT("key size %d\n\r", size);
     }
     else {
         // Error file type
-        UART_PRINT("file type does not exist\n\r");
-        return(1);
+        UART_PRINT("\n\rCertificate file type is not supported!\n\r");
+        return(-1);
     }
 
 
     return(0);
 }
 
-int32_t printloadCartificateUsage(void *arg)
+int32_t printloadCertificateUsage(void *arg)
 {
     UART_PRINT(lineBreak);
     UART_PRINT(usageStr);
@@ -6038,3 +6258,4 @@ int32_t printloadCartificateUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif

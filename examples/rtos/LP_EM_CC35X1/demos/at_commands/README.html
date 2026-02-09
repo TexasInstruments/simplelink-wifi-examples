@@ -34,31 +34,39 @@
 </header>
 <div id="content">
   <h1></h1>
-<h2 id="network-terminal-example-summary">Network Terminal Example Summary</h2>
-<p>This example demonstrates the extensive networking capabilities of the CC35xx device.</p>
+<h2 id="at-commands-example-summary">AT Commands Example Summary</h2>
+<p>This example demonstrates AT command interface for controlling the extensive networking capabilities of the CC35xx device.</p>
 <table>
 <thead>
 <tr class="header">
-<th>Silo</th>
+<th>Module</th>
 <th align="left">Description</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#wlan-commands">WLAN</a></td>
-<td align="left">Includes link layer functions such as scan, connect, etc.</td>
+<td><a href="#device-commands">Device</a></td>
+<td align="left">Basic device commands such as help, version, and echo control.</td>
 </tr>
 <tr class="even">
+<td><a href="#wlan-commands">WLAN</a></td>
+<td align="left">WiFi link layer functions including scan, connect, role management, and MAC address operations.</td>
+</tr>
+<tr class="odd">
 <td><a href="#socket-commands">Socket</a></td>
-<td align="left">Showcases a variety of socket APIs responsible for sending and receiving data.</td>
+<td align="left">Socket APIs for creating connections and sending/receiving data over TCP and UDP.</td>
+</tr>
+<tr class="even">
+<td><a href="#network-configuration-commands">NetCfg</a></td>
+<td align="left">Network configuration including IP settings, DHCP server, and ping utilities.</td>
 </tr>
 <tr class="odd">
 <td><a href="#ble-commands">BLE</a></td>
-<td align="left">Provides basic BLE commands.</td>
+<td align="left">Bluetooth Low Energy commands for advertising, scanning, and connection management.</td>
 </tr>
 </tbody>
 </table>
-<p>Each silo contains several commands accessible via the command line interface, implemented using the user UART. Any events or application output will be displayed on the UART terminal screen. In the <a href="#available-commands">Available Commands</a> section, we will discuss each silo and its commands in greater detail.</p>
+<p>Each module contains several AT commands accessible via the UART interface. Commands follow the standard AT command format: <code>at+&lt;command&gt;=&lt;parameters&gt;</code>. Any events or application output will be displayed on the UART terminal screen. In the <a href="#available-commands">Available Commands</a> section, we will discuss each module and its commands in greater detail.</p>
 <h2 id="example-usage">Example Usage</h2>
 <ul>
 <li>Build the project and run it. See the <a href="../../docs/CC35XX-Quickstart-Guide.html">Getting Started Guide</a> in the <code>docs</code> directory of your SDK root.</li>
@@ -72,472 +80,1104 @@
     Flow Control: None</code></pre>
 <p>Once the application completes its initialization and the network processor is up, the application banner will be displayed, showing version details:</p>
 <pre><code>******************************************************************
-******************   Osprey Network Terminal   *******************
+*******************      AT Commands      ************************
 *******************      Version x.x.x.x      ********************
 ******************************************************************</code></pre>
-<p>At this point, a menu showing the available commands will be printed, followed by a command prompt, indicating that the application is ready for user input.</p>
+<p>At this point, the application is ready to receive AT commands from the user.</p>
 <h2 id="application-overview">Application Overview</h2>
-<p>Network Terminal is a command-line interface (CLI) application used to demonstrate the networking capabilities of the CC35xx device. It offers a list of commands that are fed to the application via UART, then parsed and dispatched.</p>
-<p>The application starts by invoking <code>cmd_prompt()</code>, which polls the UART input for a command. Polling is completed once a carriage return is detected. At this point, <code>cmd_prompt</code> possesses the command name, followed by the user’s choice of parameters. Once the command is obtained, <code>cmd_prompt</code> searches for the user’s command in the global command table, <code>gCmdList</code>. This table stores three entries for each command: the command string, a callback that handles the command, and a menu print callback that prints the help menu.</p>
-<p>If the typed command matches a table entry, the handler is dispatched, and the parameters provided by the user are passed to the command callback. All callback functions follow the same naming convention: <code>cmd&lt;command_name&gt;Callback</code> and reside in the appropriate file. For example, all WLAN-related callbacks are implemented in <code>wlan_cmd.c</code>.</p>
-<p>Inside each command callback, the first action is to parse the user’s input. This is achieved by calling the corresponding parser function. A structure containing each command’s parameters is also passed to the designated parser and returned filled with the parsed user’s parameters. Later, the parsed structure is handled by the callback. All command parser functions follow the same naming convention: <code>Parse&lt;command_name&gt;Cmd</code>. Parser functions reside in <code>cmd_parser.c</code>.</p>
-<p>Once a dispatched callback finishes its run, the application returns to the <code>cmd_prompt</code> function, ready for another input from the user.</p>
-<h2 id="available-commands">Available Commands</h2>
-<pre><code>================================================================================
-Available commands:
-
-help                clear               wlan_ap_role_up     wlan_ap_role_down   
-wlan_sta_role_up    wlan_sta_role_down  wlan_connect        wlan_disconnect     
-wlan_scan           wlan_get_mac        wlan_set_mac        wlan_get_ps         
-wlan_set_ps         wlan_set_pm         wlan_set_LSI        wlan_start          
-wlan_stop           ble_adv_cfg         ble_adv_enable      ble_scan_cfg        
-ble_scan_enable     ble_connect         ble_disconnect      ble_peers           
-ble_start           ble_stop            ble_test_mode       calibrator          
-send                recv                socket_show         kill                
-================================================================================</code></pre>
-<h2 id="wlan-commands">WLAN Commands</h2>
+<p>AT Commands is an interface application that provides a standard AT command set for controlling the CC35xx device’s networking capabilities. It offers commands that are sent to the application via UART, parsed, and dispatched to the appropriate handlers.</p>
+<p>The application operates by continuously monitoring the UART input for AT commands. Commands follow the standard AT command syntax:</p>
 <ul>
-<li><a href="#wlan_start">wlan_start</a></li>
-<li><a href="#wlan_stop">wlan_stop</a></li>
-<li><a href="#wlan_sta_role_up">wlan_sta_role_up</a></li>
-<li><a href="#wlan_sta_role_down">wlan_sta_role_down</a></li>
-<li><a href="#wlan_scan">wlan_scan</a></li>
-<li><a href="#wlan_connect">wlan_connect</a></li>
-<li><a href="#wlan_disconnect">wlan_disconnect</a></li>
-<li><a href="#wlan_get_mac">wlan_get_mac</a></li>
-<li><a href="#wlan_set_mac">wlan_set_mac</a></li>
-<li><a href="#wlan_get_ps">wlan_get_ps</a></li>
-<li><a href="#wlan_set_ps">wlan_set_ps</a></li>
+<li>Basic command format: <code>at+&lt;command&gt;</code></li>
+<li>Command with parameters: <code>at+&lt;command&gt;=&lt;param1&gt;,&lt;param2&gt;,...</code></li>
+<li>Query command format: <code>at+&lt;command&gt;?</code></li>
+</ul>
+<p>When a command is received, the application parses the command string and extracts the command name and parameters. It searches for the command in the global command table (<code>ATCmd_list</code>), which stores entries for each command including the command string, a callback handler, and usage information.</p>
+<p>If the command matches a table entry, the appropriate handler is dispatched with the parsed parameters. All callback functions follow the naming convention: <code>ATCmd&lt;Module&gt;_&lt;command&gt;Callback</code> and reside in the appropriate module file. For example, WLAN-related callbacks are implemented in <code>atcmd_wlan.c</code>.</p>
+<p>The application provides both synchronous responses (command results) and asynchronous events (connection status, scan results, etc.) back to the host via UART. Events are formatted with standard AT event syntax and can be received at any time.</p>
+<h2 id="important-notes">Important Notes</h2>
+<ul>
+<li><p><strong>Buffer Limitations</strong>: Commands and events buffers in this example are limited to 520 bytes, by design. After typing 520 bytes, the currently typed command will be deleted and a new command prompt will appear.</p></li>
+<li><p><strong>Command Cancellation</strong>: Commands can be cancelled during insertion by pressing “Ctrl+C”. This applies to <code>at+send</code> and <code>at+sendto</code> commands which can prompt for more data if the inserted payload doesn’t match the stated payload length.</p></li>
+<li><p><strong>Command History</strong>: Command history navigation using arrow keys in terminal isn’t functioning correctly when using long commands.</p></li>
+</ul>
+<h2 id="protocol-syntax">Protocol Syntax</h2>
+<h3 id="commands">Commands</h3>
+<p>Commands follow the standard AT command syntax:</p>
+<pre><code>AT+&lt;command name&gt;=&lt;param1&gt;, &lt;param2&gt;, ...,&lt;paramX&gt;</code></pre>
+<p><strong>Command Format Rules:</strong></p>
+<ul>
+<li>Commands with parameters must include an equal sign (=) between the command name and the first parameter.</li>
+<li>Parameters must be separated by comma delimiters (,).</li>
+<li>Empty parameters (defined as “ignore” or “optional”) should be left empty with comma delimiters intact (,,).</li>
+<li>Empty parameters are treated as 0 or NULL (according to parameter type). If not defined as “ignore” or “optional”, an error will be raised.</li>
+<li>String parameters containing spaces must be enclosed with quotes (&quot; “).</li>
+<li>String parameters containing commas must be enclosed with quotes (&quot; “).</li>
+<li>Numeric parameters can be:</li>
+<li>Decimal</li>
+<li>Hexadecimal (with 0x prefix for values, not addresses like MAC)</li>
+<li>Numeric array parameters can be enclosed with square brackets ([ ]) and include:</li>
+<li>IPv4 address: x.x.x.x or [x.x.x.x] (four 8-bit values with . delimiter)</li>
+<li>IPv6 address: x❌x:x or [x❌x:x] (four 32-bit values with : delimiter)</li>
+<li>MAC address: x❌x❌x:x or [x❌x❌x:x] (six 8-bit values with : delimiter)</li>
+<li>Bitmask parameters use vertical bar (|) as delimiter: x|x|x or [x|x|x]</li>
+<li>AT commands can be entered in uppercase or lowercase with spaces between arguments.</li>
+<li>Data parameters can be:</li>
+<li>Binary format</li>
+<li>Base64 format (binary to text encoding)</li>
+</ul>
+<h3 id="command-return-status">Command Return Status</h3>
+<p>Commands return one of the following:</p>
+<ul>
+<li><strong>Success</strong>: <code>OK</code></li>
+<li><strong>Success with values</strong>: <code>&lt;command name&gt;: &lt;value1&gt;, ...,&lt;valueX&gt;</code></li>
+<li><strong>Failure</strong>: <code>&lt;event name&gt;: &lt;event ID&gt;,&lt;value1&gt;,...,&lt;valueX&gt;</code></li>
+</ul>
+<p>Return status includes a colon mark (:) between the command/event name and the first value. List values are separated by semicolon mark (;) between list members.</p>
+<h3 id="asynchronous-events">Asynchronous Events</h3>
+<p>Events may arrive at any time and follow this format:</p>
+<pre><code>&lt;event name&gt;: &lt;event ID&gt;,&lt;value1&gt;,...,&lt;valueX&gt;</code></pre>
+<p>The event includes a colon mark (:) between the event name and the event ID.</p>
+<h2 id="available-commands">Available Commands</h2>
+<p>The AT Commands application supports the following command categories:</p>
+<h3 id="device-commands">Device Commands</h3>
+<p>Basic device control and information commands.</p>
+<h3 id="wlan-commands">WLAN Commands</h3>
+<p>WiFi operations including role management, scanning, connecting, and network configuration.</p>
+<h3 id="socket-commands">Socket Commands</h3>
+<p>Socket creation and data transfer operations for TCP and UDP communications.</p>
+<h3 id="network-configuration-commands">Network Configuration Commands</h3>
+<p>IP configuration, DHCP server setup, and network utilities.</p>
+<h3 id="ble-commands">BLE Commands</h3>
+<p>Bluetooth Low Energy operations for advertising, scanning, and connection management.</p>
+<h2 id="device-commands-1">Device Commands</h2>
+<ul>
+<li><a href="#athelp">at+help</a></li>
+<li><a href="#attest">at+test</a></li>
+<li><a href="#atversion">at+version</a></li>
+<li><a href="#atate1">at+ate1</a></li>
+<li><a href="#atate0">at+ate0</a></li>
 </ul>
 <hr />
-<h4 id="wlan_start"><strong>wlan_start</strong></h4>
-<p>This command turns on the WLAN device, initialize the upper MAC thread, and initialize the SPI interface.</p>
-<blockquote>
-<p><strong>Note</strong>: This command is called by the <strong>main function</strong>, and is used only if the user has called the wlan_stop command first.</p>
-</blockquote>
+<h4 id="athelp"><strong>at+help</strong></h4>
+<p>This command displays help information about available AT commands.</p>
+<pre><code>Usage:
+        at+help
+
+Description:
+        Display list of available commands and their usage.
+
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="wlan_stop"><strong>wlan_stop</strong></h4>
-<p>This command turns off the WLAN device and deactivates the SPI interface.</p>
+<h4 id="attest"><strong>at+test</strong></h4>
+<p>This command tests the AT command interface by returning “OK”.</p>
+<pre><code>Usage:
+        at+test
+
+Description:
+        Test command to verify AT interface is responsive.
+
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="wlan_sta_role_up"><strong>wlan_sta_role_up</strong></h4>
+<h4 id="atversion"><strong>at+version</strong></h4>
+<p>This command displays the application version information.</p>
+<pre><code>Usage:
+        at+version
+
+Description:
+        Display application version details.
+
+Response:
+        +version:[version]
+        OK</code></pre>
+<hr />
+<h4 id="atate1"><strong>at+ate1</strong></h4>
+<p>This command enables echo mode where received characters are echoed back.</p>
+<pre><code>Usage:
+        at+ate1
+
+Description:
+        Enable echo of received characters.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atate0"><strong>at+ate0</strong></h4>
+<p>This command disables echo mode.</p>
+<pre><code>Usage:
+        at+ate0
+
+Description:
+        Disable echo of received characters.
+
+Response:
+        OK</code></pre>
+<hr />
+<h2 id="wlan-commands-1">WLAN Commands</h2>
+<ul>
+<li><a href="#atwlanstart">at+wlanstart</a></li>
+<li><a href="#atwlanstop">at+wlanstop</a></li>
+<li><a href="#atwlanstaroleup">at+wlanstaroleup</a></li>
+<li><a href="#atwlanaproleup">at+wlanaproleup</a></li>
+<li><a href="#atwlanroledown">at+wlanroledown</a></li>
+<li><a href="#atwlanscan">at+wlanscan</a></li>
+<li><a href="#atwlanconnect">at+wlanconnect</a></li>
+<li><a href="#atwlandisconnect">at+wlandisconnect</a></li>
+<li><a href="#atwlangetmacaddress">at+wlangetmacaddress</a></li>
+<li><a href="#atwlansetmacaddress">at+wlansetmacaddress</a></li>
+</ul>
+<hr />
+<h4 id="atwlanstart"><strong>at+wlanstart</strong></h4>
+<p>This command initializes and starts the WLAN subsystem. It starts the network processor, enables power management (ELP mode), configures transmission control parameters, and marks the network interface as active.</p>
+<pre><code>Usage:
+        at+wlanstart
+
+Description:
+        Initialize and start the WLAN subsystem.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atwlanstop"><strong>at+wlanstop</strong></h4>
+<p>This command stops the WLAN subsystem. It automatically brings down any active roles (STA and/or AP) before stopping the network processor and marking the network interface as inactive.</p>
+<pre><code>Usage:
+        at+wlanstop
+
+Description:
+        Stop the WLAN subsystem and all active roles.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atwlanstaroleup"><strong>at+wlanstaroleup</strong></h4>
 <p>This command adds and starts the station role on the device:</p>
 <ol>
 <li>Adding a new STA netif interface to the network stack.</li>
-<li>Adding a new WLAN role ID by dispatching <strong>CMD_ROLE_START</strong> to the CC35xx device.</li>
+<li>Adding a new WLAN role ID by dispatching the appropriate command to the CC35xx device.</li>
 </ol>
-<pre><code>Usage: 
-        wlan_sta_role_up [-help] 
+<pre><code>Usage:
+        at+wlanstaroleup
 
 Description:
-        Role up device as STA.</code></pre>
+        Start device in station mode.
+
+Response:
+        OK</code></pre>
 <blockquote>
 <p><strong>Note</strong>: This command is used to start the device in station mode after it is powered on and all modules are initialized.</p>
 </blockquote>
 <hr />
-<h4 id="wlan_sta_role_down"><strong>wlan_sta_role_down</strong></h4>
-<p>This command removes and finishes the station role on the device:</p>
-<ol>
-<li>If the device is connected to an AP, disconnect it from the AP.</li>
-<li>Remove the STA netif interface from the network stack.</li>
-<li>Remove the STA WLAN role ID by dispatching <strong>CMD_ROLE_DISABLE</strong> to the CC35xx device.</li>
-</ol>
+<h4 id="atwlanaproleup"><strong>at+wlanaproleup</strong></h4>
+<p>This command adds and starts the access point role on the device with the specified configuration.</p>
+<pre><code>Usage:
+        at+wlanaproleup=[SSID],[SecurityType],[SecurityKey],[Hidden],[Channel],[StaLimit]
+
+Parameters:
+        SSID          - AP's SSID (max 32 characters)
+        SecurityType  - Security type (OPEN, WPA_WPA2, WPA2_PLUS, WPA3)
+                        WPA2_PLUS enables PMF (Protected Management Frames)
+        SecurityKey   - Password for secured networks (8-63 characters for WPA)
+        Hidden        - Hidden SSID (0=visible, 1=hidden)
+        Channel       - 802.11 WLAN channel
+        StaLimit      - Maximum number of connected stations (1-4)
+
+Description:
+        Start device as access point with specified settings.
+
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="wlan_scan"><strong>wlan_scan</strong></h4>
-<p>This command allows a user to retrieve scan results from the network processor.</p>
-<pre><code>Usage: 
-  scan [-help] [-n &lt;number of APs to display&gt;]
+<h4 id="atwlanroledown"><strong>at+wlanroledown</strong></h4>
+<p>This command removes and stops a WLAN role on the device.</p>
+<pre><code>Usage:
+        at+wlanroledown=[Role]
 
-  -n        Maximum number of scan results to show
-  -help     Display this help.</code></pre>
-<p>Once the <strong>wlan_scan</strong> command has successfully completed, an event <code>WLAN_EVENT_SCAN_RESULT</code> will be triggered and the available devices will be printed to the UART console. Please refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</p>
+Parameters:
+        Role - Role type (STA or AP)
+
+Description:
+        Stop and remove specified WLAN role.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atwlanscan"><strong>at+wlanscan</strong></h4>
+<p>This command allows a user to execute a WLAN scan and retrieve scan results from the network processor.</p>
+<pre><code>Usage:
+  at+wlanscan=[count]
+
+Parameters:
+  count - Maximum number of APs to look for
+
+Description:
+        Scan for available access points.</code></pre>
+<p>Once the scan command has successfully completed, events will be triggered showing the available networks.</p>
 <p>Example:</p>
-<pre><code>scan -n 20
+<pre><code>at+wlanscan=20
 
----------------------------------------------------------------------------------------------
-    |               SSID               |       BSSID       | RSSI  | Ch | Hidden | Security |
----------------------------------------------------------------------------------------------
- 1  | SSID1                            | 94:10:3e:c6:70:a4 | -26   | 1  | NO     | OPEN     |
- 2  | SSID2                            | cc:db:93:43:da:80 | -61   | 1  | NO     | OPEN     |
- 3  | SSID3                            | 34:03:de:10:fc:43 | -59   | 1  | NO     | WPA/WPA2 |
----------------------------------------------------------------------------------------------</code></pre>
++eventwlan:scan_result,SSID1,94:10:3e:c6:70:a4,-26,1,WPA_WPA2,disabled,0
++eventwlan:scan_result,SSID2,cc:db:93:43:da:80,-61,1,OPEN,disabled,0
++eventwlan:scan_result,SSID3,34:03:de:10:fc:43,-59,1,WPA3,capable,0</code></pre>
 <blockquote>
 <p><strong>Note:</strong> The maximum number to show is <strong>20</strong>.</p>
 </blockquote>
 <hr />
-<h4 id="wlan_connect"><strong>wlan_connect</strong></h4>
+<h4 id="atwlanconnect"><strong>at+wlanconnect</strong></h4>
 <p>This command allows a user to connect to an AP. It receives the following parameters:</p>
-<ol>
-<li>SSID (Optional): The requested SSID of the AP. The application expects this parameter to be inside quotation marks (&quot; “).</li>
-<li>Security Type: The device supports four modes: <code>[OPEN, WPA2, WPA3, WPS]</code>.</li>
-<li>Password (Optional): The application expects this parameter to be inside quotation marks (&quot; “).</li>
-</ol>
-<p>When one of the <code>[OPEN, WPA2, WPA3]</code> <em>Security Types</em> is given, the connection is based on the <em>SSID</em> parameter, and hence this parameter is required. However, for <code>[WPS]</code>, the <em>SSID</em> parameter is not allowed.</p>
-<pre><code>Usage: 
-  wlan_connect [-help] [-s &lt;&quot;ssid name&quot;&gt;] [-t &lt;security type&gt;] [-p &lt;&quot;password&quot;&gt;]
-    -s      SSID
-    -t      Type of security (security type = [OPEN, WPA/WPA2])
-    -p      Password in ASCII characters </code></pre>
+<pre><code>Usage:
+  at+wlanconnect=[SSID],[BSSID],[SecurityType],[SecurityKey]
+
+  For WPS:
+  at+wlanconnect=[SecurityType],[SecurityKey]
+
+Parameters:
+    SSID         - AP's SSID
+    BSSID        - AP's MAC address (optional)
+    SecurityType - Security type (OPEN, WPA_WPA2, WPA2_PLUS, WPA3, WPS_PBC, WPS_PIN)
+                   WPA2_PLUS enables PMF (Protected Management Frames)
+    SecurityKey  - Password for secured networks (not needed for WPS_PBC)
+
+Response:
+        OK</code></pre>
 <blockquote>
-<p><strong>Note:</strong> This command is blocking, and the timeout is configured by <code>WLAN_EVENT_TOUT</code> in <code>wlan_cmd.c</code>. For WPS, the timeout is two minutes.</p>
+<p><strong>Note:</strong> This command is blocking, and the connection process may take several seconds.</p>
 </blockquote>
-<ul>
-<li>Expected Host Events - During the connection process to an AP, some async events are expected from the device side. These include:</li>
-</ul>
-<ol>
-<li><code>WLAN_EVENT_CONNECT</code>: This event signals that the device is connected to an AP. It also prints details about the connected AP, such as SSID and BSSID. Please refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</li>
-<li><code>WLAN_EVENT_DISCONNECT</code>: If the device is already connected to an AP, it will disconnect from the old one before attempting to connect to the requested AP. The disconnect reason code will be: <code>WLAN_DISCONNECT_USER_INITIATED</code>. Please refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</li>
-</ol>
 <p>Example:</p>
-<pre><code>wlan_connect -s &quot;myhome network&quot; -t WPA2 -p &quot;password&quot; </code></pre>
+<pre><code>at+wlanconnect=&quot;myhome network&quot;,WPA_WPA2,password</code></pre>
 <hr />
-<h4 id="wlan_disconnect"><strong>wlan_disconnect</strong></h4>
+<h4 id="atwlandisconnect"><strong>at+wlandisconnect</strong></h4>
 <p>This command allows a user to disconnect from an AP, if currently connected to one.</p>
+<pre><code>Usage:
+        at+wlandisconnect
+
+Description:
+        Disconnect from currently connected AP.
+
+Response:
+        OK</code></pre>
 <ul>
-<li>Expected Host Events:<br />
-<code>WLAN_EVENT_DISCONNECT</code>: This event also prints details about the disconnected AP, such as SSID and BSSID. Refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</li>
+<li>Expected Events: Disconnect event will be sent indicating the disconnection status.</li>
 </ul>
 <hr />
-<h4 id="wlan_get_mac"><strong>wlan_get_mac</strong></h4>
+<h4 id="atwlangetmacaddress"><strong>at+wlangetmacaddress</strong></h4>
 <p>This command allows a user to get the device MAC address. It receives the following parameter:</p>
 <ol>
 <li>Role Type: There are two role types available: 0 for Station and 2 for Access Point (AP).</li>
 </ol>
-<pre><code>Usage: 
-        wlan_get_mac [-help] [-i &lt;RoleType&gt;] 
+<pre><code>Usage:
+        at+wlangetmacaddress=[RoleType]
+
+Parameters:
+        RoleType - Role type (STA or AP)
 
 Description:
-        Get MacAddress. role type 0 - STA , 2 - AP 
+        Get MAC address for specified role.
 
-        -i      RoleType, if role type does not exists error is return
+Response:
+        +wlangetmacaddress:[RoleType],[MacAddress]
+        OK
 
-        -help   Display this help</code></pre>
+        RoleType   - Role type (STA or AP)
+        MacAddress - MAC address in format AA:BB:CC:DD:EE:FF</code></pre>
 <blockquote>
-<p><strong>Note:</strong> We support <code>STA role</code>, <code>AP role</code>, and <code>Multi role</code>.</p>
+<p><strong>Note:</strong> We support <code>STA role</code> and <code>AP role</code>.</p>
 </blockquote>
 <p>Example:</p>
-<pre><code>wlan_get_mac -i 0
+<pre><code>at+wlangetmacaddress=sta
 
-[MAC ADDRESS] : a8:1b:6a:a9:90:f2</code></pre>
++wlangetmacaddress:sta,a8:1b:6a:a9:90:f2
+OK</code></pre>
 <hr />
-<h4 id="wlan_set_mac"><strong>wlan_set_mac</strong></h4>
+<h4 id="atwlansetmacaddress"><strong>at+wlansetmacaddress</strong></h4>
 <p>This command allows a user to set the device’s MAC address. It receives the following parameters:</p>
 <ol>
-<li>Role Type: There are two role types available: 0 for Station and 2 for Access Point (AP).</li>
-<li>MAC Address: The new MAC address.</li>
+<li>Role Type: There are two role types available: STA or AP.</li>
+<li>MAC Address: The new MAC address in format AA:BB:CC:DD:EE:FF.</li>
 </ol>
-<pre><code>Usage: 
-        wlan_set_mac [-help] [-i &lt;RoleType&gt;] [-m &lt;macAdress&gt;]
+<pre><code>Usage:
+        at+wlansetmacaddress=[RoleType],[MacAddress]
+
+Parameters:
+        RoleType   - Role type (STA or AP)
+        MacAddress - New MAC address
 
 Description:
-        Set MacAddress. Role type 0 - STA, 2 - AP 
+        Set MAC address for specified role.
 
-        -i      RoleType, if role type does not exist, an error is returned
-
-        -m      MacAddress, if MAC address is not valid, an error is returned
-
-        -help   Display this help</code></pre>
-<p>To apply the changes, you must run <code>wlan_sta_role_down</code> and then <code>wlan_sta_role_up</code>.</p>
+Response:
+        OK</code></pre>
+<p>To apply the changes, you must stop and restart the role. The command won’t work if the specified role is already started.</p>
 <p>Example:</p>
-<pre><code>wlan_set_mac -i 0 -m AA:BB:CC:DD:EE:FF
+<pre><code>at+wlansetmacaddress=sta,AA:BB:CC:DD:EE:FF
+OK
 
-wlan_sta_role_down
+at+wlanstaroleup
+OK
 
-wlan_sta_role_up
+at+wlangetmacaddress=sta
 
-wlan_get_mac -i 0
-
-[MAC ADDRESS] : aa:bb:cc:dd:ee:ff</code></pre>
++wlangetmacaddress:sta,aa:bb:cc:dd:ee:ff
+OK</code></pre>
 <hr />
-<h4 id="wlan_get_ps"><strong>wlan_get_ps</strong></h4>
-<p>This command allows a user to get the current power save mode.</p>
-<pre><code>Usage: 
-        wlan_get_ps [-help] 
-Description:
-        Get current power save mode. 0 - Auto PS , 1 - Active mode, 2 - power save mode</code></pre>
-<blockquote>
-<p><strong>Note:</strong> The device starts in Active mode.</p>
-</blockquote>
-<hr />
-<h4 id="wlan_set_ps"><strong>wlan_set_ps</strong></h4>
-<p>This command allows a user to set the device’s power save mode. It receives the following parameter:</p>
-<ol>
-<li>Power Save Mode: There are three modes available: 0 for Auto PS, 1 for Active mode, and 2 for Power Save mode.</li>
-</ol>
-<pre><code>Usage:
-        wlan_set_ps [-help] [-m &lt;PowerSaveMode&gt;]
-
-Description:
-        Set power save mode. 0 - Auto PS , 1 - Active mode, 2 - power save mode
-
-        -m      Mode, if device not started error is return
-
-        -help   Display this help</code></pre>
-<hr />
-<h2 id="socket-commands">Socket Commands</h2>
+<h2 id="socket-commands-1">Socket Commands</h2>
 <ul>
-<li><a href="#send">send</a></li>
-<li><a href="#recv">recv</a></li>
-<li><a href="#socket_show">socket_show</a></li>
-<li><a href="#kill">kill</a></li>
+<li><a href="#atsocket">at+socket</a></li>
+<li><a href="#atclose">at+close</a></li>
+<li><a href="#ataccept">at+accept</a></li>
+<li><a href="#atbind">at+bind</a></li>
+<li><a href="#atlisten">at+listen</a></li>
+<li><a href="#atconnect">at+connect</a></li>
+<li><a href="#atsend">at+send</a></li>
+<li><a href="#atrecv">at+recv</a></li>
+<li><a href="#atsendto">at+sendto</a></li>
+<li><a href="#atrecvfrom">at+recvfrom</a></li>
 </ul>
 <hr />
-<h4 id="send"><strong>send</strong></h4>
-<p>This command demonstrates sending data in packets using the networking API. It allows a user to open UDP or TCP <strong>client</strong> sockets and send packets in various configurations. It receives the following parameters:</p>
-<ol>
-<li>Protocol: TCP/UDP</li>
-<li>Port Number</li>
-<li>Blocking vs. Non-blocking option</li>
-<li>Number of packets to transmit. Setting this to 0 will send infinite packets</li>
-</ol>
+<h4 id="atsocket"><strong>at+socket</strong></h4>
+<p>This command creates a new socket and returns a socket descriptor.</p>
 <pre><code>Usage:
-        send [-help] [-c &lt;server ip address&gt;] [-u] [-p &lt;port number&gt;]  [-nb] [-n &lt;number of packets&gt;]  
-        
-        -c      Run in client mode and connect to mentioned server - IP should be in '.' format 
-        -u      Use UDP rather than TCP
-        -p      Port number to send/receive data (Default is 5001)
-        -nb     Create non-blocking socket rather than blocking
-        -n      Number of packets to transmit (Default is 1000)
-        -V      Use IPv6 rather than IPv4</code></pre>
-<p>Once all packets have been sent or the timeout has expired (see <code>RECEIVE_TIMEOUT</code> in <code>network_terminal.h</code>), the application will return to the main menu.</p>
+        at+socket=[Family],[Type],[Protocol]
+
+Parameters:
+        Family   - Address family (inet=IPv4)
+        Type     - Socket type (stream=TCP, dgram=UDP)
+        Protocol - Protocol (tcp, udp)
+
+Description:
+        Create a new socket.
+
+Response:
+        +socket:[SocketId]
+        OK
+
+        SocketId - Socket descriptor for use in subsequent socket operations</code></pre>
 <p>Example:</p>
-<pre><code>send -c 10.0.0.10 -u -p 5001 -n 1500</code></pre>
-<p><strong>Infinity option</strong> - Setting the number of packets to 0:</p>
-<ul>
-<li>This option will initiate a new task.</li>
-<li>The task will continuously send packets in an infinite loop.</li>
-<li>For more details on managing this option, refer to the <a href="#kill">kill</a> and <a href="#socket_show">socket_show</a> commands.</li>
-</ul>
-<hr />
-<h4 id="recv"><strong>recv</strong></h4>
-<p>This command demonstrates the reception of data in packets using the networking API.</p>
-<p>This command allows a user to open UDP or TCP <strong>server</strong> sockets and receive packets in various configurations. It receives the following parameters:</p>
-<ol>
-<li>Protocol: TCP/UDP</li>
-<li>Port Number</li>
-<li>Blocking vs. Non-blocking option</li>
-<li>Number of packets to transmit. Setting this to 0 will receive infinite packets</li>
-</ol>
-<pre><code>Usage:
-        recv [-help] [-u] [-p &lt;port number&gt;] [-nb] [-n &lt;number of packets&gt;]          
+<pre><code>at+socket=inet,stream,tcp
 
-        -u      Use UDP rather than TCP
-        -p      Port number to send/receive data (Default is 5001)
-        -nb     Create non-blocking socket rather than blocking
-        -n      Number of packets to transmit (Default is 1000)
-        -V      Use IPv6 rather than IPv4</code></pre>
-<p>Once all packets have been received or the timeout has expired (refer to <code>RECEIVE_TIMEOUT</code> in <code>network_terminal.h</code>), the application will return to the main menu.</p>
++socket:0
+OK</code></pre>
+<hr />
+<h4 id="atclose"><strong>at+close</strong></h4>
+<p>This command closes an open socket.</p>
+<pre><code>Usage:
+        at+close=[SocketId]
+
+Parameters:
+        SocketId - Socket descriptor to close
+
+Description:
+        Close specified socket.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="ataccept"><strong>at+accept</strong></h4>
+<p>This command accepts an incoming connection on a listening socket (TCP server).</p>
+<pre><code>Usage:
+        at+accept=[SocketId],[Family]
+
+Parameters:
+        SocketId - Listening socket descriptor
+        Family  - Specifies the protocol family of the created socket (inet=IPv4)
+
+Description:
+        Accept incoming connection on server socket.
+
+Response:
+        OK
+        +accept:[NewSocket],[Family],[Port],[Address]
+
+        NewSocket - New connected socket descriptor
+        Family    - Internet protocol (inet for IPv4)
+        Port      - Remote peer's port number
+        Address   - Remote peer's IP address</code></pre>
+<hr />
+<h4 id="atbind"><strong>at+bind</strong></h4>
+<p>This command binds a socket to a local address and port.</p>
+<pre><code>Usage:
+        at+bind=[SocketId],[Family],[Port],[IpAddress]
+
+Parameters:
+        SocketId  - Socket descriptor
+        Family    - Address family (inet=IPv4)
+        Port      - Local port number
+        IpAddress - Local IP address
+
+Description:
+        Bind socket to local address and port.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atlisten"><strong>at+listen</strong></h4>
+<p>This command sets a socket to listen for incoming connections (TCP server).</p>
+<pre><code>Usage:
+        at+listen=[SocketId],[Backlog]
+
+Parameters:
+        SocketId - Socket descriptor
+        Backlog  - Maximum pending connections
+
+Description:
+        Set socket to listen for incoming connections.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atconnect"><strong>at+connect</strong></h4>
+<p>This command connects a socket to a remote address (TCP client).</p>
+<pre><code>Usage:
+        at+connect=[SocketId],[Family],[Port],[IpAddress]
+
+Parameters:
+        SocketId  - Socket descriptor
+        Family    - Address family (inet=IPv4)
+        Port      - Remote port number
+        IpAddress - Remote IP address
+
+Description:
+        Connect socket to remote address.
+
+Response:
+        OK</code></pre>
 <p>Example:</p>
-<pre><code>recv -u -p 5001 -n 1500</code></pre>
-<p><strong>Infinity option</strong> - Setting the number of packets to 0:</p>
+<pre><code>at+connect=0,inet,5001,192.168.1.100
+OK</code></pre>
+<hr />
+<h4 id="atsend"><strong>at+send</strong></h4>
+<p>This command sends data over a connected socket (TCP).</p>
+<pre><code>Usage:
+        at+send=[SocketId],[Length],[Format],[Data]
+
+Parameters:
+        SocketId - Socket descriptor
+        Length   - Number of bytes to send
+        Format   - Data format (0=Binary, 1=Base64)
+        Data     - Data to send
+
+Description:
+        Send data over connected socket.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atrecv"><strong>at+recv</strong></h4>
+<p>This command receives data from a connected socket (TCP).</p>
+<pre><code>Usage:
+        at+recv=[SocketId],[Format],[Length]
+
+Parameters:
+        SocketId - Socket descriptor
+        Format   - Data format (0=Binary, 1=Base64)
+        Length   - Maximum number of bytes to receive
+
+Description:
+        Receive data from connected socket.
+
+Response:
+        +recv:[SocketId],[Format],[Length],[Data]
+        OK
+
+        SocketId - Socket descriptor from which data was received
+        Format   - Data format (0=Binary, 1=Base64)
+        Length   - Actual number of bytes received
+        Data     - Received data in specified format
+
+Note:
+        Length units are always bytes, regardless of the format.
+        Response length is adjusted to the format used in the command invocation.</code></pre>
+<hr />
+<h4 id="atsendto"><strong>at+sendto</strong></h4>
+<p>This command sends data to a specific address (UDP).</p>
+<pre><code>Usage:
+        at+sendto=[SocketId],[Family],[Port],[IpAddress],[Format],[Length],[Data]
+
+Parameters:
+        SocketId  - Socket descriptor
+        Family    - Address family (inet=IPv4)
+        Port      - Destination port number
+        IpAddress - Destination IP address
+        Format    - Data format (0=Binary, 1=Base64)
+        Length    - Number of bytes to send
+        Data      - Data to send
+
+Description:
+        Send data to specified address (UDP).
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atrecvfrom"><strong>at+recvfrom</strong></h4>
+<p>This command receives data and source address (UDP).</p>
+<pre><code>Usage:
+        at+recvfrom=[SocketId],[Format],[Length]
+
+Parameters:
+        SocketId - Socket descriptor
+        Format   - Data format (0=Binary, 1=Base64)
+        Length   - Maximum number of bytes to receive
+
+Description:
+        Receive data and source address (UDP).
+
+Response:
+        +recvfrom:[SocketId],[Format],[Length],[Data]
+        OK
+
+        SocketId - Socket descriptor from which data was received
+        Format   - Data format (0=Binary, 1=Base64)
+        Length   - Actual number of bytes received
+        Data     - Received data in specified format
+
+Note:
+        Length units are always bytes, regardless of the format.
+        Response length is adjusted to the format used in the command invocation.</code></pre>
+<hr />
+<h2 id="network-configuration-commands-1">Network Configuration Commands</h2>
 <ul>
-<li>This option will initiate a new task.</li>
-<li>The task will continuously receive packets in an infinite loop.</li>
-<li>For more details on managing this option, refer to the <a href="#kill">kill</a> and <a href="#socket_show">socket_show</a> commands.</li>
+<li><a href="#atnetcfgsetinterfaceip">at+netcfgsetinterfaceip</a></li>
+<li><a href="#atnetcfggetinterfaceip">at+netcfggetinterfaceip</a></li>
+<li><a href="#atnetcfgsetdhcpserver">at+netcfgsetdhcpserver</a></li>
+<li><a href="#atnetcfggetdhcpserver">at+netcfggetdhcpserver</a></li>
+<li><a href="#atping">at+ping</a></li>
+<li><a href="#atpingstop">at+pingstop</a></li>
 </ul>
 <hr />
-<h4 id="socket_show"><strong>socket_show</strong></h4>
-<p>This command allows the user to display the currently running socket processes.</p>
+<h4 id="atnetcfgsetinterfaceip"><strong>at+netcfgsetinterfaceip</strong></h4>
+<p>This command configures the IP settings for a network interface.</p>
+<pre><code>Usage:
+        at+netcfgsetinterfaceip=[Interface],[DhcpMode]&lt;,[IpAddress],[SubnetMask],[Gateway]&gt;
+
+Parameters:
+        Interface  - Interface ID (sta, ap)
+        DhcpMode   - DHCP mode (static, dhcp)
+        IpAddress  - IP address (use if (DhcpMode==dhcp) &amp;&amp; (Interface==ap))
+        SubnetMask - Subnet mask (use if (DhcpMode==dhcp) &amp;&amp; (Interface==ap))
+        Gateway    - Gateway address (use if (DhcpMode==dhcp) &amp;&amp; (Interface==ap))
+
+Description:
+        Set IP configuration for network interface.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atnetcfggetinterfaceip"><strong>at+netcfggetinterfaceip</strong></h4>
+<p>This command retrieves the IP settings for a network interface.</p>
+<pre><code>Usage:
+        at+netcfggetinterfaceip=[Interface]
+
+Parameters:
+        Interface - Interface ID (sta, ap)
+
+Description:
+        Get IP configuration for network interface.
+
+Response:
+        +netcfggetinterfaceip:[Interface],[IpAddress],[SubnetMask],[Gateway]
+        OK
+
+        Interface  - Interface ID (sta, ap)
+        IpAddress  - IP address of the interface
+        SubnetMask - Subnet mask
+        Gateway    - Gateway address</code></pre>
+<p>Example:</p>
+<pre><code>at+netcfggetinterfaceip=sta
+
++netcfggetinterfaceip:sta,192.168.1.100,255.255.255.0,192.168.1.1
+OK</code></pre>
+<hr />
+<h4 id="atnetcfgsetdhcpserver"><strong>at+netcfgsetdhcpserver</strong></h4>
+<p>This command configures the DHCP server settings for AP mode.</p>
+<pre><code>Usage:
+        at+netcfgsetdhcpserver=[LeaseTime],[StartAddress],[EndAddress]
+
+Parameters:
+        LeaseTime    - Lease time in seconds
+        StartAddress - Starting IP address for DHCP pool
+        EndAddress   - Ending IP address for DHCP pool
+
+Description:
+        Configure DHCP server settings for AP mode.
+
+Response:
+        OK
+
+Note:
+        For now the range is limited to 100 adresses only.
+        For AP role this API can only be used if AP role is up.</code></pre>
+<hr />
+<h4 id="atnetcfggetdhcpserver"><strong>at+netcfggetdhcpserver</strong></h4>
+<p>This command retrieves the DHCP server settings.</p>
+<pre><code>Usage:
+        at+netcfggetdhcpserver
+
+Description:
+        Get DHCP server settings.
+
+Response:
+        +netcfggetdhcpserver:[LeaseTime],[StartAddress],[EndAddress]
+        OK
+
+        LeaseTime    - Lease time in seconds
+        StartAddress - Starting IP address of DHCP pool
+        EndAddress   - Ending IP address of DHCP pool</code></pre>
+<hr />
+<h4 id="atping"><strong>at+ping</strong></h4>
+<p>This command sends ICMP ping requests to test network connectivity.</p>
+<pre><code>Usage:
+        at+ping=[TargetIp]&lt;,[Interval]&gt;&lt;,[Count]&gt;&lt;,[PayloadSize]&gt;&lt;,[SourceIp]&gt;
+
+Parameters:
+        TargetIp    - Target IP address (required)
+        Interval    - Interval between pings in milliseconds (optional)
+        Count       - Number of ping requests, 0=continuous (optional)
+        PayloadSize - Ping packet payload size in bytes (optional)
+        SourceIp    - Source IP address (optional)
+
+Description:
+        Send ping requests to test connectivity.
+
+Response:
+        OK</code></pre>
+<p>Example:</p>
+<pre><code>at+ping=192.168.1.1,1000,4,32
+OK</code></pre>
+<hr />
+<h4 id="atpingstop"><strong>at+pingstop</strong></h4>
+<p>This command stops an ongoing continuous ping operation.</p>
+<pre><code>Usage:
+        at+pingstop=[PingId]
+
+Parameters:
+        PingId - Ping operation ID to stop
+
+Description:
+        Stop continuous ping operation.
+
+Response:
+        OK</code></pre>
+<hr />
+<h2 id="ble-commands-1">BLE Commands</h2>
 <ul>
-<li>Each process has a unique ID and a descriptive name.</li>
-</ul>
-<pre><code>Example:
-socket_show 
-
-         Process running: 
-
-        ---id 0          UDP client
-        ---id 1          UDP server
-</code></pre>
-<hr />
-<h4 id="kill"><strong>kill</strong></h4>
-<p>This command allows a user to close specific running socket processes by their ID.</p>
-<pre><code>Usage:
-        kill [-help] [-i &lt;id&gt;]
-
-Description:
-        kill available running process by id        </code></pre>
-<pre><code>Example:
-
-kill -i 0
-kill -i 1</code></pre>
-<h2 id="ble-commands">BLE commands</h2>
-<ul>
-<li><a href="#ble_start">ble_start</a></li>
-<li><a href="#ble_stop">ble_stop</a></li>
-<li><a href="#ble_adv_cfg">ble_adv_cfg</a></li>
-<li><a href="#ble_adv_enable">ble_adv_enable</a></li>
-<li><a href="#ble_scan_cfg">ble_scan_cfg</a></li>
-<li><a href="#ble_scan_enable">ble_scan_enable</a></li>
-<li><a href="#ble_connect">ble_connect</a></li>
-<li><a href="#ble_disconnect">ble_disconnect</a></li>
-<li><a href="#ble_peers">ble_peers</a></li>
-<li><a href="#ble_test_mode">ble_test_mode</a></li>
+<li><a href="#atbleinit">at+bleinit</a></li>
+<li><a href="#atblesetmacaddress">at+blesetmacaddress</a></li>
+<li><a href="#atblegetmacaddress">at+blegetmacaddress</a></li>
+<li><a href="#atblesetdevicename">at+blesetdevicename</a></li>
+<li><a href="#atblegetdevicename">at+blegetdevicename</a></li>
+<li><a href="#atblesetscancfg">at+blesetscancfg</a></li>
+<li><a href="#atblegetscancfg">at+blegetscancfg</a></li>
+<li><a href="#atblescan">at+blescan</a></li>
+<li><a href="#atbleconnect">at+bleconnect</a></li>
+<li><a href="#atbledisconnect">at+bledisconnect</a></li>
+<li><a href="#atbleconnectedpeers">at+bleconnectedpeers</a></li>
+<li><a href="#atblesetadvcfg">at+blesetadvcfg</a></li>
+<li><a href="#atblegetadvcfg">at+blegetadvcfg</a></li>
+<li><a href="#atbleadvstart">at+bleadvstart</a></li>
+<li><a href="#atbleadvstop">at+bleadvstop</a></li>
 </ul>
 <hr />
-<h4 id="ble_start"><strong>ble_start</strong></h4>
-<p>This command turns on the BLE controller and host, and initializes the BLE interface.</p>
-<hr />
-<h4 id="ble_stop"><strong>ble_stop</strong></h4>
-<p>This command stops the BLE controller and host.</p>
-<hr />
-<h4 id="ble_adv_cfg"><strong>ble_adv_cfg</strong></h4>
-<p>This command configures the BLE advertising instance. It receives the following parameters:</p>
-<ol>
-<li>Advertising interval</li>
-<li>Type (legacy or extended)</li>
-<li>Primary PHY settings</li>
-<li>Secondary PHY settings</li>
-<li>Instance ID</li>
-</ol>
+<h4 id="atbleinit"><strong>at+bleinit</strong></h4>
+<p>This command starts or stops the BLE module.</p>
 <pre><code>Usage:
-        ble_adv_cfg [-i &lt;instance&gt;] [-l &lt;legacy [0:extended/1:legacy]&gt;] [-n &lt;interval (ms)&gt;] [-p &lt;primary phy [1:1M/2:2M/3:coded]&gt;] [-s &lt;secondary phy [1:1M/2:2M/3:coded]&gt;]
+        at+bleinit=[Mode]
+
+Parameters:
+        Mode - Operation mode
+               0: Deinit BLE
+               1: Init BLE
 
 Description:
-        Configure a specific advertise instance.
-        Can be used with no parameters.
-        Default Parameters: instance 0, extended, 100ms interval, 1M PHY    
+        Initialize or deinitialize BLE controller and host.
 
-Example:
-        ble_adv_cfg
-        ble_adv_cfg -i 0 -l 0 -n 100 -p 1 -s 1</code></pre>
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="ble_adv_enable"><strong>ble_adv_enable</strong></h4>
-<p>This command enables or disables a BLE advertising instance. It receives the following parameters:</p>
-<ol>
-<li>Enable or disable the advertising instance.</li>
-<li>Specify the advertising instance to be configured.</li>
-<li>Set the duration for the advertising in units of 10 milliseconds.</li>
-<li>Set the maximum number of advertising events.</li>
-</ol>
+<h4 id="atblesetmacaddress"><strong>at+blesetmacaddress</strong></h4>
+<p>This command sets the BLE MAC address type.</p>
 <pre><code>Usage:
-        ble_adv_enable [-e &lt;enable [0/1]&gt;] [-i &lt;instance&gt;] [-d &lt;duration (10ms units)&gt;] [-m &lt;max events]
+        at+blesetmacaddress=[AddressType]
+
+Parameters:
+        AddressType - BLE address type
+                      0: Public Device Address
+                      1: Random Device Address
 
 Description:
-        Enable or disable a specific advertise instance.
-        Can be called only after a previous ble_adv_cfg command.
-        Can be used with no parameters.
-        Default Parameters: enable with no expiration and max events 0  
+        Set BLE MAC address type. Every call with Random type generates a new random address.
 
-Example:
-        ble_adv_enable
-        ble_adv_enable -e 1 -i 0 -d 0 -m 0
-        ble_adv_enable -e 0 -i 0</code></pre>
+Response:
+        +blesetmacaddress:[MacAddress]
+        OK
+
+        MacAddress - The generated BLE MAC address (returned when AddressType=1 for Random Address)
+
+Note:
+        Up to 31 characters for device name.
+        Default device name is &quot;TI CC3xxx&quot;.</code></pre>
 <hr />
-<h4 id="ble_scan_cfg"><strong>ble_scan_cfg</strong></h4>
-<p>This command sets the BLE scan configuration. It receives the following parameters:</p>
-<ol>
-<li>Scan interval in milliseconds.</li>
-<li>Scan window in milliseconds.</li>
-<li>PHY (physical layer) settings.</li>
-</ol>
+<h4 id="atblegetmacaddress"><strong>at+blegetmacaddress</strong></h4>
+<p>This command retrieves the BLE random MAC address.</p>
 <pre><code>Usage:
-        ble_scan_cfg [-i &lt;scan interval (ms)&gt;] [-w &lt;scan window (ms)&gt;] [-p &lt;phy [ 1:1M/4:coded/5:mixed]&gt;]
+        at+blegetmacaddress
 
 Description:
-        Configure BLE scan
-        Can be used with no parameters.
-        Default Parameters: Default Parameters: extended 1M PHY, scan interval of 100ms and scan window of 50ms
+        Get BLE MAC address. Returns the current random MAC address if set.
 
-Example:
-        ble_scan_cfg
-        ble_scan_cfg -i 100 -w 50 -p 1</code></pre>
+Response:
+        +blegetmacaddress:[MacAddress]
+        OK
+
+        MacAddress - BLE MAC address (returns random address if previously set with AddressType=1)</code></pre>
 <hr />
-<h4 id="ble_scan_enable"><strong>ble_scan_enable</strong></h4>
-<p>This command enables or disables BLE scanning. It receives the following parameters:</p>
-<ol>
-<li>Enable or disable the scanning.</li>
-<li>Filter duplicates option.</li>
-<li>Scan period in seconds.</li>
-</ol>
+<h4 id="atblesetdevicename"><strong>at+blesetdevicename</strong></h4>
+<p>This command sets the BLE device name.</p>
 <pre><code>Usage:
-        ble_scan_enable [-e &lt;enable [0/1]&gt;] [-f &lt;filter duplicate [0/1/2]&gt;] [-p &lt;period (sec)&gt;]
+        at+blesetdevicename=[DeviceName]
+
+Parameters:
+        DeviceName - BLE device name
 
 Description:
-        Enable or disable Ble scan.
-        Can be called only after a previous ble_scan_cfg command.
-        Can be used with no parameters.
-        Default Parameters: enable with scan duration of 3s, scan period 0s and no filter duplicate
+        Set BLE device name.
 
-Example:
-        ble_scan_enable
-        ble_scan_enable -e 1 -f 0 -p 0
-        ble_scan_enable -e 0
-        
---------------------------------------------------------------
-| ID |        NAME      |    PEER ADDRESS   |  TYPE  |  RSSI |
---------------------------------------------------------------
-| 0  | Simple Peripheal | A4:10:3E:C8:70:17 | PUBLIC |  -56  |
-| 1  | Simple Central   | A4:2B:83:43:DA:90 | PUBLIC |  -70  | 
-| 2  | Basic Peripheral | C0:03:DE:10:FC:43 | RANDOM |  -62  | 
---------------------------------------------------------------</code></pre>
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="ble_connect"><strong>ble_connect</strong></h4>
-<p>This command allows a user to connect to a BLE peer device. It receives the following parameters:</p>
-<ol>
-<li>Bluetooth Device Address: The address of the BLE device to connect to.</li>
-<li>Address Type: The type of address used by the BLE device. Options are <code>[PUBLIC, RANDOM]</code>.</li>
-</ol>
+<h4 id="atblegetdevicename"><strong>at+blegetdevicename</strong></h4>
+<p>This command retrieves the BLE device name.</p>
 <pre><code>Usage:
-        ble_connect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]
+        at+blegetdevicename
 
 Description:
-        Connect to a BLE peer device
+        Get BLE device name.
 
-Example:
-        ble_connect -b A4:38:25:11:53:18 -t PUBLIC</code></pre>
+Response:
+        +blegetdevicename:[DeviceName]
+        OK
+
+        DeviceName - BLE device name (up to 32 characters, default: &quot;TI CC3xxx&quot;)</code></pre>
 <hr />
-<h4 id="ble_disconnect"><strong>ble_disconnect</strong></h4>
-<p>This command allows a user to disconnect from a BLE peer device. It receives the following parameters:</p>
-<ol>
-<li>Bluetooth Device Address: The address of the BLE device to disconnect from.</li>
-<li>Address Type: The type of address used by the BLE device. Options are <code>[PUBLIC, RANDOM]</code>.</li>
-</ol>
+<h4 id="atblesetscancfg"><strong>at+blesetscancfg</strong></h4>
+<p>This command configures BLE scan parameters.</p>
 <pre><code>Usage:
-        ble_disconnect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]
+        at+blesetscancfg=[ScanType],[OwnAddressType],[FilterPolicy],[ScanInterval],[ScanWindow]
+
+Parameters:
+        ScanType        - Scan mode
+                          0: Passive Scan
+                          1: Active Scan
+        OwnAddressType  - Own address type
+                          0: Public Device Address
+                          1: Random Device Address
+        FilterPolicy    - Advertisement filter policy
+                          0: Accept all advertisements (except directed not addressed to this device)
+                          1: Accept only from devices in the White List (except directed not addressed to this device)
+                          2: Accept all advertisements (including directed not addressed to this device)
+                          3: Accept only from devices in the White List (including directed not addressed to this device)
+        ScanInterval    - Scan interval in units of 0.625ms
+                          Range: [0x0004,0x4000] or 2.5ms to 10.24s
+                          Must be &gt;= ScanWindow
+        ScanWindow      - Scan window in units of 0.625ms
+                          Range: [0x0004,0x4000] or 2.5ms to 10.24s
+                          Must be &lt;= ScanInterval
 
 Description:
-        Disconnect from a BLE peer device.
-        Can be used with no parameters.
-        Default action when no parameters is to disconnect all peers
+        Configure BLE scan parameters.
 
-Example:
-        ble_disconnect
-        ble_disconnect -b A4:38:25:11:53:18 -t PUBLIC</code></pre>
+Response:
+        OK</code></pre>
 <hr />
-<h4 id="ble_peers"><strong>ble_peers</strong></h4>
-<p>This command displays the list of all connected BLE peer devices.</p>
+<h4 id="atblegetscancfg"><strong>at+blegetscancfg</strong></h4>
+<p>This command retrieves current BLE scan configuration.</p>
 <pre><code>Usage:
-        ble_peers
+        at+blegetscancfg
 
 Description:
-        Display the list of all connected BLE peer devices with their attributes
+        Get BLE scan configuration.
 
-Example:
-        ble_peers
-            
--------------------------------------------------------------
-| Handle |   PEER ADDRESS    |  TYPE  |  OWN ROLE  | BONDED?|
--------------------------------------------------------------
-| 0      | A4:10:3E:C8:70:17 | PUBLIC | PERIPHERAL | YES    |
-| 1      | A4:2B:83:43:DA:90 | PUBLIC | CENTRAL    | NO     |
-| 2      | C0:03:DE:10:FC:43 | RANDOM | PERIPHERAL | NO     |
--------------------------------------------------------------</code></pre>
+Response:
+        +blegetscancfg:[ScanType],[OwnAddressType],[FilterPolicy],[ScanInterval],[ScanWindow]
+        OK
+
+        ScanType       - Scan mode (0: Passive Scan, 1: Active Scan)
+        OwnAddressType - Own address type (0: Public Device Address, 1: Random Device Address)
+        FilterPolicy   - Advertisement filter policy (0-3)
+        ScanInterval   - Scan interval in units of 0.625ms (Range: 0x0004-0x4000)
+        ScanWindow     - Scan window in units of 0.625ms (Range: 0x0004-0x4000)</code></pre>
 <hr />
-<h4 id="ble_test_mode"><strong>ble_test_mode</strong></h4>
-<p>This command sets the device into test mode (controller only mode). It receives the following parameter:</p>
-<ol>
-<li>Enable or disable test mode.</li>
-</ol>
+<h4 id="atblescan"><strong>at+blescan</strong></h4>
+<p>This command starts or stops BLE scanning.</p>
 <pre><code>Usage:
-        ble_test_mode [-e &lt;enable&gt;]
+        at+blescan=[Enable]&lt;,[Duration]&gt;
+
+Parameters:
+        Enable   - Enable or disable scan
+                   0: Disable
+                   1: Enable
+        Duration - Scan duration in seconds (optional, required if Enable==1)
+                   0: Continuous scanning until disabled
 
 Description:
-        Enter into a controller only )no host) mode running over UART interface for testing purposes
+        Start or stop BLE scanning.
 
-Example:
-        ble_test_mode -e 1
-        ble_test_mode -e 0</code></pre>
+Response:
+        OK
+
+Note:
+        Scan parameters must be set first using at+blesetscancfg before using this command.</code></pre>
+<p>Example:</p>
+<pre><code>at+blescan=1,3
+OK
+
++eventble:blescan,0,Simple Peripheral,A4:10:3E:C8:70:17,PUBLIC,-56
++eventble:blescan,1,Device Name,A4:2B:83:43:DA:90,PUBLIC,-70
++eventble:blescandone</code></pre>
 <hr />
+<h4 id="atbleconnect"><strong>at+bleconnect</strong></h4>
+<p>This command connects to a BLE peer device.</p>
+<pre><code>Usage:
+        at+bleconnect=[PeerAddress],[PeerAddressType]&lt;,[Timeout]&gt;
+
+Parameters:
+        PeerAddress     - Bluetooth device MAC address
+        PeerAddressType - Peer address type
+                          0: Public Device Address
+                          1: Random Device Address
+        Timeout         - Connection timeout (optional)
+
+Description:
+        Connect to BLE peer device.
+
+Response:
+        OK</code></pre>
+<p>Example:</p>
+<pre><code>at+bleconnect=A4:38:25:11:53:18,0
+OK
+
++eventble:bleconnect,[ConnectionHandle],[PeerAddress],[PeerAddressType]</code></pre>
+<hr />
+<h4 id="atbledisconnect"><strong>at+bledisconnect</strong></h4>
+<p>This command disconnects from a BLE peer device.</p>
+<pre><code>Usage:
+        at+bledisconnect
+
+Description:
+        Disconnect from BLE peer device.
+
+Response:
+        OK</code></pre>
+<hr />
+<h4 id="atbleconnectedpeers"><strong>at+bleconnectedpeers</strong></h4>
+<p>This command displays all connected BLE peer devices.</p>
+<pre><code>Usage:
+        at+bleconnectedpeers
+
+Description:
+        Display list of connected BLE peers.
+
+Response:
+        +bleconnectedpeers:[PeerAddress1];[PeerAddress2];...
+        OK
+
+        PeerAddress1, PeerAddress2, ... - MAC addresses of connected BLE peers (semicolon-separated)</code></pre>
+<hr />
+<h4 id="atblesetadvcfg"><strong>at+blesetadvcfg</strong></h4>
+<p>This command configures BLE advertising parameters.</p>
+<pre><code>Usage:
+        at+blesetadvcfg=[MinInterval],[MaxInterval],[AdvType],[OwnAddressType],[ChannelMap]&lt;,[FilterPolicy]&gt;&lt;,[PeerAddressType],[PeerAddress]&gt;&lt;,[PrimaryPhy],[SecondaryPhy]&gt;
+
+Parameters:
+        MinInterval     - Minimum advertising interval in 0.625ms units
+                          Range: [0x0020,0x4000] or [20,10240] milliseconds
+                          If 0, stack uses default
+        MaxInterval     - Maximum advertising interval in 0.625ms units
+                          Range: [0x0020,0x4000] or [20,10240] milliseconds
+                          If 0, stack uses default
+        AdvType         - Advertising type
+                          0: BLE_ADV_TYPE_IND
+                          1: BLE_ADV_TYPE_DIRECT_IND_HIGH
+                          2: BLE_ADV_TYPE_SCAN_IND
+                          3: BLE_ADV_TYPE_NONCONN_IND
+                          4: BLE_ADV_TYPE_DIRECT_IND_LOW
+                          5: BLE_ADV_TYPE_EXT_NOSCANNABLE_IND
+                          6: BLE_ADV_TYPE_EXT_CONNECTABLE_IND
+                          7: BLE_ADV_TYPE_EXT_SCANNABLE_IND
+        OwnAddressType  - Own address type
+                          0: Public Device Address
+                          1: Random Device Address
+        ChannelMap      - Advertising channel map (if 0, stack uses default)
+                          1: Channel 37
+                          2: Channel 38
+                          3: Channel 39
+                          7: All channels
+        FilterPolicy    - Advertising filter policy (optional)
+                          0: NONE - no filtering, no whitelist (default)
+                          1: SCAN - process all connection requests but only scans from white list
+                          2: CONN - process all scan requests but only connection requests from white list
+                          3: BOTH - ignore all scan and connection requests unless in white list
+        PeerAddressType - Peer address type for directed advertising (optional, valid only if directed)
+                          0: Public Device Address
+                          1: Random Device Address
+        PeerAddress     - Peer address for directed advertising (optional, valid only if directed)
+        PrimaryPhy      - Primary advertising PHY (optional)
+                          1: 1M Phy
+                          3: Coded Phy
+        SecondaryPhy    - Secondary advertising PHY (optional)
+                          1: 1M Phy
+                          2: 2M Phy
+                          3: Coded Phy
+
+Description:
+        Configure BLE advertising parameters.
+
+Response:
+        OK
+
+Note:
+        BLE_ADV_TYPE_DIRECT_IND_HIGH is limited to a duration of 1280 milliseconds.</code></pre>
+<hr />
+<h4 id="atblegetadvcfg"><strong>at+blegetadvcfg</strong></h4>
+<p>This command retrieves current BLE advertising configuration.</p>
+<pre><code>Usage:
+        at+blegetadvcfg
+
+Description:
+        Get BLE advertising configuration. Returns all parameters as set by at+blesetadvcfg.
+
+Response:
+        +blegetadvcfg:[MinInterval],[MaxInterval],[AdvType],[OwnAddressType],[ChannelMap],[FilterPolicy],[PeerAddressType],[PeerAddress],[PrimaryPhy],[SecondaryPhy]
+        OK
+
+        MinInterval     - Minimum advertising interval in 0.625ms units
+        MaxInterval     - Maximum advertising interval in 0.625ms units
+        AdvType         - Advertising type (0-7)
+        OwnAddressType  - Own address type (0: Public, 1: Random)
+        ChannelMap      - Advertising channel map (1: Ch37, 2: Ch38, 4: Ch39, 7: All)
+        FilterPolicy    - Advertising filter policy (0-3, optional)
+        PeerAddressType - Peer address type (0: Public, 1: Random, optional)
+        PeerAddress     - Peer address for directed advertising (optional)
+        PrimaryPhy      - Primary advertising PHY (1: 1M, 3: Coded, optional)
+        SecondaryPhy    - Secondary advertising PHY (1: 1M, 2: 2M, 3: Coded, optional)</code></pre>
+<hr />
+<h4 id="atbleadvstart"><strong>at+bleadvstart</strong></h4>
+<p>This command starts BLE advertising.</p>
+<pre><code>Usage:
+        at+bleadvstart
+
+Description:
+        Start BLE advertising with previously configured parameters.
+
+Response:
+        OK
+
+Note:
+        Advertising configuration must be set first using at+blesetadvcfg.</code></pre>
+<hr />
+<h4 id="atbleadvstop"><strong>at+bleadvstop</strong></h4>
+<p>This command stops BLE advertising.</p>
+<pre><code>Usage:
+        at+bleadvstop
+
+Description:
+        Stop BLE advertising.
+
+Response:
+        OK</code></pre>
+<hr />
+<h2 id="events">Events</h2>
+<p>Asynchronous events can be triggered at any time and are displayed on the UART terminal. Events follow the format: <code>+Event&lt;Type&gt;:&lt;EventID&gt;,&lt;Value1&gt;,...,&lt;ValueX&gt;</code></p>
+<h3 id="wlan-events">WLAN Events</h3>
+<p>WLAN events are triggered during WiFi operations and indicate connection status, scan results, and AP client management.</p>
+<h4 id="eventwlanconnect"><strong>+EventWlan:CONNECT</strong></h4>
+<p>Triggered when STA successfully connects to an AP or when connection fails.</p>
+<pre><code>Format: +EventWlan:CONNECT,&lt;SSID&gt;,&lt;BSSID&gt;
+
+Values:
+        SSID  - AP's SSID
+        BSSID - AP's MAC address
+        &quot;-1&quot;  - Indicates connection failure</code></pre>
+<h4 id="eventwlandisconnect"><strong>+EventWlan:DISCONNECT</strong></h4>
+<p>Triggered when STA disconnects from an AP.</p>
+<pre><code>Format: +EventWlan:DISCONNECT,&lt;SSID&gt;,&lt;BSSID&gt;,&lt;ReasonCode&gt;
+
+Values:
+        SSID       - AP's SSID
+        BSSID      - AP's MAC address
+        ReasonCode - Disconnection reason code</code></pre>
+<h4 id="eventwlanscan_results"><strong>+EventWlan:SCAN_RESULTS</strong></h4>
+<p>Triggered after scan command completion. Multiple events are sent, one per discovered network, separated by semicolons.</p>
+<pre><code>Format: +EventWlan:SCAN_RESULTS,&lt;SSID&gt;,&lt;BSSID&gt;,&lt;RSSI&gt;,&lt;Channel&gt;,&lt;SecurityType&gt;,&lt;Key&gt;,&lt;Hidden&gt;
+
+Values:
+        SSID         - Network SSID
+        BSSID        - AP MAC address
+        RSSI         - Signal strength in dBm
+        Channel      - WiFi channel number
+        SecurityType - OPEN, WPA, WPA2, WPA_WPA2, WPA3
+        PMF          - Required, Capable, Disabled
+        Hidden       - 0: Not hidden, 1: Hidden SSID</code></pre>
+<h4 id="eventwlansta_added"><strong>+EventWlan:STA_ADDED</strong></h4>
+<p>Triggered when a station connects to the operating AP (AP mode).</p>
+<pre><code>Format: +EventWlan:STA_ADDED,&lt;MACAddress&gt;
+
+Values:
+        MACAddress - Connected station's MAC address</code></pre>
+<h4 id="eventwlansta_removed"><strong>+EventWlan:STA_REMOVED</strong></h4>
+<p>Triggered when a station disconnects from the operating AP (AP mode).</p>
+<pre><code>Format: +EventWlan:STA_REMOVED,&lt;MACAddress&gt;
+
+Values:
+        MACAddress - Disconnected station's MAC address</code></pre>
+<h3 id="network-events">Network Events</h3>
+<p>Network events indicate IP configuration changes and network layer status.</p>
+<h4 id="eventnetworkipv4_acquired"><strong>+EventNetwork:IPv4_ACQUIRED</strong></h4>
+<p>Triggered when a network interface acquires an IPv4 address (STA mode).</p>
+<pre><code>Format: +EventNetwork:IPv4_ACQUIRED,&lt;IPAddress&gt;,&lt;Netmask&gt;,&lt;Gateway&gt;
+
+Values:
+        IPAddress - Assigned IP address
+        Netmask   - Subnet mask
+        Gateway   - Gateway address</code></pre>
+<h3 id="ble-events">BLE Events</h3>
+<p>BLE events are triggered during Bluetooth Low Energy operations including scanning, connections, and advertising.</p>
+<h4 id="eventbleblescan"><strong>+EventBle:BLESCAN</strong></h4>
+<p>Triggered during BLE scanning when a device is discovered.</p>
+<pre><code>Format: +EventBle:BLESCAN,&lt;MACAddress&gt;,&lt;RSSI&gt;,&lt;OwnAddressType&gt;,&lt;DeviceName&gt;
+
+Values:
+        MACAddress      - Discovered device MAC address
+        RSSI            - Signal strength in dBm
+        OwnAddressType  - PUBLIC or RANDOM
+        DeviceName      - Device name (&quot;Unnamed&quot; if not available)</code></pre>
+<h4 id="eventbleblescandone"><strong>+EventBle:BLESCANDONE</strong></h4>
+<p>Triggered when BLE scan completes or is stopped.</p>
+<pre><code>Format: +EventBle:BLESCANDONE
+
+No additional values.</code></pre>
+<h4 id="eventblebleconnect"><strong>+EventBle:BLECONNECT</strong></h4>
+<p>Triggered when BLE connection is established.</p>
+<pre><code>Format: +EventBle:BLECONNECT,&lt;ConnectionHandle&gt;,&lt;MACAddress&gt;,&lt;PeerAddressType&gt;
+
+Values:
+        ConnectionHandle - Connection handle ID
+        MACAddress       - Peer device MAC address
+        PeerAddressType  - PUBLIC or RANDOM</code></pre>
+<h4 id="eventblebledisconnect"><strong>+EventBle:BLEDISCONNECT</strong></h4>
+<p>Triggered when BLE connection is terminated.</p>
+<pre><code>Format: +EventBle:BLEDISCONNECT,&lt;ConnectionHandle&gt;,&lt;MACAddress&gt;,&lt;AddressType&gt;
+
+Values:
+        ConnectionHandle - Connection handle ID
+        MACAddress       - Peer device MAC address
+        AddressType      - PUBLIC or RANDOM</code></pre>
+<h4 id="eventblebleadvcomplete"><strong>+EventBle:BLEADVCOMPLETE</strong></h4>
+<p>Triggered when BLE advertising operation completes.</p>
+<pre><code>Format: +EventBle:BLEADVCOMPLETE,&lt;TerminationCode&gt;
+
+Values:
+        TerminationCode - Reason for advertising termination</code></pre>
 <!-- Close div from before_body_template.html -->
 </div>
 <footer id="tiFooter">
@@ -545,7 +1185,7 @@ Example:
   with 100,000+ analog ICs and embedded processors, along with software, tools
   and the industry‘s largest sales/support staff.</p>
   <p>
-    <a href="https://www.ti.com/corp/docs/legal/copyright.shtml">© Copyright 1995-2025</a>, Texas Instruments Incorporated. All rights reserved. <br>
+    <a href="https://www.ti.com/corp/docs/legal/copyright.shtml">© Copyright 1995-2026</a>, Texas Instruments Incorporated. All rights reserved. <br>
     <a href="https://www.ti.com/corp/docs/legal/trademark/trademrk.htm">Trademarks</a> | <a href="https://www.ti.com/corp/docs/legal/privacy.shtml">Privacy policy</a> | <a href="https://www.ti.com/corp/docs/legal/termsofuse.shtml">Terms of use</a> | <a href="https://www.ti.com/lsds/ti/legal/termsofsale.page">Terms of sale</a>
   </p>
 </footer>

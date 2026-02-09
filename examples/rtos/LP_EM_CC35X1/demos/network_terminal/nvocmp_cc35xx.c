@@ -170,19 +170,13 @@ Requires API's in a crc.h to implement CRC functionality.
 #ifndef NV_LINUX
 
 #include <ti/devices/DeviceFamily.h>
-/* CC23X0 and CC27XX does not support GPRAM,
- * so VIMS access is not needed */
-#if !defined(DeviceFamily_CC23X0R5) && !defined(DeviceFamily_CC23X0R53) && !defined(DeviceFamily_CC23X0R2) && !defined(DeviceFamily_CC23X0R22) && !defined(DeviceFamily_CC27XX) && !defined(DeviceFamily_CC35XX)
-#include DeviceFamily_constructPath(driverlib/vims.h)
-#endif
 
 #ifdef NVOCMP_MIN_VDD_FLASH_MV
 #include <driverlib/aon_batmon.h>
 #endif
 
 #ifdef ENABLE_SPS
-#include <ti/drivers/AESECB.h>
-#include <ti/drivers/cryptoutils/cryptokey/CryptoKeyPlaintext.h>
+#include <psa/crypto.h>
 #endif
 
 #include "ti_flash_map_config.h"
@@ -655,6 +649,14 @@ typedef struct
 #define XMEMWFF3_NVS_DEVICE     0x0
 #define XMEMWFF3_NVS_FLAGS      0x0
 
+#ifdef ENABLE_SPS
+  /* TKDK is derived from HUK. Size of TKDK is 32 bytes */
+  #define TKDK_SIZE 		32
+  #define PSA_KEY_ID_SPS    PSA_KEY_ID_USER_MAX - 2
+  #define SPS_KEY_SIZE    	32
+  const uint8_t label[]   = "ThisIsALabelForNVOCMPKeyToEncryptAndDecryptDataPayload";
+#endif
+
 //*****************************************************************************
 // Local variables
 //*****************************************************************************
@@ -716,12 +718,8 @@ NVOCMP_initAction_t gAction;
 uint8_t NVOCMP_size;
 
 #ifdef ENABLE_SPS
-// AESECB variables
-AESECB_Handle aesHandle;
-static const AESECBKeyParams  aesECBKeyParams = {
-  .key = {0x8c, 0x5c, 0xf3, 0x45, 0x7f, 0xf2, 0x22, 0x28, 0xc3, 0x9c, 0x05, 0x1c, 0x4e, 0x05, 0xed, 0x40},
-  .keyLength = 16,
-};
+static psa_algorithm_t spsAlg = PSA_ALG_ECB_NO_PADDING;
+static psa_key_id_t    spsKeyID;
 #endif
 
 //*****************************************************************************
@@ -804,6 +802,12 @@ static void       NVOCMP_migratePage(NVOCMP_nvHandle_t *pNvHandle, uint8_t page)
 #if ((NVOCMP_NVPAGES > NVOCMP_NVONEP) && !defined(NVOCMP_MIGRATE_DISABLED)) \
     || defined NVOCMP_RAM_OPTIMIZATION
 static void       NVOCMP_copyItem(uint8_t srcPg, uint8_t dstPg, uint16_t sOfs, uint16_t dOfs, uint16_t len);
+#endif
+
+#ifdef ENABLE_SPS
+static psa_status_t NVOCMP_setupKeyDerivation(psa_key_derivation_operation_t *derivation, psa_algorithm_t alg, psa_key_id_t keyID);
+static psa_status_t NVOCMP_deriveTrustedKey(void);
+static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize);
 #endif
 
 //*****************************************************************************
@@ -1020,8 +1024,8 @@ static uint8_t NVOCMP_initNvApi(void *param)
 #endif
 
 #ifdef ENABLE_SPS
-        // AESECB variables
-        AESECB_Params ecbParams;
+        // PSA variables
+        psa_status_t status;
 #endif
 
         // Only one init per device reset
@@ -1075,19 +1079,24 @@ static uint8_t NVOCMP_initNvApi(void *param)
         XMEMWFF3_sectorSize = NVOCMP_hwAttrs.flashType.sectorSize;
 
 #ifdef ENABLE_SPS
-        // AESECB Driver initialization.
-        AESECB_init();
-        AESECB_Params_init(&ecbParams);
-        ecbParams.returnBehavior = AESECB_RETURN_BEHAVIOR_BLOCKING;
-
-        // Open AESECB Driver interface and get a handle.
-        aesHandle = AESECB_open(CONFIG_AESECB_0, &ecbParams);
-        if (aesHandle == NULL)
+        // PSA Crypto initialization.
+        status = psa_crypto_init();
+        if (status != PSA_SUCCESS)
         {
-          /* Failed to get a handle to AES driver!
+            /* Failed to initilize PSA
+             * Clean up and return to caller.
+             */
+              NVOCMP_failF = NVINTF_PSAINIT_FAIL;
+              NVOCMP_EXCEPTION(pg, NVINTF_FAILURE)
+              return(NVOCMP_failF);
+        }
+        status = NVOCMP_keyDerivationFromTkdk (SPS_KEY_SIZE);
+        if (status != PSA_SUCCESS)
+        {
+          /* Failed to Derive Key for encryption/decryption
            * Clean up and return to caller.
            */
-            NVOCMP_failF = NVINTF_AESOPEN_FAIL;
+            NVOCMP_failF = NVINTF_PSAKEY_DER_FAIL;
             NVOCMP_EXCEPTION(pg, NVINTF_FAILURE)
             return(NVOCMP_failF);
         }
@@ -3201,11 +3210,10 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
     NVOCMP_pageHdr_t pageHdr;
 
 #ifdef ENABLE_SPS
-    CryptoKey cryptoKey;
-    AESECB_Operation ecbOperation;
-    int_fast16_t encryptionResult;
     uint8_t ciphertext[MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
     uint8_t plaintext[MAX_PAYLOAD_LENGTH];
+    psa_status_t encStatus;
+    size_t     outputLength;
 #endif
 
     NVOCMP_read(dstPg, NVOCMP_PGHDROFS, (uint8_t *)&pageHdr, NVOCMP_PGHDRLEN);
@@ -3277,25 +3285,13 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
         memset(plaintext, 0x00, MAX_PAYLOAD_LENGTH);
         memcpy(plaintext, pBuf, pHdr->len);
 
-        // Encrypt the data before writing to flash.
-        CryptoKeyPlaintextHSM_initKey(&cryptoKey,
-                                   (uint8_t *)aesECBKeyParams.key,
-                                   aesECBKeyParams.keyLength);
-
-        AESECB_Operation_init(&ecbOperation);
-        ecbOperation.key         = &cryptoKey;
-        ecbOperation.input       = plaintext;
-        ecbOperation.inputLength = dLen;
-        ecbOperation.output      = ciphertext;
-
-        // Perform a single step encryption operation of the message
-        encryptionResult = AESECB_oneStepEncrypt(aesHandle, &ecbOperation);
-
-        if (encryptionResult != AESECB_STATUS_SUCCESS)
+        // Encrypt the data before writing to flash using PSA API
+        encStatus = psa_cipher_encrypt (spsKeyID, spsAlg, plaintext, dLen, ciphertext, sizeof(ciphertext), &outputLength);
+        if (encStatus != PSA_SUCCESS)
         {
-            // Handle error, when oneStepEncrypt fails.
-            NVOCMP_failW = NVINTF_ENCRYPTION_FAIL;
-            return;
+          // Handle error, when PSA encrypt fails.
+          NVOCMP_failW = NVINTF_ENCRYPTION_FAIL;
+          return;
         }
 #endif
 
@@ -3497,12 +3493,11 @@ static uint8_t NVOCMP_readItem(NVOCMP_itemHdr_t *iHdr, uint16_t ofs, uint16_t le
 #endif
 
 #ifdef ENABLE_SPS
-  CryptoKey cryptoKey;
-  AESECB_Operation ecbOperation;
-  int_fast16_t decryptionResult;
   uint8_t plaintext[MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
   uint8_t ciphertext [MAX_PAYLOAD_LENGTH];
   uint16_t lenEncrypted;
+  psa_status_t decStatus;
+  size_t   outputLength;
 #endif
 
     iOfs = (iHdr->hofs - iHdr->len);
@@ -3559,25 +3554,14 @@ static uint8_t NVOCMP_readItem(NVOCMP_itemHdr_t *iHdr, uint16_t ofs, uint16_t le
 #ifdef ENABLE_SPS
             /* Data item has been read from flash and it is in the buffer.
              * Need to decrypt before returning back to caller.
+             * Decrypt using PSA API.
              */
-            CryptoKeyPlaintextHSM_initKey(&cryptoKey,
-                                      (uint8_t *)aesECBKeyParams.key,
-                                      aesECBKeyParams.keyLength);
-
-            AESECB_Operation_init(&ecbOperation);
-            ecbOperation.key         = &cryptoKey;
-            ecbOperation.input       = ciphertext;
-            ecbOperation.inputLength = lenEncrypted;
-            ecbOperation.output      = plaintext;
-
-            // Perform a single step decryption operation of the message
-            decryptionResult = AESECB_oneStepDecrypt(aesHandle, &ecbOperation);
-
-            if (decryptionResult != AESECB_STATUS_SUCCESS)
+            decStatus = psa_cipher_decrypt (spsKeyID, spsAlg, ciphertext, lenEncrypted, plaintext, sizeof(plaintext), &outputLength);
+            if (decStatus != PSA_SUCCESS)
             {
-                // Handle error, when oneStepDecrypt fails.
-                NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
-                return NVINTF_DECRYPTION_FAIL;
+              // Handle error, when PSA decrypt fails.
+              NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
+              return NVINTF_DECRYPTION_FAIL;
             }
 
             // Copy encrypted data into buffer.
@@ -5436,4 +5420,149 @@ static uint32_t NVOCMP_sanityCheckApi (void)
 }
 #endif
 
+#ifdef ENABLE_SPS
+/******************************************************************************
+ * @fn      NVOCMP_setupKeyDerivation
+ *
+ * @brief   Global function to derive key based on algorithm type.
+ *
+ * @param   derivation - key derivation operation
+ * @param   alg - algorithm to use for key derivation
+ * @param   keyID - key ID to derive from
+ *
+ * @return  PSA_SUCCESS: Derivation set up is successful
+ *          PSA_ERROR_XXX: Failed to set up key derivation
+ *
+ */
+static psa_status_t NVOCMP_setupKeyDerivation(psa_key_derivation_operation_t *derivation, psa_algorithm_t alg, psa_key_id_t keyID)
+{
+    psa_status_t status;
+    uint64_t value = 1U;
+
+    /* Make sure we're deriving from HUK or from the TKDK */
+    if ((keyID != PSA_KEY_ID_HSM_HUK) && (keyID != PSA_KEY_ID_HSM_TKDK))
+    {
+        return PSA_ERROR_NOT_PERMITTED;
+    }
+
+    /* Set up the key derivation operation */
+    status = psa_key_derivation_setup(derivation, alg);
+
+    if (status == PSA_SUCCESS)
+    {
+      /* Provide the input key for derivation */
+      status = psa_key_derivation_input_key(derivation, PSA_KEY_DERIVATION_INPUT_SECRET, keyID);
+
+      if (status == PSA_SUCCESS)
+      {
+          /* Set input label */
+          status = psa_key_derivation_input_bytes(derivation, PSA_KEY_DERIVATION_INPUT_LABEL, label, sizeof(label));
+      }
+    }
+
+    return status;
+}
+
+
+/******************************************************************************
+ * @fn      NVOCMP_deriveTrustedKey
+ *
+ * @brief   Global function to derive TKDK from HUK.
+ *
+ * @param   none
+ *
+ * @return  PSA_SUCCESS   - If TKDK is generated from HUK
+ *          PSA_ERROR_XXX - One of the PSA_ERROR codes, if TKDK generation fails
+ *
+ */
+static psa_status_t NVOCMP_deriveTrustedKey(void)
+{
+  psa_status_t status;
+  psa_key_attributes_t attributes;
+  psa_key_derivation_operation_t derivation = PSA_KEY_DERIVATION_OPERATION_INIT;
+  psa_key_id_t outputKeyID;
+
+  /* The TKDK is derived from the HUK via a CMAC-based KDF */
+  status = NVOCMP_setupKeyDerivation(&derivation, PSA_ALG_SP800_108_COUNTER_CMAC, PSA_KEY_ID_HSM_HUK);
+
+  if (status == PSA_SUCCESS)
+  {
+      /* Configure attributes for output key */
+      attributes = PSA_KEY_ATTRIBUTES_INIT;
+      /* The TKDK performs derivations with an HMAC-based KDF */
+      psa_set_key_algorithm(&attributes, PSA_ALG_SP800_108_COUNTER_HMAC(PSA_ALG_SHA_256));
+      /* Constant size TKDK */
+      psa_set_key_bits(&attributes, PSA_BYTES_TO_BITS(TKDK_SIZE));
+      /* The TKDK can only be used for derivation */
+      psa_set_key_type(&attributes, PSA_KEY_TYPE_DERIVE);
+      psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_DERIVE);
+      psa_set_key_id(&attributes, PSA_KEY_ID_HSM_TKDK);
+
+      /* TKDK lifetime only support Asset store location and persistence */
+      psa_set_key_lifetime(&attributes,
+                          PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION(PSA_KEY_PERSISTENCE_HSM_ASSET_STORE,
+                                                                          PSA_KEY_LOCATION_HSM_ASSET_STORE));
+
+      /* Perform the key derivation */
+      status = psa_key_derivation_output_key(&attributes, &derivation, &outputKeyID);
+      /* outputKeyID should be equal to PSA_KEY_ID_HSM_TKDK */
+
+      /* Clean up */
+      psa_key_derivation_abort(&derivation);
+  }
+
+  return status;
+}
+
+/******************************************************************************
+ * @fn      NVOCMP_keyDerivationFromTkdk
+ *
+ * @brief   Global function to derive a key from TKDK.
+ *
+ * @param   derivedKeySize  Size of the key to be derived.
+ *
+ * @return  PSA_SUCCESS   - If Key is successfully derived from TKDK
+ *          PSA_ERROR_XXX - One of the PSA_ERROR codes, if key derivation failed
+ *
+ */
+static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize)
+{
+    psa_status_t status;
+    psa_key_derivation_operation_t derivation = PSA_KEY_DERIVATION_OPERATION_INIT;
+    /* Attributes for key to be derived from TKDK, after the TKDK is derived */
+    psa_key_attributes_t attributes           = PSA_KEY_ATTRIBUTES_INIT;
+    size_t capacity;
+
+    /* Derive TKDK - it can be used via its reserved Key ID if successful */
+    status = NVOCMP_deriveTrustedKey();
+
+    if (status == PSA_SUCCESS)
+    {
+        /* Setup a derivation of a key from the TKDK, which uses an HMAC-based KDF */
+        status = NVOCMP_setupKeyDerivation(&derivation, PSA_ALG_SP800_108_COUNTER_HMAC(PSA_ALG_SHA_256), PSA_KEY_ID_HSM_TKDK);
+
+        if (status == PSA_SUCCESS)
+        {
+            /* Set up attributes of key to derive from TKDK */
+            psa_set_key_algorithm(&attributes, PSA_ALG_ECB_NO_PADDING);
+            psa_set_key_bits(&attributes, PSA_BYTES_TO_BITS(derivedKeySize));
+            psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+            psa_set_key_usage_flags(&attributes, (PSA_KEY_USAGE_ENCRYPT | PSA_KEY_USAGE_DECRYPT));
+            /* Derived keys can only be produced with Asset Store location and persistence */
+            psa_set_key_lifetime(&attributes,
+                                 PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION(PSA_KEY_PERSISTENCE_HSM_ASSET_STORE,
+                                                                                PSA_KEY_LOCATION_HSM_ASSET_STORE));
+            psa_set_key_id(&attributes, PSA_KEY_ID_SPS); // TO-DO: Check this
+
+            /* Derive a key from the TKDK */
+            status = psa_key_derivation_output_key(&attributes, &derivation, &spsKeyID);
+
+            /* Clean up */
+            psa_key_derivation_abort(&derivation);
+        }
+    }
+
+    return status;
+}
+#endif // #ifdef ENABLE_SPS
 //*****************************************************************************

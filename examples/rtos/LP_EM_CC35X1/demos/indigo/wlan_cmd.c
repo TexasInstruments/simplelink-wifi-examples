@@ -43,9 +43,11 @@
 #include "network_lwip.h"
 #include "FreeRTOS.h"
 #include "ble_if.h"
+#include "ble_cmd.h"
 #include "lwip/sockets.h"
 #include "lwip_ping.h"
 #include "dhcpserver.h"
+#include "date_time_service.h"
 //#define GENERATE_RANDOM_MAC
 #ifdef GENERATE_RANDOM_MAC
 #ifdef CC35XX
@@ -55,7 +57,13 @@
 #endif 
 #endif
 
+#ifdef SNTP_SUPPORT
+#include "sntp_wrapper.h"
+#endif
+
+#ifdef CC35XX
 #define ENT_EXAMPLE //when enterprise example is enabled the code size is increased  due to the inclusion of the certificate files
+#endif
 
 #ifdef ENT_EXAMPLE
 
@@ -74,10 +82,13 @@ extern Bool_e g_wait_p2p_scan_complete;
 extern OsiSyncObj_t p2p_find_stopped_syncObj;
 #endif // CC35XX
 
+#ifdef CC35XX_INDIGO_APP
 //Indigo 
-extern LoadCertiCmd_t client_certi;
-extern LoadCertiCmd_t ca_certi;
-extern LoadCertiCmd_t private_key_certi;
+extern LoadCertiCmd_t g_client_indigo_cert;
+extern LoadCertiCmd_t g_ca_indigo_cert;
+extern LoadCertiCmd_t g_private_key_indigo_cert;
+void releaseLoadedCertificate(certificate_load_type_t type);
+#endif
 
 /* Application defines */
 #ifdef CC35XX
@@ -86,7 +97,7 @@ extern LoadCertiCmd_t private_key_certi;
 #define WLAN_EVENT_TOUT             (40000)
 #endif
 #define WLAN_WPS_TOUT               (121000)
-#define WLAN_ENT_TOUT               (1000000)
+#define WLAN_ENT_TOUT               (25000)
 #define MAX_SCAN_TRAILS             (10)
 #define P2P_CONNECT_PRIORITY        (SPAWN_TASK_PRIORITY - 1)
 #define P2P_STACK_SIZE              (2048)
@@ -94,9 +105,10 @@ extern LoadCertiCmd_t private_key_certi;
 #define P2P_DEVICE_TYPE             ("1-0050F204-1")
 #define P2P_DEVICE_NAME             ("cc32xx_p2p_device")
 #define LISTEN_CHANNEL              (11)
-#define LISTEN_REGULATORY_CLASS     (81)
+#define LISTEN_REGULATORY_CLASS_24G (81)
 #define OPRA_CHANNEL                (6)
-#define OPRA_REGULATORY_CLASS       (81)
+#define OPRA_REGULATORY_CLASS_24G   (81)
+#define P2P_CONNECT_TIMEOUT_SEC     (60)
 #define TIMEOUT_SEM                 (5)
 #define LPDS_WAKEUP_SW              (1)
 #define MGMT                        (0)
@@ -132,6 +144,7 @@ typedef enum
 #define SECURITY_TYPE_MASK                   (SECURITY_TYPE_BITMAP_OPEN  | SECURITY_TYPE_BITMAP_WPA | SECURITY_TYPE_BITMAP_WPA2 | SECURITY_TYPE_BITMAP_WPA3)
 #define SECURITY_PMF_CAPABILITIES_MASK       (SECURITY_TYPE_BITMAP_PMF_CAPABLE | SECURITY_TYPE_BITMAP_PMF_REQUIRED)
 //----------------------------------------------------------------
+
 
 /******************************************************************************
                       LOCAL FUNCTION PROTOTYPES
@@ -305,6 +318,7 @@ int32_t cmdWlanRoleUpApCallback(void *arg)
     {
         network_stack_remove_if_ap();
         FreeRoleUpApCmd(&RoleUpApParams);
+        Report("\n\rFailed setting up AP.\n\r");
         return -1;
     }
 
@@ -346,6 +360,8 @@ int32_t printWlanRoleUpApUsage(void *arg)
 #ifdef CC35XX
     UART_PRINT(wlan_role_up_ap_t_optionDetailsStr);
     UART_PRINT(wlan_role_up_ap_w_optionDetailsStr);
+    UART_PRINT(wlan_role_up_ap_a_optionDetailsStr);
+    UART_PRINT(wlan_role_up_ap_b_optionDetailsStr);
 #endif
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
@@ -452,6 +468,9 @@ int32_t printWlan2PConnectUsage(void *arg)
     UART_PRINT(wlan_p2p_connect_UsageStr_second);
     UART_PRINT(descriptionStr);
     UART_PRINT(wlan_p2p_connect_DetailsStr);
+    UART_PRINT(wlan_p2p_connect_w_optionDetailsStr);
+    UART_PRINT(wlan_p2p_connect_p_optionDetailsStr);
+    UART_PRINT(wlan_p2p_connect_t_optionDetailsStr);
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
 
@@ -895,13 +914,40 @@ int32_t cmdWlanConnectCallback(void *arg)
 #ifdef ENT_EXAMPLE
     if(isEnt)
     {
-        uint32_t   ca_cert_len = ca_certi.size;
-        uint8_t*  ca_cert_pt =  (uint8_t*)ca_certi.certi;
-        uint32_t   user_cert_len = client_certi.size;
-        uint8_t*  user_cert_pt =  (uint8_t*)client_certi.certi;
-        uint32_t   key_cert_len = private_key_certi.size;
-        uint8_t*  key_cert_pt =  (uint8_t*)private_key_certi.certi;
+#ifdef CC35XX_INDIGO_APP
+        uint32_t  ca_cert_len = g_ca_indigo_cert.size;
+        uint8_t*  ca_cert_pt =  (uint8_t*)g_ca_indigo_cert.pEntCert;
 
+        uint32_t   user_cert_len = g_client_indigo_cert.size;
+        uint8_t*  user_cert_pt =  (uint8_t*)g_client_indigo_cert.pEntCert;
+
+        uint32_t   key_cert_len = g_private_key_indigo_cert.size;
+        uint8_t*  key_cert_pt =  (uint8_t*)g_private_key_indigo_cert.pEntCert;
+#else	
+        uint32_t   ca_cert_len = ca_certificate_len;
+        uint8_t*  ca_cert_pt =  (uint8_t*)ca_certificate;
+        uint32_t   user_cert_len = client_certificate_len;
+        uint8_t*  user_cert_pt =  (uint8_t*)client_certificate;
+        uint32_t   key_cert_len = client_private_key_len;
+        uint8_t*  key_cert_pt =  (uint8_t*)client_private_key;
+
+        uint32_t  ca_cert_len_sizeof = sizeof(ca_certificate);
+        uint32_t  user_cert_len_sizeof = sizeof(client_certificate);
+        uint32_t  key_cert_pt_sizeof = sizeof(client_private_key);
+
+        if(ca_cert_len != ca_cert_len_sizeof-1)
+        {
+            Report("\n\rNotice !! sizes do not match !! ca_certificate_len:%d != %d \n\r",ca_cert_len, ca_cert_len_sizeof);
+        }
+        if(user_cert_len != user_cert_len_sizeof-1)
+        {
+            Report("\n\rNotice !! sizes do not match !! client_certificate_len:%d != %d \n\r",user_cert_len, user_cert_len_sizeof);
+        }
+        if(key_cert_len != key_cert_pt_sizeof-1)
+        {
+            Report("\n\rNotice !! sizes do not match !! client_private_key_len:%d != %d \n\r",key_cert_len, key_cert_pt_sizeof);
+        }
+#endif
 #ifdef FOrCE_CA_CRT_VERIFY  //option not to verify the cA cert
         EapConnectParams.pEap_ca_cert = (uint8_t*)ca_cert_pt;
         EapConnectParams.eap_ca_cert_len = ca_cert_len;//length without null terminator
@@ -987,12 +1033,18 @@ int32_t cmdWlanConnectCallback(void *arg)
         {
             ret = osi_SyncObjWait(&(app_CB.CON_CB.connectEventSyncObj),
                     WLAN_ENT_TOUT);
+#ifdef CC35XX_INDIGO_APP
+            releaseLoadedCertificate(CLEAR_ALL_CERTIFICATES);
+#endif					
+					
         }
         else if ((WLAN_SEC_TYPE_WPS_PBC == ConnectParams.secParams.Type) ||
                  (WLAN_SEC_TYPE_WPS_PIN == ConnectParams.secParams.Type))
         {
-            // ret = osi_SyncObjWait(&(app_CB.CON_CB.connectEventSyncObj),
-            //                      WLAN_WPS_TOUT);
+#ifndef CC35XX_INDIGO_APP		
+            ret = osi_SyncObjWait(&(app_CB.CON_CB.connectEventSyncObj),
+                                  WLAN_WPS_TOUT);
+#endif								  
         }
         else
         {
@@ -1017,7 +1069,7 @@ int32_t cmdWlanConnectCallback(void *arg)
         }
         else
         {
-            UART_PRINT("\n\r[wlan_connect app] : connected !!!!");
+            //UART_PRINT("\n\r[wlan_connect app] : connected !!!!");
         }
 
     }
@@ -1090,7 +1142,6 @@ int32_t cmdWlanDisconnectCallback(void *arg)
 
     char    cmdStr[CMD_BUFFER_LEN + 1];
     char    *token = NULL;
-    uint8_t help = FALSE;
     char    *macAddressStr = NULL;
     uint8_t pMacAddress[6] = {0};
 
@@ -1098,9 +1149,6 @@ int32_t cmdWlanDisconnectCallback(void *arg)
     cmdStr[CMD_BUFFER_LEN] = '\0';
     token = strtok(cmdStr, space_str);
 
-    if (token == NULL) {
-        help = TRUE;
-    }
 
     while(token) {
         if(!strcmp(token, m_optionStr)) {
@@ -1990,6 +2038,26 @@ int32_t cmdSetInterfaceIpCallback(void *arg)
         return ret;
     }
 
+    #ifdef CC35XX
+    if ((params.roleType == WLAN_ROLE_DEVICE) && (IS_BIT_SET(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED)))
+    {
+        if (app_CB.P2pGroupType == P2P_GROUP_TYPE_GO)
+        {
+            params.roleType = WLAN_ROLE_AP;
+        }
+        else if (app_CB.P2pGroupType == P2P_GROUP_TYPE_CLIENT)
+        {
+            params.roleType = WLAN_ROLE_STA;
+        }
+        else
+        {
+            UART_PRINT("\n\rError! Network Is not Active.\n\r");
+            return -1;
+        }
+    }
+
+#endif // CC35XX
+
     if (params.roleType == WLAN_ROLE_STA)
     {
         if (params.ipMode == IP_DHCP)
@@ -2094,6 +2162,25 @@ int32_t cmdGetInterfaceIpCallback(void *arg)
         return -1;
     }
     os_memset(params, 0x0, sizeof(SetInterfaceIpParams_t));
+#ifdef CC35XX
+    if ((roleType == WLAN_ROLE_DEVICE) && (IS_BIT_SET(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED)))
+    {
+        if (app_CB.P2pGroupType == P2P_GROUP_TYPE_GO)
+        {
+            roleType = WLAN_ROLE_AP;
+        }
+        else if (app_CB.P2pGroupType == P2P_GROUP_TYPE_CLIENT)
+        {
+            roleType = WLAN_ROLE_STA;
+        }
+        else
+        {
+            Report("\n\rNetwork Error! P2p Group Is not Active.\n\r");
+            os_free(params);
+            return -1;
+        }
+    }
+#endif // CC35XX
 
     ret = network_stack_get_if_ip(roleType,
                                   &ipAddress,
@@ -2615,7 +2702,6 @@ int32_t cmdSetPsModeCallback(void *arg)
     return (ret);
 }
 
-
 int32_t printSetPmModeUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -2631,6 +2717,7 @@ int32_t printSetPmModeUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+
 
 /*!
     \brief          Parse set power management mode command.
@@ -2730,6 +2817,7 @@ int32_t cmdSetPmModeCallback(void *arg)
     return (ret);
 }
 
+
 int32_t printSetLsiUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -2744,6 +2832,211 @@ int32_t printSetLsiUsage(void *arg)
     return(0);
 
 }
+
+#ifdef CC33XX
+/*!
+    \brief          Prints Set Channel List  command help menu.
+
+    \param          arg       -   Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdSetSelectedScanChannelsCallback
+ */
+int32_t printSetChListUsage(void *arg)
+{
+
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(SetChListStr);
+    UART_PRINT(SetChListUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(wlanSetChListStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+int32_t ParseSelectedChannelsLength(void* arg)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    uint8_t length = 0;
+    char *strId = NULL;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+
+    token = strtok(cmdStr, space_str);
+
+    if (token == NULL)
+    {
+        return 0;
+    }
+
+     while(token)
+     {
+        if (!strcmp(token, n_optionStr))
+        {
+            strId = strtok(NULL, space_str);
+            length = atoi(strId);
+            return length;
+        }
+
+        token = strtok(NULL, space_str);
+     }
+
+    Report("\n\r[Set Channel]  Length Not Found \n\r");
+    SHOW_WARNING(-1, CMD_ERROR);
+    printSetChListUsage(NULL);
+
+     return 0;
+
+}
+int32_t ParseSetSelectedChannelsCmd(void *arg, WlanSelectedChannelsArray_t *selectedChannels)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    uint8_t help = FALSE;
+    int16_t channelNumber;
+    char* channelNumberString = NULL ;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    
+    uint8_t length = ParseSelectedChannelsLength(arg);
+
+    selectedChannels->length = length;
+
+    Report("\n\r[Set Channel] length %d \n\r",length);
+
+    if(length <= 0)
+    {
+        Report("\n\r[Set Channel] Invalid Length! \n\r");
+        SHOW_WARNING(-1, CMD_ERROR);
+        return -1;
+    }
+
+    token = strtok(cmdStr, space_str);
+
+    if (token == NULL)
+    {
+        help = TRUE;
+    }
+
+    selectedChannels->channelArray = os_malloc(sizeof(uint32_t) * length);
+
+    if(selectedChannels->channelArray == NULL)
+    {
+        Report("\n\r[Set Channel] Invalid Channel! \n\r");
+        SHOW_WARNING(-1, CMD_ERROR);
+        printSetChListUsage(NULL);
+        return (-1);
+    }
+
+    os_memset(selectedChannels->channelArray, 0, length);
+
+    while (token)
+    {
+        if (!strcmp(token, l_optionStr))
+        {
+            channelNumberString = strtok(NULL, space_str);
+            break;
+        } 
+
+        token = strtok(NULL, space_str);
+
+    }
+
+    if(channelNumberString == NULL)
+    {
+        Report("\n\r[Set Channel] Channel list not specified! \n\r");
+        help = TRUE;
+    }
+    else
+    {
+        for(int i = 0; i <length; i++)
+        {
+            if(channelNumberString == NULL)
+            {
+                Report("\n\r[Set Channel] missing number of channels \n\r");
+                help = TRUE;
+                break;
+            }
+
+            channelNumber = atoi(channelNumberString);
+
+            if(channelNumber > 0)
+            {
+                selectedChannels->channelArray[i] = channelNumber;
+            }
+            else
+            {
+                help = TRUE;
+                break;
+            }    
+            channelNumberString = strtok(NULL, space_str);
+        }
+    }
+    if (help)
+    {
+        Report("\n\r[Set Channel] Channel list Invalid \n\r");
+        SHOW_WARNING(-1, CMD_ERROR);
+        printSetChListUsage(NULL);
+        os_free(selectedChannels->channelArray);
+        return (-1);
+    }
+
+
+    return (0);
+}
+
+
+/*!
+    \brief          Set Selected Channels for Scan/Connects.
+
+    \param          arg       -   Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa
+ */
+
+int32_t cmdSetSelectedScanChannelsCallback(void *arg)
+{
+    int16_t         ret = 0;
+
+    WlanSelectedChannelsArray_t selectedChannels = 
+    {
+        .channelArray = NULL,
+        .length = 0
+    };
+
+    ret = ParseSetSelectedChannelsCmd(arg, &selectedChannels);
+
+    if(ret < 0)
+    {
+        return ret;
+    }
+
+    ret = Wlan_Set(WLAN_SET_LISTED_CHANNELS_FOR_SCAN, (void *)&selectedChannels);
+
+    if(ret < 0)
+    {
+        Report("\n\r[Set Channel] Failed to Set Channel \n\r");
+    }
+    else
+    {
+        Report("\n\r[Set Channel] Successfully Set\n\r");
+    }
+
+    os_free(selectedChannels.channelArray);
+
+    return (ret);
+}
+
+#endif
 
 int32_t cmdSetWsocPrimaryCallback(void *arg)
 {
@@ -2791,6 +3084,7 @@ int32_t printSetWsocPrimaryUsage(void *arg)
 
     \sa             cmdSetPmModeCallBack
  */
+
 int32_t ParseSetLsiCmd(void *arg, WlanLongSleepInterval *LsiParams)
 {
     char cmdStr[CMD_BUFFER_LEN + 1];
@@ -3043,6 +3337,7 @@ int32_t cmdGetFwVerCallback(void *arg)
                         wlanVer.phy_version[1],
                         wlanVer.phy_version[0]);
 
+#ifdef CC35XX
         ret = Wlan_Get(WLAN_GET_SPVERSION,(void *)&spVer);
 
         /* Print service pack version if read success */
@@ -3064,10 +3359,15 @@ int32_t cmdGetFwVerCallback(void *arg)
                          spVer.phy_version[1],
                          spVer.phy_version[0]);
         }
+        else
+        {
+            UART_PRINT("SP Version read failure with error %d\r\n", ret);
+        }
+#endif
     }
     else
     {
-        UART_PRINT("Version read failure with error %d\r\n", ret);
+        UART_PRINT("FW Version read failure with error %d\r\n", ret);
     }
 
     return (ret);
@@ -3242,6 +3542,9 @@ int32_t cmdWlanStopCallback(void *arg)
         Report("\n\rWlan already stopped !!!\n\r");
         return -1;
     }
+
+    /* Stop BLE before stopping WLAN roles */
+    cmdBleStopCallback(NULL);
 
     if(IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
     {
@@ -3642,7 +3945,6 @@ void PrintScanApSecurityResults(uint32_t apSecurity)
 {
     // Print which security the AP supports
     uint32_t apSecurityType = (apSecurity & SECURITY_TYPE_MASK);
-    uint32_t keyMgmt;
     switch (apSecurityType)
     {
         case SECURITY_TYPE_BITMAP_OPEN :
@@ -3680,10 +3982,6 @@ void PrintScanApSecurityResults(uint32_t apSecurity)
     {
         UART_PRINT(" %-7s  |", DISABLE_str);
     }
-
-    keyMgmt = apSecurity << 14 ;//RSN_WLAN_SCAN_RESULT_KEY_MGMT_POSITION;
-    UART_PRINT(" % 0x%x  |", keyMgmt);
-
 }
 
 
@@ -3739,6 +4037,59 @@ int32_t cmdStartApWpsCallback(void *arg)
     return ret;
 }
 #endif
+#ifdef CC35XX_INDIGO_APP
+/*!
+    \brief          Prints  WPS AP Pin Set command help menu.
+
+    \param          arg       -   Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdSetWpsApPinCallback
+*/
+int32_t printSetWpsApPinUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(setWpsApPinStr);
+    UART_PRINT(setWpsApPinUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(setWpsApPinDetailsStr);
+    UART_PRINT(setWpsApPin_t_optionDetailsStr);
+    UART_PRINT(setWpsApPin_p_optionDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+/*!
+    \brief          Set WPS AP Pin
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would return -1;
+
+    \sa             ParseCmd
+
+*/
+int32_t cmdSetWpsApPinCallback(void *arg)
+{
+    int32_t ret = 0;
+    WlanSetWpsApPinParam_t wpsApPin;
+    memset(&wpsApPin, 0x0, sizeof(wpsApPin));
+
+    ret = ParseSetWpsApPinCmd(arg, &wpsApPin);
+    if(ret < 0)
+    {
+        printSetWpsApPinUsage(NULL);
+        return -1;
+    }
+
+    while((ret = Wlan_Set(WLAN_SET_WPS_AP_PIN, &wpsApPin))==WLAN_RET_OPER_IN_PROGRESS);
+
+    return ret;
+}
+#endif
+
 
 /*****************************************************************************
                   Local Functions
@@ -4320,10 +4671,20 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
     uint32_t wps_method = 0;
     uint8_t security_type;
     char pin[9] = {0};
+    uint32_t timeout = 0; // in seconds
     char* ssid = " ";
     int ssid_len = 1;
     int pin_len = 0; // 0 or 8
     int32_t ret = 0;
+
+    ret = ParseP2PConnectCmd(arg, peer_mac, &wps_method, pin, &timeout);
+    if(ret < 0)
+    {
+        printWlan2PConnectUsage(arg);
+        return -1;
+    }
+
+    osi_SyncObjClear(&(app_CB.CON_CB.disconnectEventSyncObj));
 
     ret = Wlan_Disconnect(WLAN_ROLE_STA,NULL);
     if(ret == OK){
@@ -4336,12 +4697,6 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
         }
     }
 
-    ret = ParseP2PConnectCmd(arg, peer_mac, &wps_method, pin);
-    if(ret < 0)
-    {
-        printWlan2PConnectUsage(arg);
-        return -1;
-    }
     if (wps_method == 0)
     {
         security_type = WLAN_SEC_TYPE_P2P_PBC;
@@ -4372,9 +4727,9 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
         return -1;
     }
 
-    Report("P2P connect, peer address: %02x:%02x:%02x:%02x:%02x:%02x security-type:%d pin:%s pin_len:%d\n",
+    Report("P2P connect, peer address: %02x:%02x:%02x:%02x:%02x:%02x security-type:%d pin:%s pin_len:%d timeout:%d\n",
             peer_mac[0], peer_mac[1], peer_mac[2], peer_mac[3], peer_mac[4], peer_mac[5],
-            security_type, pin, pin_len);
+            security_type, pin, pin_len, timeout);
 
     osi_SyncObjClear(&(app_CB.CON_CB.connectEventSyncObj));
 
@@ -4390,13 +4745,17 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
     if(ret == 0)
     {
         ret = osi_SyncObjWait(&(app_CB.CON_CB.connectEventSyncObj),
-                                WLAN_WPS_TOUT);
+                                OSI_WAIT_FOR_SECOND * timeout);
        
-        if(ret != 0)
+        if(ret != OSI_OK)
         {
             WlanP2pCmd_t pParams;
-            UART_PRINT("\n\r[p2p_connect app] : Timeout expired connecting WiFi-Direct: %d\n\r",
-                                               security_type);
+            UART_PRINT("\n\r[p2p_connect app] : Timeout %d expired connecting WiFi-Direct\n\r", timeout);
+            // Cleanup: Cancel any ongoing P2P operations
+            pParams.Id = P2P_CMD_ID_CANCEL;
+            Wlan_Set(WLAN_SET_P2P_CMD, &pParams);
+
+            // Remove any partial group
             pParams.Id = P2P_CMD_ID_GROUP_REMOVE;
             ret = Wlan_Set(WLAN_SET_P2P_CMD, &pParams);
             if (ret != 0)
@@ -4406,9 +4765,13 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
             
             return(-1);
         }
-        else
+        else if (IS_BIT_SET(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED))
         {
             UART_PRINT("\n\r[p2p_connect app] : connected !!!!");
+        }
+        else
+        {
+            UART_PRINT("\n\r[p2p_connect app] : P2P Connect failed\n\r");
         }
 
     }
@@ -4476,13 +4839,12 @@ int32_t cmdWlanP2PSetChannelCallback(void *arg)
     WlanP2pCmd_t P2PSetChannel;
     int32_t ret;
 
-
     P2PSetChannel.Id = P2P_CMD_ID_CONFIG_CHANNELS;
 
     P2PSetChannel.Data.cfgParams.operChannel = 0;
-    P2PSetChannel.Data.cfgParams.operClass = 81;
+    P2PSetChannel.Data.cfgParams.operClass = OPRA_REGULATORY_CLASS_24G;
     P2PSetChannel.Data.cfgParams.listenChannel = 0;
-    P2PSetChannel.Data.cfgParams.listenClass = 81;
+    P2PSetChannel.Data.cfgParams.listenClass = LISTEN_REGULATORY_CLASS_24G;
     P2PSetChannel.Data.cfgParams.goIntent = 0;
 
     /* Call the command parser */
@@ -4494,12 +4856,11 @@ int32_t cmdWlanP2PSetChannelCallback(void *arg)
         return -1;
     }
 
-    Report("p2p set channel: operational channel=%d, listen channel=%d, goIntent=%d\n\r",
+    Report("p2p set channel: operational channel=%d, listen channel=%d, goIntent=%d\n\r"
+           "p2p set channel: operational regulatory class=%d, listen regulatory class=%d\n\r",
             P2PSetChannel.Data.cfgParams.operChannel,
             P2PSetChannel.Data.cfgParams.listenChannel,
-            P2PSetChannel.Data.cfgParams.goIntent);
-
-    Report("p2p set channel: operational regulatory class=%d, listen regulatory class=%d\n\r",
+            P2PSetChannel.Data.cfgParams.goIntent,
             P2PSetChannel.Data.cfgParams.operClass,
             P2PSetChannel.Data.cfgParams.listenClass);
 
@@ -4707,12 +5068,14 @@ int32_t cmdWlanAddProfileCallback(void *arg)
    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_IS_UP))
    {
        UART_PRINT("\n\rDevice is stopped, run wlan_start.\n\r");
+       FreeProfileCmd(&ProfileParams);
        return (-1);
    }
 
    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
    {
        UART_PRINT("\n\rNo STA role up\n\r");
+       FreeProfileCmd(&ProfileParams);
        return (-1);
    }
 
@@ -5248,6 +5611,7 @@ int32_t cmdPingStopCallback(void *arg)
     return ret;
 }
 
+
 /*!
     \brief          WLAN Regulatory Domain Entry Set callback.
 
@@ -5392,9 +5756,115 @@ int32_t printWlanGetRegDomainEntryUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif // CC35XX
+#ifdef SNTP_SUPPORT
+int32_t cmdSntpConfigServers(void *arg)
+{
+    int32_t ret  = 0;
+    char  *serverIp[3];
+    uint32_t numOfServers;
+    int i;
+    ret = ParseSntpConfigServersCmd(arg, &numOfServers,serverIp);
+    if(ret < 0)
+    {
+        printSntpConfigServersUsage(arg);
+        return(0);
+    }
+    sntpWrapper_store_servers(numOfServers,serverIp[0],serverIp[1], serverIp[2]);
+    for(i=0; i<numOfServers; i++)
+    {
+        os_free(serverIp[i]);
+    }
+    return ret;
+}
 
+int32_t cmdSntpUpdateDateTime(void *arg)
+{
+    int32_t ret  = 0;
+
+    if (((!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT)) || (!IS_STA_CONNECTED(app_CB.Status)))
+            && (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_AP_BIT)))
+    {
+        Report("\n\rSTA/AP role is not up or connected.\n\r");
+        return -1;
+    }
+
+    ret = sntpWrapper_updateDateTime();
+    return ret;
+}
+#endif
+int32_t cmdSetDateTime(void *arg)
+{
+    int32_t ret  = 0;
+    uint32_t epochTime;
+    uint32_t year,month,day,hour, minute, second;
+
+    ret = ParseSetDateTimeCmd(arg, &year,&month,&day,&hour, &minute, &second);
+    if(ret < 0)
+    {
+        printSetDateTimeUsage(arg);
+        return(0);
+    }
+    epochTime =  datetime_to_epoch(year,month,day,hour, minute, second);
+    datetime_SecondsSet( epochTime);
+    return ret;
+}
+int32_t cmdGetDateTime(void *arg)
+{
+    int32_t ret  = 0;
+    datetime_printCurTime();
+    return ret;
+}
+
+#ifdef CC35XX_INDIGO_APP
+
+void releaseLoadedCertificate(certificate_load_type_t type)
+{
+    switch(type)
+    {
+        case LOAD_CLIENT_CERTIFICATE:
+            if(g_client_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_client_indigo_cert.pEntCert);
+            }
+            os_memset(&g_client_indigo_cert,0, sizeof(g_client_indigo_cert));
+            break;
+        case LOAD_SERVER_CERTIFICATE:
+            if(g_ca_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_ca_indigo_cert.pEntCert);
+            }
+            os_memset(&g_ca_indigo_cert,0, sizeof(g_ca_indigo_cert));
+            break;
+        case LOAD_KEY_CERTIFICATE:
+            if(g_private_key_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_private_key_indigo_cert.pEntCert);
+            }
+            os_memset(&g_private_key_indigo_cert,0, sizeof(g_private_key_indigo_cert));
+            break;
+        case CLEAR_ALL_CERTIFICATES:
+            if(g_client_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_client_indigo_cert.pEntCert);
+            }
+            os_memset(&g_client_indigo_cert,0, sizeof(g_client_indigo_cert));
+            if(g_ca_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_ca_indigo_cert.pEntCert);
+            }
+            os_memset(&g_ca_indigo_cert,0, sizeof(g_ca_indigo_cert));
+            if(g_private_key_indigo_cert.pEntCert != NULL)
+            {
+                os_free(g_private_key_indigo_cert.pEntCert);
+            }
+            os_memset(&g_private_key_indigo_cert,0, sizeof(g_private_key_indigo_cert));
+            break;
+
+    }
+}
 //Indigo
-int32_t cmdloadCartificateCallback(void *arg){
+int32_t cmdloadCertificateCallback(void *arg){
     int32_t ret = 0;
     LoadCertiCmd_t LoadCertiParams;
 
@@ -5402,13 +5872,13 @@ int32_t cmdloadCartificateCallback(void *arg){
 
     if(ret < 0)
     {
-        os_free(client_certi.certi);
-        os_free(ca_certi.certi);
-        os_free(private_key_certi.certi);
+        releaseLoadedCertificate(CLEAR_ALL_CERTIFICATES);
+
+        Report("\n\r failed to parse certificates");
         return(-1);
     }
 
     return(0);
 }
+#endif
 
-#endif // CC35XX

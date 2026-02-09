@@ -320,7 +320,7 @@ void InitTerm(void)
 
 void UART_writePolling(uint8_t *buffer, uint32_t len)
 {
-    uint8_t uartIter;
+    uint32_t uartIter;
 
     for (uartIter=0; uartIter<len; uartIter++)
     {

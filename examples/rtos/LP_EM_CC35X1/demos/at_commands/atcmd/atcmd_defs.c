@@ -96,7 +96,7 @@ ATCmd_List_t ATCmd_list[] =
 /* send  cmd        */              { ATCmd_sockSendStr,              ATCmdSock_sendCallback,             ATCmd_sockSendUsageStr,                   0,                  0xFF,                            3 },
 /* recv  cmd        */              { ATCmd_sockRecvStr,              ATCmdSock_recvCallback,             ATCmd_sockRecvUsageStr,                   1,                  3,                               3 },
 /* sendto  cmd      */              { ATCmd_sockSendToStr,            ATCmdSock_sendToCallback,           ATCmd_sockSendToUsageStr,                 0,                  0xFF,                            6 },
-/* recvfrom  cmd    */              { ATCmd_sockRecvFromStr,          ATCmdSock_recvFromCallback,         ATCmd_sockRecvFromUsageStr,               1,                  6,                               6 },
+/* recvfrom  cmd    */              { ATCmd_sockRecvFromStr,          ATCmdSock_recvFromCallback,         ATCmd_sockRecvFromUsageStr,               1,                  3,                               3 },
 #if 0
 /* file open  cmd   */              { ATCmd_fileOpenStr,              ATCmdFile_openCallback,             ATCmd_fileOpenUsageStr,                   1,                  3,                               3 },
 /* file close  cmd  */              { ATCmd_fileCloseStr,             ATCmdFile_closeCallback,            ATCmd_fileCloseUsageStr,                  1,                  3,                               3 },
@@ -245,7 +245,7 @@ char ATCmd_sockRecvUsageStr[]               = "[sd],[format],[length]";
 char ATCmd_sockSendToStr[]                  = "+sendto";
 char ATCmd_sockSendToUsageStr[]             = "[sd],[family],[port],[addr],[format],[length],[data]";
 char ATCmd_sockRecvFromStr[]                = "+recvfrom";
-char ATCmd_sockRecvFromUsageStr[]           = "[sd],[family],[port],[addr],[format],[length]";
+char ATCmd_sockRecvFromUsageStr[]           = "[sd],[format],[length]";
 
 char ATCmd_fileOpenStr[]                    = "+fileopen";
 char ATCmd_fileOpenUsageStr[]               = "[Filename],[Option]";

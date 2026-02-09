@@ -239,7 +239,7 @@ void ButtonSw1EventHandler(BUTTON_IF_events_bm events)
  * User must copy the topic or payload data if it needs to be saved.
  */
 void BrokerCB(char* topic, uint8_t* payload, uint16_t len, uint8_t qos){
-    UART_PRINT("TOPIC: %s PAYLOAD: %s QOS: %d\r\n", topic, payload, qos);
+    UART_PRINT("TOPIC: %s PAYLOAD: %.*s QOS: %d\r\n", topic, len, payload, qos);
 }
 
 void GetFwVerCB(char* topic, uint8_t* payload, uint16_t len, uint8_t qos)
@@ -247,7 +247,7 @@ void GetFwVerCB(char* topic, uint8_t* payload, uint16_t len, uint8_t qos)
     struct msgQueue queueElement;
     int ret;
 
-    UART_PRINT("TOPIC: %s PAYLOAD: %s QOS: %d\r\n", topic, payload, qos);
+    UART_PRINT("TOPIC: %s PAYLOAD: %.*s QOS: %d\r\n", topic, len, payload, qos);
 
     queueElement.event = APP_MQTT_PUBLISH_FW_VER;
 
@@ -262,7 +262,7 @@ void GetSensorsCB(char* topic, uint8_t* payload, uint16_t len, uint8_t qos)
     struct msgQueue queueElement;
     int ret;
 
-    UART_PRINT("TOPIC: %s PAYLOAD: %s QOS: %d\r\n", topic, payload, qos);
+    UART_PRINT("TOPIC: %s PAYLOAD: %.*s QOS: %d\r\n", topic, len, payload, qos);
 
     queueElement.event = APP_MQTT_PUBLISH_SENSORS;
 

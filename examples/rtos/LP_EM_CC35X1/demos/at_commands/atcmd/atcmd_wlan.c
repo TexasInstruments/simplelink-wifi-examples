@@ -1018,6 +1018,9 @@ int32_t ATCmdWlan_apRoleUpCallback(void *arg)
     apRoleUpCmd.tx_pow = 0;
     apRoleUpCmd.wpsDisabled = 1;
 
+    apRoleUpCmd.sae_anticlogging_threshold = SAE_ANTI_CLOGGING_DEFAULT;
+    apRoleUpCmd.transitionDisable = 0;
+
     os_memcpy(&apRoleUpCmd.secParams,
               &apRoleUpParams.secParams,
               sizeof(WlanSecParams_t));

@@ -59,7 +59,6 @@
 #define IPERF_LWIP_MAX_FORMAT_RATE_LENGTH  20
 
 extern session_conn_t iperf_session[];
-extern int32_t canSend;
 
 // Forward declarations
 static void iperflwip_server_udp_init(void *param);
@@ -86,6 +85,8 @@ static void iperflwip_server_udp_init(void *param)
     session_con->total_bytes = 0;
     session_con->bytes_per_period = 0;
     session_con->poll_count = 0;
+    session_con->previous_time = osi_GetTimeMS();
+    session_con->start_time = osi_GetTimeMS();
 
     session_con->src_ip.addr = htonl((unsigned int )session_con->lwipConfig.ipAddr.ipv4);
     session_con->src_port = session_con->lwipConfig.destOrLocalPortNumber;
@@ -196,11 +197,8 @@ static void  lwiperf_udp_server_recv(void *arg, struct udp_pcb *pcb,
                     ipaddr_ntoa(addr), port);
             iperflwip_udp_server_stop(session_con);
         } else {
-            while (q != NULL) {
-                session_con->total_bytes += q->len;
-                session_con->bytes_per_period += q->len;;
-                q = q->next;
-            }
+            session_con->total_bytes += q->tot_len;
+            session_con->bytes_per_period += q->tot_len;
         }
     }
     // Optional: echo back the received packet (iperf expects no response)

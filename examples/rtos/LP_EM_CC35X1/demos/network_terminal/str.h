@@ -71,6 +71,8 @@ extern const char *wlan_role_up_ap_DetailsStr;
 #ifdef CC35XX
 extern const char *wlan_role_up_ap_t_optionDetailsStr;
 extern const char *wlan_role_up_ap_w_optionDetailsStr;
+extern const char *wlan_role_up_ap_a_optionDetailsStr;
+extern const char *wlan_role_up_ap_b_optionDetailsStr;
 #endif
 
 
@@ -159,6 +161,12 @@ extern const char *wlanSetPmModeDetailsStrPowerDown;
 extern const char *wlanSetPmModeDetailsStrELP;
 extern const char *wlanSetPmMode_m_optionDetailsStr;
 
+#ifdef CC33XX
+extern const char SetChListStr[];
+extern const char SetChListUsageStr[];
+extern const char *wlanSetChListStr ;
+#endif
+
 extern const char GetFwVerStr[];
 extern const char getFwVerUsageStr[];
 extern const char *wlanGetFwVerDetailsStr;
@@ -218,6 +226,9 @@ extern const char printWlanP2PFindUsageStr[];
 extern const char wlanP2PConnectStr[];
 extern const char wlan_p2p_connect_UsageStr_first[];
 extern const char wlan_p2p_connect_UsageStr_second[];
+extern const char wlan_p2p_connect_w_optionDetailsStr[];
+extern const char wlan_p2p_connect_p_optionDetailsStr[];
+extern const char wlan_p2p_connect_t_optionDetailsStr[];
 extern const char *wlan_p2p_find_stop_DetailsStr;
 
 extern const char  wlan_role_up_group_remove_UsageStr_third[];
@@ -375,6 +386,7 @@ extern const char recvTestIperf_i_optionDetailsStr[];
 extern const char *recvTestIperf_t_optionDetailsStr;
 extern const char *recvTestIperf_b_optionDetailsStr;
 extern const char *recvTestIperf_B_optionDetailsStr;
+extern const char *recvTestIperf_l_optionDetailsStr;
 
 extern const char StopTestIperf[];
 extern const char *recvStopTestIperfUsage2Str;
@@ -435,6 +447,12 @@ extern const char wlanConfigPeerAgingStr[];
 extern const char wlan_ConfigPeerAging_UsageStr_first[];
 extern const char wlan_ConfigPeerAging_UsageStr_second[];
 extern const char wlan_ConfigPeerAging_DetailsStr[];
+
+extern const char setWpsApPinStr[];
+extern const char setWpsApPinUsageStr[];
+extern const char setWpsApPinDetailsStr[];
+extern const char setWpsApPin_t_optionDetailsStr[];
+extern const char setWpsApPin_p_optionDetailsStr[];
 
 extern const char startApWpsStr[];
 extern const char startApWpsUsageStr[];
@@ -564,6 +582,9 @@ extern const char *MangmentFrames_str[];
 extern const char *CtrlFrames_str[];
 extern const char *DataFrames_str[];
 
+extern const char DEFAULT_str[];
+extern const char ALWAYS_str[];
+extern const char LOW_str[];
 
 extern const char fsError[];
 extern const char socketError[];

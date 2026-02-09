@@ -549,6 +549,7 @@ static int gap_event_passkey_action(struct ble_gap_event *passkey_event)
 static int gap_event_cb(struct ble_gap_event *event, void *arg)
 {
     int rc = 0;
+    struct ble_gap_conn_desc desc;
     struct ble_hs_adv_fields adv_fields;
     char no_local_name[7] = "Unnamed";
 
@@ -557,6 +558,11 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             console_printf("\n\rConnection %s with status=%d",
                         event->connect.status == 0 ? "established successfully" : "failed",
                         event->connect.status);
+
+            rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
+            ASSERT_GENERAL(rc == 0);
+            console_printf("\n\rConnected to ");
+            print_addr(desc.peer_ota_addr.val);
 
             if (event->connect.status == 0)
             {
@@ -1296,8 +1302,13 @@ int nimble_host_set_bd_address(uint8_t addr_type)
 int nimble_host_start(void)
 {
     int rc = 0;
+    int status = 0;
 
-    BleIf_EnableBLE();
+    rc = BleIf_EnableBLE();
+    if(OSI_OK != rc)
+    {
+        return rc;
+    }
 
     ble_example_init();
 
@@ -1321,24 +1332,29 @@ int nimble_host_start(void)
     rc = ble_npl_task_init(&s_task_host, "nimble_host", nimble_host_task,
                       NULL, NIMBLE_THRD_PRIORITY, BLE_NPL_TIME_FOREVER,
                       NIMBLE_THRD_DEFAULT_STACK, NIMBLE_THRD_STACK_SIZE);
+    if(OSI_OK != rc)
+    {
+        Report("\n\rnimble_host_start: Failed to init host task. error number %d", rc);
+        ASSERT_GENERAL(0);
+    }
 
     Report("\n\r-------------- Wait for BLE Host\n\r");
 
     rc = osi_SyncObjWait(&hostInitEventSyncObj, OSI_WAIT_FOR_SECOND);
     if(OSI_OK != rc)
     {
-        Report("\n\rBleIf_EnableBLE: Failed to receive Host Init Done. error number %d", rc);
-        ASSERT_GENERAL(0);
+        Report("\n\rnimble_host_start: Failed to start the BLE host. error number %d", rc);
+        status = -1;
     }
 
     rc = osi_SyncObjDelete(&hostInitEventSyncObj);
     if(OSI_OK != rc)
     {
-        Report("\n\rBleIf_EnableBLE: Failed to delete sync object. error number %d", rc);
+        Report("\n\rnimble_host_start: Failed to delete sync object. error number %d", rc);
         ASSERT_GENERAL(0);
     }
 
-    return rc;
+    return status;
 }
 
 int nimble_host_stop(void)
