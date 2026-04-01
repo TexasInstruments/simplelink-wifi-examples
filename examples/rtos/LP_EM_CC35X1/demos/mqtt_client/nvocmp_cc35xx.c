@@ -191,7 +191,7 @@ Requires API's in a crc.h to implement CRC functionality.
 // Constants and Definitions
 //*****************************************************************************
 #ifndef NVOCMP_NVPAGES
-#define NVOCMP_NVPAGES      2
+#define NVOCMP_NVPAGES      6
 #endif
 
 #define NVOCMP_FASTCP       1           // Fast Compaction by Skipping All Active Item Pages
@@ -201,7 +201,7 @@ Requires API's in a crc.h to implement CRC functionality.
 #define NVOCMP_FASTITEM     0           // Fast Find Item
 
 #ifndef NVOCMP_NWSAMEITEM
-#define NVOCMP_NWSAMEITEM   0           // Not Write Same Item
+#define NVOCMP_NWSAMEITEM   1           // Write Same Item Enabled
 #endif
 
 #ifndef NVOCMP_MIGRATE_ENABLED

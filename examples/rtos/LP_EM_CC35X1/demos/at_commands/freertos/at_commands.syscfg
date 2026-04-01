@@ -48,7 +48,7 @@ const Settings              = scripting.addModule("/ti/posix/freertos/Settings")
  * Write custom configuration values to the imported modules.
  */
 FreeRTOS.useTimeSlicing = true;
-FreeRTOS.heapSize       = 0x00037900;
+FreeRTOS.heapSize = 0x00057000;
 
 GPIO1.$hardware = system.deviceData.board.components.LED_RED;
 GPIO1.$name     = "CONFIG_GPIO_LED_0";

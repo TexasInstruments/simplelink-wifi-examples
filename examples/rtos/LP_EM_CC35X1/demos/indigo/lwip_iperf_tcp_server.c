@@ -189,7 +189,6 @@ static err_t iperflwip_tcp_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
 static err_t iperflwip_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
     session_conn_t *session_con = (session_conn_t *)arg;
-    int8_t i;
 
     LWIP_ASSERT("pcb mismatch", session_con->conn_pcb_tcp == tpcb);
 
@@ -213,7 +212,7 @@ static err_t iperflwip_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
     session_con->total_bytes += p->tot_len;
     session_con->bytes_per_period += p->tot_len;
     pbuf_free(p);
-
+#if 0
     //for fairness, verify if there is client which has something to send
     for(i=1; i<IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS+1; i++)
     {
@@ -231,6 +230,7 @@ static err_t iperflwip_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
             }
         }
     }
+#endif
     return ERR_OK;
 }
 

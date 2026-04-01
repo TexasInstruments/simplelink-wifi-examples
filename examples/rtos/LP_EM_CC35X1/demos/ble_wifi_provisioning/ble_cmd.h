@@ -77,6 +77,18 @@ int32_t cmdBleSetBdAddrCallback(void *arg);
 
 int32_t printBleSetBdAddrUsage(void *arg);
 
+int32_t cmdBleSetTxPwrCallback(void *arg);
+
+int32_t printBleSetTxPwrUsage(void *arg);
+
+int32_t cmdBleConnUpdateCallback(void *arg);
+
+int32_t printBleConnUpdateUsage(void *arg);
+
+int32_t cmdBleSetPhyCallback(void *arg);
+
+int32_t printBleSetPhyUsage(void *arg);
+
 int32_t cmdBleStartCallback(void *arg);
 
 int32_t printBleStartUsage(void *arg);

@@ -56,6 +56,7 @@ const char wlan_role_up_ap_UsageStr_first[]   =  " [-help] [-s <\"ssid name\">] 
 const char wlan_role_up_ap_UsageStr_second[]  =  "[-c <Wlan channel>]"
                                         "[-l <STA connection limit [1-4]>]"
                                         "[-r <AP Regulatory Domain [\"US\" \"JP\" \"00\"]>]\n\r";
+										
 #ifdef CC35XX
 const char *wlan_role_up_ap_t_optionDetailsStr    = "\n\r\t-t\tType of security "
                                           "(security type = "
@@ -129,16 +130,22 @@ const char *wlanConnect_p_optionDetailsStr    = "\n\r\t-p\tPassword in ascii "
 #ifdef CC35XX
 
 const char *wlanConnect_e_optionDetailsStr="\n\r\t-e\tEnterprise connection"
-        "(EAP methods = "
+        " (EAP methods = "
         "[TLS, TTLS_MSCHAP, PEAP0_MSCHAP])\n\r";
+
+const char *wlanConnect_k_optionDetailsStr="\n\r\t-k\tEnterprise TLS-WPA3 SUITEB192"
+        " (key size = "
+        "[192])\n\r";
 
 const char *wlanConnect_i_optionDetailsStr="\n\r\t-i\tEnterprise identity\n\r";
 
 
 const char *wlanConnect_ent_usageDetailsStr_1= "\n\r note: For enterprise the possible security types : WPA2, WPA2_PLUS, WPA3 ,WPA2/WPA3";
-const char *wlanConnect_ent_usageDetailsStr_2 = "\n\r TLS :        wlan_connect -t WPA2/WPA3 -e TLS -s \"QuickTrack_1652185873\" -i \"Client Certificate IDL\" ";
-const char *wlanConnect_ent_usageDetailsStr_3 = "\n\r TTLS_MSCHAP: wlan_connect -t WPA2/WPA3 -e TTLS_MSCHAP -s \"QuickTrack_1652185873\" -i \"wifi-user@ttls\" -p \"test11\" ";
-const char *wlanConnect_ent_usageDetailsStr_4 = "\n\r PEAP0_MSCHAP: wlan_connect -t WPA3 -e PEAP0_MSCHAP -s \"QuickTrack_1652185873\" -i \"wifi-user@peap1\" -p \"test11\" ";
+const char *wlanConnect_ent_usageDetailsStr_6 = "\n\r note: For TLS SUITEB192 only:  -t WPA3 and -e TLS -k 192";
+const char *wlanConnect_ent_usageDetailsStr_2 = "\n\r TLS :               wlan_connect -t WPA2/WPA3 -e TLS -s \"QuickTrack_1652185873\" -i \"Client Certificate IDL\" ";
+const char *wlanConnect_ent_usageDetailsStr_3 = "\n\r TTLS_MSCHAP:        wlan_connect -t WPA2/WPA3 -e TTLS_MSCHAP -s \"QuickTrack_1652185873\" -i \"wifi-user@ttls\" -p \"test11\" ";
+const char *wlanConnect_ent_usageDetailsStr_4 = "\n\r PEAP0_MSCHAP:       wlan_connect -t WPA3 -e PEAP0_MSCHAP -s \"QuickTrack_1652185873\" -i \"wifi-user@peap1\" -p \"test11\" ";
+const char *wlanConnect_ent_usageDetailsStr_5 = "\n\r TLS SUITEB192 only: wlan_connect -t WPA3 -e TLS -k 192 -s \"QuickTrack_1652185873\" -i \"Client Certificate IDL\" ";
 #endif
 
 
@@ -341,25 +348,52 @@ const char bleStopStr[]                        = "ble_stop";
 const char bleStopUsageStr[]                   = " [-help] \n\r";
 const char bleStopDetailsStr[]                  = "Ble stop. \n\r";
 
+/* ble set tx power */
+const char bleSetTxPwrStr[]                    = "ble_set_tx_pwr";
+const char bleSetTxPwrUsageStr[]               = " [-help] [-p <power (dBm)> (-20, -10, -5, 0, 5, 10, 20)] \n\r";
+const char bleSetTxPwrDetailsStr[]             = "Ble set transmit power. Value will be rounded down to nearest valid step.\n\r";
+
+/* ble conn update */
+const char bleConnUpdateStr[]                  = "ble_conn_update";
+const char bleConnUpdateUsageStr[]             = " [-help] [-h <conn handle>] [-n <interval min (ms)>] [-x <interval max (ms)>]\n\r\t"
+                                                 "[-t <supervision timeout (ms)>] [-l <latency>]\n\r";
+const char bleConnUpdateDetailsStr[]           = "Ble connection parameters update. Intervals support decimal values (e.g. 7.5).\n\r";
+
+/* ble set phy */
+const char bleSetPhyStr[]                      = "ble_set_phy";
+const char bleSetPhyUsageStr[]                 = " [-help] [-h <conn handle>] [-tx <tx phy mask>] [-rx <rx phy mask>]\n\r\t"
+                                                 "[-o <coded phy opts: 0=any, 1=S2, 2=S8>]\n\r";
+const char bleSetPhyDetailsStr[]               = "Ble set preferred PHY. Mask: 1=1M, 2=2M, 4=CODED (combine with +, e.g. 3=1M+2M).\n\r";
+
 /* csi enable */
-char csiEnableStr[]                       = "csi_enable";
-char csiEnableUsageStr[]                  = " [-help] \n\r";
-char csiEnableDetailsStr[]                 = "CSI enable. \n\r";
+const char csiEnableStr[]                       = "csi_enable";
+const char csiEnableUsageStr[]                  = " [-help] \n\r";
+const char csiEnableDetailsStr[]                 = "CSI enable. \n\r";
 
 /* csi stop */
-char csiStopStr[]                       = "csi_stop";
-char csiStopUsageStr[]                  = " [-help] \n\r";
-char csiStopDetailsStr[]                 = "CSI stop. \n\r";
+const char csiStopStr[]                       = "csi_stop";
+const char csiStopUsageStr[]                  = " [-help] \n\r";
+const char csiStopDetailsStr[]                 = "CSI stop. \n\r";
 
 /* csi disable */
-char csiDisableStr[]                       = "csi_disable";
-char csiDisableUsageStr[]                  = " [-help] \n\r";
-char csiDisableDetailsStr[]                 = "CSI disable. \n\r";
+const char csiDisableStr[]                       = "csi_disable";
+const char csiDisableUsageStr[]                  = " [-help] \n\r";
+const char csiDisableDetailsStr[]                 = "CSI disable. \n\r";
 
 /* csi get results */
-char csiGetResultsStr[]                       = "csi_get_results";
-char csiGetResultsUsageStr[]                  = " [-help] \n\r";
-char csiGetResultsDetailsStr[]                 = "CSI get results. \n\r";
+const char csiGetResultsStr[]                       = "csi_get_results";
+const char csiGetResultsUsageStr[]                  = " [-help] \n\r";
+const char csiGetResultsDetailsStr[]                 = "CSI get results. \n\r";
+
+/* csi solicitation */
+const char csiSolicitationStr[]                       = "csi_config";
+const char csiSolicitationUsageStr[]                  =  " [-help] [-s <enable Solicitation>] [-p <Period time>] \n\r";//[-e <Expiry time>]
+const char csiSolicitationDetailsStr[]                 = "CSI solicitation. \n\r";
+
+/* csi solicitation set MAC */
+const char csiSolicitationSetMacStr[]                 = "csi_set_mac";
+const char csiSolicitationSetMacUsageStr[]            = " [-help] [-a <add/remove [0/1]>] [-m <\"MAC ADDRESS\">] \n\r";
+const char csiSolicitationSetMacDetailsStr[]          = "CSI solicitation add/remove MAC address. \n\r";
 
 /* test */
 const char testStr[]                      = "test";
@@ -586,8 +620,8 @@ const char wlanSetRegDomEntry_p_optionDetailsStr[] = "\n\r\t-p\tMax TX power. Up
 const char wlanSetRegDomEntry_d_optionDetailsStr[] = "\n\r\t-d\tDFS. Are the specified channels are DFS channels. Non-DFS is default.\n\r";
 const char wlanSetRegDomEntry_n_optionDetailsStr[] = "\n\r\t-n\tNumber of channels in rule. Max is 32. Mandatory\n\r";
 const char wlanSetRegDomEntry_bm_optionDetailsStr[] = "\n\r\t-bm\tBitmap (hex format) representing the channels in the rule. \n\r\t\tStarting from the LSB, "
-                                                      "each bit represent a channel between the specified\n\r\t\tmin and max channels, in leaps "
-                                                      "of 20 MHz bandwith channels (according to the band).\n\rMandatory\n\r";
+                                                      "each bit represent a channel in leaps\n\r\t\t"
+                                                      "of 20 MHz bandwith channels. Mandatory\n\r";
 const char wlanSetRegDomEntry_r_optionDetailsStr[] = "\n\r\t-r\tReset rule entry at given rule index\n\r";
 
 const char wlanGetRegDomEntryStr[]       = "get_cstm_reg_domain";
@@ -667,6 +701,7 @@ const  char g_optionStr[]            = "-g";
 const  char r_optionStr[]            = "-r";
 const  char h_optionStr[]            = "-h";
 const  char i_optionStr[]            = "-i";
+const  char k_optionStr[]            = "-k";
 const  char l_optionStr[]            = "-l";
 const  char n_optionStr[]            = "-n";
 const  char o_optionStr[]            = "-o";
@@ -677,6 +712,7 @@ const  char w_optionStr[]            = "-w";
 const  char I_optionStr[]            = "-I";
 const  char st_optionStr[]           = "-st";
 const  char tx_optionStr[]           = "-tx";
+const  char rx_optionStr[]           = "-rx";
 const  char tone_optionStr[]         = "-tone";
 const  char cca_optionStr[]          = "-cca";
 const  char u_optionStr[]            = "-u";

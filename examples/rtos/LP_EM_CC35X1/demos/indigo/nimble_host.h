@@ -67,5 +67,9 @@ int nimble_host_get_bd_address(uint8_t addr_type);
 
 int nimble_host_set_bd_address(uint8_t addr_type);
 
+int nimble_host_set_tx_power(uint8_t tx_power_index);
+
+int nimble_host_set_phy(uint16_t conn_handle, uint8_t tx_phys_mask, uint8_t rx_phys_mask, uint16_t phy_opts);
+
 /* application specific APIs */
 void register_extra_gap_event_cb(void (*cb)(void *, void *));

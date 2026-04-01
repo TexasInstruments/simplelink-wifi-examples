@@ -57,7 +57,7 @@
 
 
 #define IPERF_LWIP_CLIENT_DURATION_MS 10000 // Test duration (10 seconds)
-#define SEND_BUFFER_SIZE_UDP_CLIENT (TCP_MSS)
+#define SEND_BUFFER_SIZE_UDP_CLIENT (1470)
 
 #define IPERF_LWIP_MAX_FORMAT_RATE_LENGTH  20
 
@@ -230,7 +230,6 @@ void udp_client_task(void *arg) {
                 tcpip_callback(iperflwip_udp_client_tx,(void *) session_con);
             }
         }
-        taskYIELD();//allow others to run
 
 
     }

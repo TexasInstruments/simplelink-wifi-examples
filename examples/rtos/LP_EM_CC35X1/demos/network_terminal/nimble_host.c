@@ -31,9 +31,11 @@
  */
 #include "nimble/nimble_npl.h"
 #include "nimble/nimble_port.h"
+#include "nimble/hci_common.h"
 #include "uart_term.h"
 #include "console/console.h"
 #include "host/ble_hs.h"
+#include "host/ble_hs_hci.h"
 #include "host/util/util.h"
 
 #include "services/gap/ble_svc_gap.h"
@@ -153,6 +155,11 @@ static void print_addr(const void *addr)
 {
     const uint8_t *u8p;
 
+    if (addr == NULL)
+    {
+        return;
+    }
+
     u8p = addr;
     console_printf("%02X:%02X:%02X:%02X:%02X:%02X",
                    u8p[5], u8p[4], u8p[3], u8p[2], u8p[1], u8p[0]);
@@ -183,7 +190,7 @@ static void print_scan_results()
             console_printf("| %-20s ", extScanCB.extScanResults[i].local_name);
             console_printf("| ");
             print_addr(extScanCB.extScanResults[i].addr.val);
-            console_printf(" | %-6s", extScanCB.extScanResults[i].addr.type == 0 ? "PUBLIC" : "RANDOM");
+            console_printf(" | %-6s", (extScanCB.extScanResults[i].addr.type & 1) ? "RANDOM" : "PUBLIC");
             console_printf(" | %04d |", extScanCB.extScanResults[i].rssi);
             UART_PRINT(lineBreak);
         }
@@ -204,9 +211,10 @@ static void add_to_connected_peers(uint16 conn_handle)
             {
                 extConnCB.connHandles[i] = conn_handle;
                 extConnCB.connCount++;
-                break;
+                return;
             }
         }
+        console_printf("\n\rWarning: Connection array full, cannot add handle %d\n\r", conn_handle);
     }
 }
 
@@ -251,15 +259,17 @@ static void print_connected_peers()
         {
             if (extConnCB.connHandles[i] != BLE_HS_CONN_HANDLE_NONE)
             {
-                ble_gap_conn_find(extConnCB.connHandles[i], &connDesc);
+                if (ble_gap_conn_find(extConnCB.connHandles[i], &connDesc) != 0)
+                {
+                    continue;
+                }
                 console_printf("| %d      ", connDesc.conn_handle);
                 console_printf("| ");
                 print_addr(connDesc.peer_ota_addr.val);
-                console_printf(" | %-6s", connDesc.peer_ota_addr.type == 0 ? "PUBLIC" : "RANDOM");
+                console_printf(" | %-6s", (connDesc.peer_ota_addr.type & 1) ? "RANDOM" : "PUBLIC");
                 console_printf(" | %-10s", connDesc.role == 0 ? "CENTRAL" : "PERIPHERAL");
                 console_printf(" | %-4s    |", connDesc.sec_state.bonded == 0 ? "NO" : "YES");
                 UART_PRINT(lineBreak);
-
             }
         }
         printBorder('-', 63);
@@ -312,10 +322,11 @@ static int is_peer_bonded(uint16 conn_handle)
 #define BLE_SVC_TI_PERIPHERAL_CHR_UUID16_4  0XFFF4
 #define BLE_SVC_TI_PERIPHERAL_CHR_UUID16_5  0XFFF5
 
+/* TI Peripheral Service handle for notifications */
 uint16_t ti_peripheral_handle = 0;
 
 /**
- * Structure holding data for the main characteristics
+ * Structure holding data for the TI Peripheral service characteristics
  */
 struct ble_svc_ti_peripheral_data {
     uint8_t char1;
@@ -333,10 +344,10 @@ struct ble_svc_ti_peripheral_data ble_svc_ti_peripheral_data = {
     .char5 = {0x01,0x02,0x03,0x04,0x05},
 };
 
-static int gatt_svr_chr_access_ti_peripheral(uint16_t conn_handle, uint16_t attr_handle,
+static int gatt_svr_ti_peripheral_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
-static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
+static const struct ble_gatt_svc_def gatt_svr_ti_peripheral_svcs[] = {
     {
         /* Service: TI Simple Peripheral */
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
@@ -344,28 +355,28 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .characteristics = (struct ble_gatt_chr_def[]) { {
             /* Characteristic: READ/WRITE */
             .uuid = BLE_UUID16_DECLARE(BLE_SVC_TI_PERIPHERAL_CHR_UUID16_1),
-            .access_cb = gatt_svr_chr_access_ti_peripheral,
+            .access_cb = gatt_svr_ti_peripheral_chr_access,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         }, {
             /* Characteristic: READ */
             .uuid = BLE_UUID16_DECLARE(BLE_SVC_TI_PERIPHERAL_CHR_UUID16_2),
-            .access_cb = gatt_svr_chr_access_ti_peripheral,
+            .access_cb = gatt_svr_ti_peripheral_chr_access,
             .flags = BLE_GATT_CHR_F_READ,
         }, {
             /* Characteristic: WRITE */
             .uuid = BLE_UUID16_DECLARE(BLE_SVC_TI_PERIPHERAL_CHR_UUID16_3),
-            .access_cb = gatt_svr_chr_access_ti_peripheral,
+            .access_cb = gatt_svr_ti_peripheral_chr_access,
             .flags = BLE_GATT_CHR_F_WRITE,
         }, {
             /* Characteristic: NOTIFY */
             .uuid = BLE_UUID16_DECLARE(BLE_SVC_TI_PERIPHERAL_CHR_UUID16_4),
-            .access_cb = gatt_svr_chr_access_ti_peripheral,
+            .access_cb = gatt_svr_ti_peripheral_chr_access,
             .val_handle = &ti_peripheral_handle,
             .flags = BLE_GATT_CHR_F_NOTIFY,
         }, {
             /* Characteristic: READ */
             .uuid = BLE_UUID16_DECLARE(BLE_SVC_TI_PERIPHERAL_CHR_UUID16_5),
-            .access_cb = gatt_svr_chr_access_ti_peripheral,
+            .access_cb = gatt_svr_ti_peripheral_chr_access,
             .flags = BLE_GATT_CHR_F_READ,
         }, {
             0, /* No more characteristics in this service */
@@ -376,7 +387,8 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     },
 };
 
-static int gatt_svr_chr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
+static int
+gatt_svr_ti_peripheral_chr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
                    void *dst, uint16_t *len)
 {
     uint16_t om_len;
@@ -395,7 +407,8 @@ static int gatt_svr_chr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max
     return 0;
 }
 
-static int gatt_svr_chr_notify(uint16_t conn_handle, uint8_t value)
+static int
+gatt_svr_ti_peripheral_chr_notify(uint16_t conn_handle, uint8_t value)
 {
     int rc;
     struct os_mbuf *om;
@@ -404,13 +417,22 @@ static int gatt_svr_chr_notify(uint16_t conn_handle, uint8_t value)
     notify_value[0] = value;
 
     om = ble_hs_mbuf_from_flat(&notify_value, sizeof(notify_value));
+    if (om == NULL)
+    {
+        return BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
 
     rc = ble_gatts_notify_custom(conn_handle, ti_peripheral_handle, om);
+    if (rc != 0)
+    {
+        os_mbuf_free_chain(om);
+    }
 
     return rc;
 }
 
-static int gatt_svr_chr_access_ti_peripheral(uint16_t conn_handle, uint16_t attr_handle,
+static int
+gatt_svr_ti_peripheral_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     uint16_t uuid16;
@@ -426,7 +448,7 @@ static int gatt_svr_chr_access_ti_peripheral(uint16_t conn_handle, uint16_t attr
                                     sizeof(ble_svc_ti_peripheral_data.char1));
                 return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
             } else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-                rc = gatt_svr_chr_write(ctxt->om, 0,
+                rc = gatt_svr_ti_peripheral_chr_write(ctxt->om, 0,
                                         sizeof(ble_svc_ti_peripheral_data.char1),
                                         &ble_svc_ti_peripheral_data.char1, NULL);
                 return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
@@ -442,12 +464,12 @@ static int gatt_svr_chr_access_ti_peripheral(uint16_t conn_handle, uint16_t attr
 
         case BLE_SVC_TI_PERIPHERAL_CHR_UUID16_3:
             ASSERT_GENERAL(ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR);
-            rc = gatt_svr_chr_write(ctxt->om, 0,
+            rc = gatt_svr_ti_peripheral_chr_write(ctxt->om, 0,
                                     sizeof(ble_svc_ti_peripheral_data.char3),
                                     &ble_svc_ti_peripheral_data.char3, NULL);
             if (rc == 0)
             {
-                rc = gatt_svr_chr_notify(conn_handle, ble_svc_ti_peripheral_data.char3);
+                rc = gatt_svr_ti_peripheral_chr_notify(conn_handle, ble_svc_ti_peripheral_data.char3);
             }
             return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
             break;
@@ -481,12 +503,12 @@ static int gatt_svr_init(void)
 {
     int rc;
 
-    rc = ble_gatts_count_cfg(gatt_svr_svcs);
+    rc = ble_gatts_count_cfg(gatt_svr_ti_peripheral_svcs);
     if (rc != 0) {
         return rc;
     }
 
-    rc = ble_gatts_add_svcs(gatt_svr_svcs);
+    rc = ble_gatts_add_svcs(gatt_svr_ti_peripheral_svcs);
     if (rc != 0) {
         return rc;
     }
@@ -559,13 +581,13 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                         event->connect.status == 0 ? "established successfully" : "failed",
                         event->connect.status);
 
-            rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
-            ASSERT_GENERAL(rc == 0);
-            console_printf("\n\rConnected to ");
-            print_addr(desc.peer_ota_addr.val);
-
             if (event->connect.status == 0)
             {
+                rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
+                ASSERT_GENERAL(rc == 0);
+                console_printf("\n\rConnected to ");
+                print_addr(desc.peer_ota_addr.val);
+
                 add_to_connected_peers(event->connect.conn_handle);
                 if (is_peer_bonded(event->connect.conn_handle))
                 {
@@ -620,19 +642,19 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             break;
 
         case BLE_GAP_EVENT_SUBSCRIBE:
-            console_printf("\n\rsubscribe event attr_handle=%d\n",
+            console_printf("\n\rSubscribe event attr_handle=%d\n",
                         event->subscribe.attr_handle);
             break;
 
         case BLE_GAP_EVENT_MTU:
-            console_printf("\n\rmtu update event; conn_handle=%d cid=%d mtu=%d\n",
+            console_printf("\n\rMTU update event; conn_handle=%d cid=%d mtu=%d\n",
                         event->mtu.conn_handle,
                         event->mtu.channel_id,
                         event->mtu.value);
             break;
 
         case BLE_GAP_EVENT_IDENTITY_RESOLVED:
-            console_printf("\n\ridentity resolved; peer identity address: ");
+            console_printf("\n\rIdentity peer address resolved: ");
             print_addr(event->identity_resolved.peer_id_addr.val);
             break;
 
@@ -906,6 +928,7 @@ int nimble_host_ext_adv_cfg(ExtAdvCfg_t *pAdvCfg)
     if ( rc != 0 )
     {
         console_printf("\n\rERROR: failed to configure the data to include in advertisements packets, with error code: %d\n\r", rc);
+        os_mbuf_free_chain(adv_data);
         return (rc);
     }
 
@@ -1117,7 +1140,7 @@ int nimble_host_gap_update_params(uint16 connHandle, uint32 interval_min_us, uin
     struct ble_gap_upd_params upd_params = {
         .itvl_min = (interval_min_us == 0) ? BLE_GAP_INITIAL_CONN_ITVL_MIN : BLE_GAP_CONN_ITVL_MS((double) interval_min_us / 1000),
         .itvl_max = (interval_max_us == 0) ? BLE_GAP_INITIAL_CONN_ITVL_MAX : BLE_GAP_CONN_ITVL_MS((double) interval_max_us / 1000),
-        .latency = BLE_GAP_INITIAL_CONN_LATENCY,
+        .latency = (latency == 0) ? BLE_GAP_INITIAL_CONN_LATENCY : BLE_GAP_CONN_ITVL_MS((double) latency / 1000),
         .supervision_timeout = (supervision_timeout_us == 0) ? BLE_GAP_INITIAL_SUPERVISION_TIMEOUT : (double) supervision_timeout_us / 1000 / 10,
         .min_ce_len = BLE_GAP_INITIAL_CONN_MIN_CE_LEN,
         .max_ce_len = BLE_GAP_INITIAL_CONN_MAX_CE_LEN,
@@ -1297,6 +1320,54 @@ int nimble_host_set_bd_address(uint8_t addr_type)
     own_addr_type = addr.type;
 
     return 0;
+}
+
+int nimble_host_set_tx_power(uint8_t tx_power_index)
+{
+    struct ble_hci_vs_set_tx_pwr_cp cmd;
+    int rc;
+
+    if (!nimble_host_is_enabled())
+    {
+        Report("\n\rBLE is stopped, run ble_start.\n\r");
+        return -1;
+    }
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.tx_power = tx_power_index;
+
+    rc = ble_hs_hci_send_vs_cmd((BLE_HCI_OCF_VS_SET_TX_PWR - 1),
+                                  &cmd, sizeof(cmd), NULL, 0);
+
+    if (rc != 0)
+    {
+        Report("\n\rfailed to set TX power, error: %d\n\r", rc);
+        return rc;
+    }
+
+    Report("\n\rTX power set successfully\n\r");
+    return 0;
+}
+
+int nimble_host_set_phy(uint16_t conn_handle, uint8_t tx_phys_mask, uint8_t rx_phys_mask, uint16_t phy_opts)
+{
+    int rc;
+
+    if (!nimble_host_is_enabled())
+    {
+        Report("\n\rBLE is stopped, run ble_start.\n\r");
+        return -1;
+    }
+
+    rc = ble_gap_set_prefered_le_phy(conn_handle, tx_phys_mask, rx_phys_mask, phy_opts);
+
+    if (rc != 0)
+    {
+        Report("Failed to set PHY, error: %d\n\r", rc);
+        return -1;
+    }
+
+    return rc;
 }
 
 int nimble_host_start(void)

@@ -59,7 +59,7 @@
 
 #define IPERF_LWIP_MAX_FORMAT_RATE_LENGTH  20
 
-#define SEND_BUFFER_SIZE TCP_MSS
+#define SEND_BUFFER_SIZE 1460
 
 
 extern session_conn_t iperf_session[];
@@ -119,6 +119,8 @@ static void iperflwip_client_tcp_init(void *param)
 
     tcp_nagle_disable(session_con->conn_pcb_tcp);
 
+    tcp_setprio(session_con->conn_pcb_tcp, TCP_PRIO_MAX);       
+
 
     err = tcp_connect(session_con->conn_pcb_tcp, &session_con->dest_ip, session_con->lwipConfig.destOrLocalPortNumber, iperflwip_tcp_session_conected);
     if (err != ERR_OK) {
@@ -152,6 +154,7 @@ err_t iperflwip_tcp_session_conected(void *arg, struct tcp_pcb *tpcb, err_t err)
     inet_ntop(AF_INET, &ipAddress, ip, INET_ADDRSTRLEN);
     Report("\n\riperflwip_client: Connected to %s port %d\n\r", ip,
            session_con->conn_pcb_tcp->local_port);
+
 
     session_con->total_bytes = 0;
     session_con->is_running = true;

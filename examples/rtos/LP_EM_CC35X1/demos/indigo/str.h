@@ -116,11 +116,14 @@ extern const char *wlanConnect_t_optionDetailsStr;
 extern const char *wlanConnect_p_optionDetailsStr;
 #ifdef CC35XX
 extern const char *wlanConnect_e_optionDetailsStr;
+extern const char *wlanConnect_k_optionDetailsStr;
 extern const char *wlanConnect_i_optionDetailsStr;
 extern const char *wlanConnect_ent_usageDetailsStr_1;
 extern const char *wlanConnect_ent_usageDetailsStr_2;
 extern const char *wlanConnect_ent_usageDetailsStr_3;
 extern const char *wlanConnect_ent_usageDetailsStr_4;
+extern const char *wlanConnect_ent_usageDetailsStr_5;
+extern const char *wlanConnect_ent_usageDetailsStr_6;
 #endif
 
 extern const char wlanDisconnectStr[];
@@ -335,6 +338,18 @@ extern const char bleSetBdAddrStr[];
 extern const char bleSetBdAddrUsageStr[];
 extern const char bleSetBdAddrDetailsStr[];
 
+extern const char bleSetTxPwrStr[];
+extern const char bleSetTxPwrUsageStr[];
+extern const char bleSetTxPwrDetailsStr[];
+
+extern const char bleConnUpdateStr[];
+extern const char bleConnUpdateUsageStr[];
+extern const char bleConnUpdateDetailsStr[];
+
+extern const char bleSetPhyStr[];
+extern const char bleSetPhyUsageStr[];
+extern const char bleSetPhyDetailsStr[];
+
 extern const char bleStartStr[];
 extern const char bleStartUsageStr[];
 extern const char bleStartDetailsStr[];
@@ -343,21 +358,33 @@ extern const char bleStopStr[];
 extern const char bleStopUsageStr[];
 extern const char bleStopDetailsStr[];
 
-extern char csiEnableStr[];
-extern char csiEnableUsageStr[];
-extern char csiEnableDetailsStr[];
+extern const char bleTestModeStr[];
+extern const char bleTestModeUsageStr[];
+extern const char bleTestModeDetailsStr[];
 
-extern char csiStopStr[];
-extern char csiStopUsageStr[];
-extern char csiStopDetailsStr[];
+extern const char csiEnableStr[];
+extern const char csiEnableUsageStr[];
+extern const char csiEnableDetailsStr[];
 
-extern char csiDisableStr[];
-extern char csiDisableUsageStr[];
-extern char csiDisableDetailsStr[];
+extern const char csiStopStr[];
+extern const char csiStopUsageStr[];
+extern const char csiStopDetailsStr[];
 
-extern char csiGetResultsStr[];
-extern char csiGetResultsUsageStr[];
-extern char csiGetResultsDetailsStr[];
+extern const char csiDisableStr[];
+extern const char csiDisableUsageStr[];
+extern const char csiDisableDetailsStr[];
+
+extern const char csiGetResultsStr[];
+extern const char csiGetResultsUsageStr[];
+extern const char csiGetResultsDetailsStr[];
+
+extern const char csiSolicitationStr[];
+extern const char csiSolicitationUsageStr[];
+extern const char csiSolicitationDetailsStr[];
+
+extern const char csiSolicitationSetMacStr[];
+extern const char csiSolicitationSetMacUsageStr[];
+extern const char csiSolicitationSetMacDetailsStr[];
 
 extern const char sendStr[];
 extern const char sendUsage1Str[];
@@ -501,6 +528,7 @@ extern const char g_optionStr[];
 extern const char r_optionStr[];
 extern const char h_optionStr[];
 extern const char i_optionStr[];
+extern const char k_optionStr[];
 extern const char l_optionStr[];
 extern const char n_optionStr[];
 extern const char o_optionStr[];
@@ -511,6 +539,7 @@ extern const char w_optionStr[];
 extern const char I_optionStr[];
 extern const char st_optionStr[];
 extern const char tx_optionStr[];
+extern const  char rx_optionStr[];
 extern const char tone_optionStr[];
 extern const char cca_optionStr[];
 extern const char u_optionStr[];

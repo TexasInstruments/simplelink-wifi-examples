@@ -51,6 +51,7 @@ void initCompletionArray(char **strings, uint8_t numStrings);
 void freeCompletionArray();
 
 void InitTerm(void);
+void DeinitTerm(void);
 
 int Report(const char *pcFormat,...);
 

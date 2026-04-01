@@ -1639,4 +1639,3 @@ void osi_SetDateTimeS(uint64_t newtime)
     clock_settime(CLOCK_REALTIME,&ts);
 
 }
-

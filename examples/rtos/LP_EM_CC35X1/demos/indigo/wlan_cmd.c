@@ -51,9 +51,9 @@
 //#define GENERATE_RANDOM_MAC
 #ifdef GENERATE_RANDOM_MAC
 #ifdef CC35XX
-	#include "generate_mac_address.h"
+    #include "generate_mac_address.h"
 #elif defined(CC33XX)
-	#include <wlan_irq_adapt.h>
+    #include <wlan_irq_adapt.h>
 #endif 
 #endif
 
@@ -204,9 +204,11 @@ uint32_t ActiveNetIfBitMap = 0x00;
 
 
 
-int csi_keep_reading = 0;
-OsiSyncObj_t csi_thread_sync = NULL;
-OsiThread_t csi_thread = NULL;
+static volatile int csi_keep_reading = 0;
+static volatile int csi_thread_exit = 0;
+static OsiSyncObj_t csi_thread_sync = NULL;
+static OsiSyncObj_t csi_thread_exit_sync = NULL;
+static OsiThread_t csi_thread = NULL;
 
 #ifdef CC35XX
     //prepare configuration for WPS connection
@@ -711,7 +713,7 @@ int32_t cmdWlanRoleUpStaCallback(void *arg)
     if (ret < 0)
     {
         network_stack_remove_if_sta();
-        Report("\n\r _role_sta_up: Wlan_RoleUp Failed with error code: %d", ret);
+        Report("\n\r_role_sta_up: Wlan_RoleUp Failed with error code: %d", ret);
         return ret; //Return -1 to lwip is Wlan_RoleUp is failed
     }
 
@@ -894,9 +896,10 @@ int32_t cmdWlanConnectCallback(void *arg)
     int32_t ret = 0;
     ConnectCmd_t ConnectParams;
     WlanEapConnectParams_t EapConnectParams;
-    uint8_t flags =0;
     uint8_t isEnt = 0;
-
+#ifdef ENT_EXAMPLE
+    uint8_t flags =0;
+#endif
 
     /* Call the command parser */
     memset(&ConnectParams, 0x0, sizeof(ConnectCmd_t));
@@ -1027,6 +1030,18 @@ int32_t cmdWlanConnectCallback(void *arg)
      * Indicating that the NWP has connected and acquired IP address is raised.
      * For further information, see this application read me file.
      */
+    if (IS_STA_CONNECTED(app_CB.Status))
+    {
+        //the previous connection is about to end - let's wait for disconnect
+        ret = osi_SyncObjWait(&(app_CB.CON_CB.disconnectEventSyncObj), 1000); // 1 sec
+        if (ret != 0)
+        {
+            Report("\n\r[wlan_connect app]:WARNING timeout on wait for disconnect the previous connection (err=%d)\n\r", ret);
+        }
+
+        osi_SyncObjClear(&(app_CB.CON_CB.connectEventSyncObj));
+    }
+    
     if(!IS_STA_CONNECTED(app_CB.Status))
     {
         if(isEnt)
@@ -1101,13 +1116,16 @@ int32_t printWlanConnectUsage(void *arg)
 #ifdef CC35XX
     UART_PRINT(wlanConnect_e_optionDetailsStr);
     UART_PRINT(wlanConnect_i_optionDetailsStr);
+    UART_PRINT(wlanConnect_k_optionDetailsStr);
 #endif
     UART_PRINT(help_optaionDetails);
 #ifdef CC35XX
     UART_PRINT(wlanConnect_ent_usageDetailsStr_1);
+    UART_PRINT(wlanConnect_ent_usageDetailsStr_6);
     UART_PRINT(wlanConnect_ent_usageDetailsStr_2);
     UART_PRINT(wlanConnect_ent_usageDetailsStr_3);
     UART_PRINT(wlanConnect_ent_usageDetailsStr_4);
+    UART_PRINT(wlanConnect_ent_usageDetailsStr_5);
 #endif
     UART_PRINT(lineBreak);
     return(0);
@@ -2892,8 +2910,8 @@ int32_t ParseSelectedChannelsLength(void* arg)
     printSetChListUsage(NULL);
 
      return 0;
-
 }
+
 int32_t ParseSetSelectedChannelsCmd(void *arg, WlanSelectedChannelsArray_t *selectedChannels)
 {
     char cmdStr[CMD_BUFFER_LEN + 1];
@@ -2988,7 +3006,6 @@ int32_t ParseSetSelectedChannelsCmd(void *arg, WlanSelectedChannelsArray_t *sele
         return (-1);
     }
 
-
     return (0);
 }
 
@@ -3035,9 +3052,9 @@ int32_t cmdSetSelectedScanChannelsCallback(void *arg)
 
     return (ret);
 }
+#endif //CC33XX
 
-#endif
-
+#ifdef CC35XX
 int32_t cmdSetWsocPrimaryCallback(void *arg)
 {
     int16_t         ret = 0;
@@ -3069,6 +3086,7 @@ int32_t printSetWsocPrimaryUsage(void *arg)
     Report(lineBreak);
     return (0);
 }
+#endif //CC35XX
 
 /*!
     \brief          Parse set power management mode command.
@@ -3314,7 +3332,9 @@ int32_t cmdGetFwVerCallback(void *arg)
 {
     int16_t         ret = 0;
     WlanFWVersions_t wlanVer = {0};
+#ifdef CC35XX
     WlanSPVersions_t spVer = {0};
+#endif
 
     ret = Wlan_Get(WLAN_GET_FWVERSION,(void *)&wlanVer);
 
@@ -3522,7 +3542,7 @@ int32_t cmdWlanStopCallback(void *arg)
 
     /*
     if (DEVICE_OFF == wlan_GetStateWlan())
-	//if (DEVICE_OFF == GetState_WL())	
+    //if (DEVICE_OFF == GetState_WL())	
     {
         Report("\n\rWlan already stopped !!!\n\r");
         return -1;
@@ -3751,6 +3771,33 @@ int32_t printCsiEnableUsage(void *arg)
     return(0);
 }
 
+int32_t printCsiSolicitationUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(csiSolicitationStr);
+    UART_PRINT(csiSolicitationUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(csiSolicitationDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+int32_t printCsiSolicitationSetMacUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(csiSolicitationSetMacStr);
+    UART_PRINT(csiSolicitationSetMacUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(csiSolicitationSetMacDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+
 int32_t printCsiStopUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -3792,6 +3839,7 @@ int32_t printCsiGetResultsUsage(void *arg)
 
 
 
+
 /*!
     \brief          Print CSI data to terminal UART
 
@@ -3801,19 +3849,62 @@ int32_t printCsiGetResultsUsage(void *arg)
 
     \sa
  */
-void CSI_InfoDump (WlanGetCSIData_t *pCsiData)
+/**
+ * @brief CSI data receive callback
+ * Prints CSI data in CSV format, header printed once.
+ */
+static void csi_rx_cb(WlanGetCSIData_t *pCsiData)
 {
-    Report("\n\rCSI data:");
+    static int s_count = 0;
+    
+    // Sum PRINT
+    uint32 csi_cb_time_ms = osi_GetTimeMS();
 
-    Report("\n\rMAC: %02x:%02x:%02x:%02x:%02x:%02x",
-           pCsiData->tMacAddr[0],
-           pCsiData->tMacAddr[1],
-           pCsiData->tMacAddr[2],
-           pCsiData->tMacAddr[3],
-           pCsiData->tMacAddr[4],
-           pCsiData->tMacAddr[5]);
-    Report("\n\rRSSI %d timestamp 0x%x", pCsiData->rssi, pCsiData->timestamp);
+    if (s_count % 50 == 0) 
+    {
+        Report("\n\rTHIS PRINT IS EVERY 50 CSI PACKETS\n CSI packet received, total: %d, time(ms): %d\n ", (s_count + 1),csi_cb_time_ms);
 
+        Report("\n\rCSI_DATA: tMacAddr:%02x:%02x:%02x:%02x:%02x:%02x, " 
+               "rssi=%d, rate=%d, sig_mode=%d, mcs=%d, cw=%d, sgi=%d, "
+               "channel=%d, timestamp:0x%x, ant=%d, seqNum=%d, csiInfoLength=%d",
+        pCsiData->tMacAddr[0], pCsiData->tMacAddr[1], pCsiData->tMacAddr[2],
+        pCsiData->tMacAddr[3], pCsiData->tMacAddr[4], pCsiData->tMacAddr[5],
+        pCsiData->rssi,
+        pCsiData->rate,
+        pCsiData->sig_mode,
+        pCsiData->mcs,
+        pCsiData->cw, // bandwidth
+        pCsiData->sgi,
+        pCsiData->channel,
+        pCsiData->timestamp,
+        pCsiData->ant,
+        pCsiData->seqNum,
+        pCsiData->csiInfoLength
+        );
+    }
+    
+    // increment counter
+    s_count++;
+
+/* Example for CSI DATA structure */
+    /*
+    uint8_t ImOut0 ;
+    uint8_t ReOut0 ;
+    uint8_t ImOut1 ;
+    uint8_t ReOut1 ;
+    for (int i = 0; i < CSI_MAX_DATA_LENGTH-1; i++) {
+        ImOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 0) & 0xFF;
+        ReOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 8) & 0xFF;
+        ImOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 16) & 0xFF;
+        ReOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 24) & 0xFF;
+        Report("%d,%d,%d,%d,", ImOut0, ReOut0, ImOut1, ReOut1);
+        }
+
+    ImOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 0) & 0xFF;
+    ReOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 8) & 0xFF;
+    Report("%d,%d", ImOut0, ReOut0);
+    Report("]\"\n");    
+    */
 }
 
 /*!
@@ -3825,19 +3916,48 @@ void CSI_InfoDump (WlanGetCSIData_t *pCsiData)
 
     \sa
  */
-void csi_thread_entry(void *arg)
+/**
+ * @brief CSI thread main function (polling style)
+ */
+static void csi_thread_entry(void *arg)
 {
     WlanGetCSIData_t csiData;
-    while (1)
-    {
-        osi_SyncObjWait(&csi_thread_sync, OSI_WAIT_FOREVER);
-        while (csi_keep_reading)
-        {
 
-            Wlan_Get(WLAN_GET_CSI,&csiData);
-            CSI_InfoDump(&csiData);
-            os_sleep(1,0);
+    while (!csi_thread_exit)
+    {
+        int waitResult = osi_SyncObjWait(&csi_thread_sync, OSI_WAIT_FOREVER);
+        
+        /* Check if we should exit immediately after waking up */
+        if (csi_thread_exit)
+        {
+            break;
         }
+        /* Only proceed if wait was successful */
+        if (waitResult == OSI_OK)
+        {
+            while (csi_keep_reading && !csi_thread_exit)
+            {
+                int ret = Wlan_Get(WLAN_GET_CSI, &csiData);
+                if (ret == 0)
+                {
+                    csi_rx_cb(&csiData);
+                }
+                else
+                {
+                    /* Brief delay on error to avoid tight loop */
+                    osi_Sleep(1);
+                }
+                
+                /* Add small delay to allow other WLAN operations */
+                osi_uSleep(1000); /* 1ms delay */
+            }
+        }
+    }
+
+    /* Signal that thread is exiting */
+    if (csi_thread_exit_sync != NULL)
+    {
+        osi_SyncObjSignal(&csi_thread_exit_sync);
     }
 }
 
@@ -3850,27 +3970,117 @@ void csi_thread_entry(void *arg)
 
     \sa
  */
-int32_t cmdCsiEnableCallback (void *arg)
+/**
+ * @brief Initialize and enable CSI
+ */
+int32_t csiInitCallback(void *arg)
 {
-    int32_t  ret;
+    int ret;
+    int retVal = 0;
     WlanCfgCsi_t csiCfg;
     csiCfg.csiEnable = TRUE;
-
     if (csi_thread == NULL)
     {
-        osi_SyncObjCreate(&csi_thread_sync);
+        /* Reset flags for fresh start */
+        csi_thread_exit = 0;
+        csi_keep_reading = 0;
 
-        osi_ThreadCreate(&csi_thread,     // Thread control block
-                                  "",                       // Thread name
-                                  4096,                     // STACK size
-                                  4,                        // Priority
+        retVal = osi_SyncObjCreate(&csi_thread_sync);
+        if(retVal != OSI_OK)
+        {
+            return WlanError(WLAN_ERROR_SEVERITY__MID, WLAN_ERROR_MODULE__COMMANDS, WLAN_ERROR_TYPE__CSI);
+        }
+
+        retVal = osi_SyncObjCreate(&csi_thread_exit_sync);
+        if (retVal != OSI_OK)
+        {
+            osi_SyncObjDelete(&csi_thread_sync);
+            csi_thread_sync = NULL;
+            return WlanError(WLAN_ERROR_SEVERITY__MID, WLAN_ERROR_MODULE__COMMANDS, WLAN_ERROR_TYPE__CSI);
+        }
+
+        retVal = osi_ThreadCreate(&csi_thread,              // Thread control block
+                                  "csi_thread",             // Thread name
+                                  CSI_THR_STACK_SIZE,       // STACK size
+                                  CSI_THRD_PRIORITY,        // Priority
                                   (void*) csi_thread_entry, // Execute function
                                   NULL);                    // params
+        if(retVal != OSI_OK)
+        {
+            Report("\n\r csiInit: CSI ThreadCreate failed !!!");
+            osi_SyncObjDelete(&csi_thread_exit_sync);
+            csi_thread_exit_sync = NULL;
+            osi_SyncObjDelete(&csi_thread_sync);
+            csi_thread_sync = NULL;
+            return WlanError(WLAN_ERROR_SEVERITY__MID, WLAN_ERROR_MODULE__COMMANDS, WLAN_ERROR_TYPE__CSI);
+        }                                  
     }
-    ret = Wlan_Set(WLAN_SET_CSI,(void *)&csiCfg);
-    return(ret);
+
+    ret = Wlan_Set(WLAN_SET_CSI, (void *)&csiCfg);
+    if (ret != 0)
+    {
+        Report("\n\r[CSI] Failed to enable CSI in firmware: %d\n\r", ret);
+    }
+    return ret;
 }
 
+int32_t csiSolicCallback(void *arg)
+{
+    // Handle CSI solicitation
+    int ret;
+    WlanCfgCsiSol_t csiSolCfg;
+
+    // Set defaults in case user omits some options (optional)
+    csiSolCfg.csiSolEnable = TRUE;
+    csiSolCfg.csiSolPeriod = 100; // default period
+    //csiSolCfg.csiSolExpiry = ; // default expiry (unused for now)
+
+    if(ParseCsiSolicCmd(arg, &csiSolCfg) < 0)
+    {
+        printCsiSolicitationUsage(NULL);
+        return -1;
+    }
+    ret = Wlan_Set(WLAN_SET_CSI_SOLICITATION, (void *)&csiSolCfg);
+    if (ret == 0) 
+    {
+        Report("CSI solicitation %s, period=%d\n", csiSolCfg.csiSolEnable ? "enabled" : "disabled", csiSolCfg.csiSolPeriod);
+    }
+    else 
+    {
+        Report("Failed to set CSI solicitation\n");
+    }
+    return ret;
+}
+
+
+
+int32_t csiSolicSetMacCfg(void *arg)
+{
+    // Handle CSI solicitation MAC list
+    WlanCfgCsiSolSetMac_t csiSolSetMacCfg = {0};
+    csiSolSetMacCfg.csiSolAddRemoveMac = -1;
+    int ret;
+
+    if(ParseCsiSolicSetMacCmd(arg, &csiSolSetMacCfg) < 0)
+    {
+        printCsiSolicitationSetMacUsage(NULL);
+        return -1;
+    }
+
+    ret = Wlan_Set(WLAN_SET_CSI_SOLICITATION_MAC, (void *)&csiSolSetMacCfg);
+
+    if (ret == 0) {
+        Report("CSI solicitation MAC %s: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            csiSolSetMacCfg.csiSolAddRemoveMac ? "added" : "removed",
+            csiSolSetMacCfg.csiSolMacAddress[0], csiSolSetMacCfg.csiSolMacAddress[1],
+            csiSolSetMacCfg.csiSolMacAddress[2], csiSolSetMacCfg.csiSolMacAddress[3],
+            csiSolSetMacCfg.csiSolMacAddress[4], csiSolSetMacCfg.csiSolMacAddress[5]);
+    } else {
+        Report("Failed to set CSI solicitation MAC\n");
+    }
+
+    return ret;
+}
 
 /*!
     \brief          Stop pulling CSI results
@@ -3881,10 +4091,19 @@ int32_t cmdCsiEnableCallback (void *arg)
 
     \sa
  */
-int32_t cmdCsiStopCallback (void *arg)
+int32_t csiStopCallback(void *arg)
 {
-    csi_keep_reading = 0;
-    return(0);
+    if (csi_thread != NULL)
+    {
+        csi_keep_reading = 0;
+        Report("\n\r[CSI] Stopped reading CSI data\n\r");
+        return 0;
+    }
+    else
+    {
+        Report("\n\r[CSI] Thread not initialized\n\r");
+        return -1;
+    }
 }
 
 /*!
@@ -3896,25 +4115,77 @@ int32_t cmdCsiStopCallback (void *arg)
 
     \sa
  */
-int32_t cmdCsiDisableCallback (void *arg)
+int32_t csiDeinitCallback(void *arg)
 {
-    int32_t  ret;
+    int ret = 0;
+    int waitResult;
     WlanCfgCsi_t csiCfg;
     csiCfg.csiEnable = FALSE;
 
-    if (csi_thread == NULL)
+    /* Stop CSI in the lower layers before deleting the thread */
+    ret = Wlan_Set(WLAN_SET_CSI, (void *)&csiCfg);
+    if (ret != 0)
     {
-        // Thread doesn't exist, nothing to do
+        Report("\n\r[CSI] Warning: Failed to disable CSI in firmware: %d\n\r", ret);
     }
-    else
-    {
-        osi_ThreadDelete(&csi_thread);
+    if (csi_thread != NULL)
+     {
+        /* Stop reading and signal thread to exit */
+        csi_keep_reading = 0;
+        csi_thread_exit = 1;
 
-        osi_SyncObjDelete(&csi_thread_sync);
+         /* Wake up the thread if it's waiting */
+        if (csi_thread_sync != NULL)
+        {
+            osi_SyncObjSignal(&csi_thread_sync);
+        }
+        /* Wait for thread to signal it has exited */
+        if (csi_thread_exit_sync != NULL)
+        {
+            waitResult = osi_SyncObjWait(&csi_thread_exit_sync, 5000);
+
+            if (waitResult == OSI_OK)
+            {
+                /* Thread exited successfully - safe to delete */
+                osi_ThreadDelete(&csi_thread);
+                csi_thread = NULL;
+                if (csi_thread_exit_sync != NULL)
+                {
+                    osi_SyncObjDelete(&csi_thread_exit_sync);
+                    csi_thread_exit_sync = NULL;
+                }
+                if (csi_thread_sync != NULL)
+                {
+                    osi_SyncObjDelete(&csi_thread_sync);
+                    csi_thread_sync = NULL;
+                }
+             /* Reset flags */
+                csi_thread_exit = 0;
+                csi_keep_reading = 0;
+            }
+            else
+            {
+                /* Timeout - thread still running, do NOT delete */
+                Report("\n\r[CSI] Warning: Thread did not exit, resources not freed\n\r");
+                /* Leave thread running to avoid undefined behavior */
+                /* Reset exit flag since cleanup failed */
+                csi_thread_exit = 0;
+                ret = -1;
+            }
+        }
+        else
+        {
+            /* No exit sync available - unsafe, warn user */
+           Report("\n\r[CSI] Error: No exit sync available, cannot safely delete thread\n\r");
+           ret = -1;
+        }
     }
-    ret = Wlan_Set(WLAN_SET_CSI,(void *)&csiCfg);
-    return(ret);
-}
+ else
+    {
+        Report("\n\r[CSI] Thread already deinitialized\n\r");
+    }
+    return ret;
+ }
 
 /*!
     \brief          Start pulling CSI results
@@ -3925,12 +4196,21 @@ int32_t cmdCsiDisableCallback (void *arg)
 
     \sa
  */
-int32_t cmdCsiGetResultsCallback (void *arg)
+int32_t csiGetresultsStart(void *arg)
 {
+    if (csi_thread == NULL || csi_thread_sync == NULL)
+    {
+        UART_PRINT("\n\r[CSI] Error: CSI not initialized\n\r");
+        return -1;
+    }
+    if (csi_thread_exit)
+    {
+        UART_PRINT("\n\r[CSI] Error: CSI thread is shutting down\n\r");
+        return -1;
+    }
     csi_keep_reading = 1;
     osi_SyncObjSignal(&csi_thread_sync);
-
-    return(0);
+    return 0;
 }
 /////************ end of csi *************////
 /*!
@@ -4318,7 +4598,6 @@ int32_t cmdWlanRoleUpP2PCallback(void *arg)
 
 }
 
-#ifdef CC35XX
 //////////////////////// vendor IE /////////////////////////////
 /*!
     \brief          ucreate vendor IE lists
@@ -4388,7 +4667,6 @@ int32_t cmdDeleteVendorIEListCallback(void *arg)
         Report("Deleting vendor IE list for role:%d failed !!! \n", role);
     }
     return ret;
-
 }
 
 
@@ -4576,8 +4854,6 @@ int32_t cmdConfigStaAgingEventCallback(void *arg)
     return(ret);
 
 }
-
-#endif
 
 //////////////////////// P2P /////////////////////////////
 /*!
@@ -5757,6 +6033,7 @@ int32_t printWlanGetRegDomainEntryUsage(void *arg)
     return(0);
 }
 #endif // CC35XX
+
 #ifdef SNTP_SUPPORT
 int32_t cmdSntpConfigServers(void *arg)
 {
@@ -5792,7 +6069,8 @@ int32_t cmdSntpUpdateDateTime(void *arg)
     ret = sntpWrapper_updateDateTime();
     return ret;
 }
-#endif
+#endif //SNTP_SUPPORT
+
 int32_t cmdSetDateTime(void *arg)
 {
     int32_t ret  = 0;
@@ -5809,6 +6087,7 @@ int32_t cmdSetDateTime(void *arg)
     datetime_SecondsSet( epochTime);
     return ret;
 }
+
 int32_t cmdGetDateTime(void *arg)
 {
     int32_t ret  = 0;
@@ -5817,7 +6096,6 @@ int32_t cmdGetDateTime(void *arg)
 }
 
 #ifdef CC35XX_INDIGO_APP
-
 void releaseLoadedCertificate(certificate_load_type_t type)
 {
     switch(type)
@@ -5863,7 +6141,7 @@ void releaseLoadedCertificate(certificate_load_type_t type)
 
     }
 }
-//Indigo
+
 int32_t cmdloadCertificateCallback(void *arg){
     int32_t ret = 0;
     LoadCertiCmd_t LoadCertiParams;
@@ -5880,5 +6158,5 @@ int32_t cmdloadCertificateCallback(void *arg){
 
     return(0);
 }
-#endif
+#endif //CC35XX_INDIGO_APP
 

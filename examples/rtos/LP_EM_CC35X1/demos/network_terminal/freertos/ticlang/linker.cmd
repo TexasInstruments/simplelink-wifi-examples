@@ -87,14 +87,36 @@ SECTIONS
     /* Code RAM */
     .TI.ramfunc     : {} load=FLASH_NON_SECURE, run=TCM_CRAM_NON_SECURE, table(BINIT)
 
+    /* Data section - moved to DRAM to save TCM space */
+    GROUP {
+        .data:   {} palign(4)   /* This is where initialized globals and static go */
+    } > DRAM_NON_SECURE
+
+    /* System memory in DRAM */
     GROUP {
         .sysmem: {} palign(4)   /* This is where the malloc heap goes */
-        .bss:    {} palign(4)   /* This is where uninitialized globals go */
-        .data:   {} palign(4)   /* This is where initialized globals and static go */
+    } > DRAM_NON_SECURE
+
+    /* Specific BSS subsections in DRAM */
+    GROUP {
+        .bss.ucHeap:    {} palign(4)   /* FreeRTOS heap */
+        .bss.pool_acl_buf:    {} palign(4)
+        .bss.ble_l2cap_chan_mem: {} palign(4)
+        .bss.os_msys_1_data: {} palign(4)
+    } > DRAM_NON_SECURE
+
+    /* Move entire BSS section (including COMMON symbols) to DRAM to save TCM space */
+    /* TI Clang linker merges COMMON symbols into .bss, so we must move all of .bss */
+    GROUP {
+        .bss:    {} palign(4)   /* All uninitialized globals including COMMON symbols */
         RUN_START(__BSS_START)
         RUN_END(__BSS_END)
-        .stack:  {} palign(4)   /* This is where the main() stack goes */
-    } > DRAM_NON_SECURE | TCM_DRAM_NON_SECURE
+    } > DRAM_NON_SECURE
+
+    /* Only stack in TCM_DRAM for fast access */
+    GROUP {
+        .stack:  {} palign(4)   /* This is where the main() stack goes - 12KB (0x2FF0) */
+    } > TCM_DRAM_NON_SECURE
 
     GROUP {
         .ramVecs: {} palign(512) (NOLOAD)

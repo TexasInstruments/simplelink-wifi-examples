@@ -47,6 +47,10 @@
 #define NET_IF_IS_UP                (2)
 #define NET_IF_DEVICE_BIT           (4)
 
+#define    _CSI_THR_NAME                    "csi_thread"
+#define    CSI_THR_STACK_SIZE              (2048) // TODO consider reducing stack size
+#define    CSI_THRD_PRIORITY               (3)
+
 /******************************************************************************/
 
 /* Function prototypes */
@@ -127,12 +131,6 @@ int32_t cmdSetLsiCallback(void *arg);
 int32_t printGetFwVerUsage(void *arg);
 
 int32_t cmdGetFwVerCallback(void *arg);
-
-#ifndef CC35XX
-int32_t printEnableBLEUsage(void *arg);
-
-int32_t cmdEnableBLECallback(void *arg);
-#endif // CC35XX
 
 #ifdef CC35XX
 
@@ -265,13 +263,23 @@ int32_t printCsiDisableUsage(void *arg);
 
 int32_t printCsiGetResultsUsage(void *arg);
 
-int32_t cmdCsiEnableCallback (void *arg);
+int32_t printCsiSolicitationUsage(void *arg);
 
-int32_t cmdCsiStopCallback (void *arg);
+int32_t printCsiSolicitationSetMacUsage(void *arg);
 
-int32_t cmdCsiDisableCallback (void *arg);
+// CSI API
+int32_t csiInitCallback(void *arg);
 
-int32_t cmdCsiGetResultsCallback (void *arg);
+int32_t csiGetresultsStart(void *arg);
+
+int32_t csiStopCallback(void *arg);
+
+int32_t csiDeinitCallback(void *arg);
+
+int32_t csiSolicCallback(void *arg);
+
+int32_t csiSolicSetMacCfg(void *arg);
+
 // ****************************************
 
 
@@ -340,7 +348,7 @@ int32_t cmdCoexEnablecallback(void *arg);
 
 int32_t printCoexEnableUsage(void *arg);
 
-int32_t printCountrycodeeUsage(void *arg);
+int32_t printCountrycodeUsage(void *arg);
 
 int32_t cmdCoexDisablecallback(void *arg);
 

@@ -334,9 +334,14 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     }
 
     if((ssid != NULL) && (strlen(ssid) <= WLAN_SSID_MAX_LENGTH))
-    {   
+    {
         size_t len = strlen(ssid);
         ProfileParams->ssid = (uint8_t *)os_zalloc(len + 1);
+        if(ProfileParams->ssid == NULL)
+        {
+            Report("\r\n[Cmd Parser] : Memory allocation failed for SSID.\n\r");
+            return(-1);
+        }
         memcpy(ProfileParams->ssid, ssid, len + 1);
     }
     else
@@ -348,6 +353,11 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     if(priority)
     {
         ProfileParams->priority = (uint32_t *)os_zalloc(4);
+        if(ProfileParams->priority == NULL)
+        {
+            Report("\r\n[Cmd Parser] : Memory allocation failed for priority.\n\r");
+            return(-1);
+        }
         if (atoi((const char*)priority) < 0 || atoi((const char*)priority) > 15)
         {
             Report("\r\n [Cmd Parser] : Invalid priority. Expected priority 0-15.\n\r");
@@ -361,12 +371,22 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     else
     {
         ProfileParams->priority = (uint32_t *)os_zalloc(4);
+        if(ProfileParams->priority == NULL)
+        {
+            Report("\r\n[Cmd Parser] : Memory allocation failed for priority.\n\r");
+            return(-1);
+        }
         *(ProfileParams->priority) = 0;
     }
     
     if(hidden)
     {
         ProfileParams->hidden = (uint32_t *)os_zalloc(4);
+        if(ProfileParams->hidden == NULL)
+        {
+            Report("\r\n[Cmd Parser] : Memory allocation failed for hidden.\n\r");
+            return(-1);
+        }
         if( atoi((const char*)hidden) < 0 || atoi((const char*)hidden) > 1)
         {
             Report("\r\n [Cmd Parser] : Invalid hidden. Expected 0 or 1. Setting default value (1) \n\r");
@@ -381,6 +401,11 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     {
         // By default, the profile is hidden
         ProfileParams->hidden = (uint32_t *)os_zalloc(4);
+        if(ProfileParams->hidden == NULL)
+        {
+            Report("\r\n[Cmd Parser] : Memory allocation failed for hidden.\n\r");
+            return(-1);
+        }
         *(ProfileParams->hidden) = 1;
     }
 
@@ -933,9 +958,12 @@ int32_t ParseConnectCmd(void *arg, ConnectCmd_t *ConnectParams,
     char                 *ssid = NULL;
     char                 *password = NULL;
     char                 *security = NULL;
+#ifdef CC35XX
     char                 *eapPhaseVal = NULL;
     char                 *eapIdentity = NULL;
     int32_t              eapIdentityLen;
+    char                 *KeyLenStr = NULL;
+#endif
 
     uint8_t help = FALSE;
 
@@ -1012,7 +1040,7 @@ int32_t ParseConnectCmd(void *arg, ConnectCmd_t *ConnectParams,
             }
             else
             {
-                Report("\n\r ERROR ! Received enterprise method is invalid %s");
+                Report("\n\r ERROR ! Received enterprise method is invalid");
             }
 
         }
@@ -1030,6 +1058,20 @@ int32_t ParseConnectCmd(void *arg, ConnectCmd_t *ConnectParams,
             Report("\n\r eapIdentoty %s",eapConnectParams->eapIdentity);
 
         }
+        else if(!strcmp(token, k_optionStr))
+        {
+            eapConnectParams->KeyLength = 0;
+            KeyLenStr = strtok(NULL, space_str);
+            if(KeyLenStr)
+            {
+                eapConnectParams->KeyLength = (uint32_t)atoi(KeyLenStr);
+            }
+
+            //identity
+            Report("\n\r KeyLength %d",eapConnectParams->KeyLength);
+
+        }
+
 #endif
         else if(!strcmp(token, t_optionStr))
         {
@@ -1066,6 +1108,11 @@ int32_t ParseConnectCmd(void *arg, ConnectCmd_t *ConnectParams,
         else
         {
             ConnectParams->ssid = (uint8_t *)os_zalloc(strlen(ssid) + 1);
+            if(ConnectParams->ssid == NULL)
+            {
+                Report("\r\n[Cmd Parser] : Memory allocation failed for SSID.\n\r");
+                return(-1);
+            }
             strcpy((char *)ConnectParams->ssid, ssid);
             ConnectParams->ssid[strlen(ssid)]=0;
         }
@@ -1119,7 +1166,7 @@ int32_t ParseConnectCmd(void *arg, ConnectCmd_t *ConnectParams,
     {
         Report(
             "\r\n [Cmd Parser] : Parser expects security type "
-            "parameter [OPEN, WPA, WPA2, WPA3, WPS, WPA2/WPA3].\n\r");
+            "parameter [OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPS, WPA2/WPA3].\n\r");
         return(-1);
     }
 
@@ -1507,7 +1554,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
             }
 
             if((RoleUpApParams->sta_limit < 1) ||
-            (RoleUpApParams->sta_limit > 16))
+            (RoleUpApParams->sta_limit > 8))
             {
                 Report(
                     "\r\n [Cmd Parser] : invalid Parameter for station limit "
@@ -2044,7 +2091,7 @@ int32_t ParseP2PConnectCmd(void *arg,uint8_t* peer_mac, uint32_t* wps_method,cha
                 Report("\r\n [Cmd Parser] : PIN not provided !!!" );
                 return(-1);
             }
-            pin_len =  strlen(pin);
+            pin_len =  strlen(pPin);
             if (pin_len > 8)
             {
                 Report("\r\n [Cmd Parser] : PIN length should be less than 8 !!!" );
@@ -2150,7 +2197,7 @@ int32_t ParseConnPolicySetCmd(void *arg, WlanPolicySetGet_t *ConnPolicySetParams
             if (token)
             {
                 ConnPolicySetParams->fastPersistant = atoi(token);
-            }   
+            }
         }
         else
         {
@@ -2160,7 +2207,7 @@ int32_t ParseConnPolicySetCmd(void *arg, WlanPolicySetGet_t *ConnPolicySetParams
         }
         token = strtok(NULL, space_str);
     }
-    
+
     if(help)
     {
         printWlanSetConnPolicyUsage(arg);
@@ -2170,6 +2217,158 @@ int32_t ParseConnPolicySetCmd(void *arg, WlanPolicySetGet_t *ConnPolicySetParams
 }
 
 
+
+/*!
+    \brief          Parse CSI solicitation configuration command.
+=
+
+    This routine fills the parameters for CSI solicitation configuration from the command line
+    and checks the parameters validity.
+    In case of a parsing error or invalid parameters,
+    this function prints help menu.
+
+    \param          arg            -   Points to command line buffer.
+                                       Contains the command line typed by user.
+
+    \param            conectionless -   Points to enable solicitation mode.
+    \param            period        -   Points to the period time.
+    --\param            expiry       -   Points to the expiry time.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would print error,
+                    and show the csi_configure command help menu.
+
+    \sa             csiSolicCallback
+ */
+int32_t ParseCsiSolicCmd(void *arg, WlanCfgCsiSol_t* csiSolConfig)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    char *enableCsiSol = NULL;
+    char *periodtime = NULL;
+    //char *expirytime = NULL;
+    uint8_t help = FALSE;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+        help = TRUE;
+
+    while(token)
+    {
+        if(!strcmp(token, help_optionStr))
+        {
+            help = TRUE;
+        }
+        else if(!strcmp(token, s_optionStr))
+        {
+            enableCsiSol = strtok(NULL, space_str);
+        }
+        else if(!strcmp(token, p_optionStr))
+        {
+            periodtime = strtok(NULL, space_str);
+        }
+        /*else if(!strcmp(token, e_optionStr))
+        {
+            expirytime = strtok(NULL, space_str);
+        }
+        */
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help || !enableCsiSol || !periodtime)
+        return -1;
+
+    csiSolConfig->csiSolEnable = atoi(enableCsiSol);
+    if((csiSolConfig->csiSolEnable != 0) && (csiSolConfig->csiSolEnable != 1))
+        return -1;
+
+    csiSolConfig->csiSolPeriod = atoi(periodtime);
+    if(csiSolConfig->csiSolPeriod == 0)
+        return -1;
+
+    return 0;
+}
+
+
+
+/*!
+    \brief          Parse CSI solicitation set MAC command.
+=
+
+    This routine fills the parameters for CSI solicitation set MAC from the command line
+    and checks the parameters validity.
+    In case of a parsing error or invalid parameters,
+    this function prints help menu.
+
+    \param          arg            -   Points to command line buffer.
+                                       Contains the command line typed by user.
+
+    \param          addRemove  -   Points to the add/remove flag.
+    \param          mac        -   Points to the MAC address.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would print error,
+                    and show the csi_set_mac command help menu.
+
+    \sa             csiSolicSetMacCfg
+ */
+int32_t ParseCsiSolicSetMacCmd(void *arg, WlanCfgCsiSolSetMac_t* csiSolMacSet)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    char *addRemoveStr = NULL;
+    char *macStr = NULL;
+    uint8_t help = FALSE;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+        help = TRUE;
+
+    while(token)
+    {
+        if(!strcmp(token, help_optionStr))
+        {
+            help = TRUE;
+        }
+        else if(!strcmp(token, a_optionStr))
+        {
+            addRemoveStr = strtok(NULL, space_str);
+        }
+        else if(!strcmp(token, m_optionStr))
+        {
+            macStr = strtok(NULL, space_str);
+        }
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help || !addRemoveStr || !macStr)
+        return -1;
+
+    csiSolMacSet->csiSolAddRemoveMac = atoi(addRemoveStr);
+    if((csiSolMacSet->csiSolAddRemoveMac != 0) && (csiSolMacSet->csiSolAddRemoveMac != 1))
+        return -1;
+
+    if(macAddressParse(macStr, csiSolMacSet->csiSolMacAddress) < 0)
+        return -1;
+
+    return 0;
+}
 
 #endif
 
@@ -2755,7 +2954,7 @@ int32_t ParseRegDomEntrySetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryPa
         }
         else
         {
-            Report("\n\r[Cmd Parser]: Unsupported option\n\r");
+            Report("\n\r[Cmd Parser]: Unsupported option %.12s\n\r", token);
             return -1;
         }
         token = strtok(NULL, space_str);
@@ -3349,9 +3548,9 @@ int32_t ParseSendCmd(void *arg,  SendCmd_t *SendCmdParams)
             if((ip != NULL) && (clientIp == NULL))
             {
 
-                clientIp = os_malloc(strlen((const char*)ip));
+                clientIp = os_malloc(strlen((const char*)ip) + 1);
 
-                os_memcpy(clientIp, ip, strlen((const char*)ip));
+                os_memcpy(clientIp, ip, strlen((const char*)ip) + 1);
             }
             else
             {
@@ -3799,9 +3998,9 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
             if((ip != NULL) && (clientIp == NULL))
             {
 
-                clientIp = os_malloc(strlen((const char*)ip));
+                clientIp = os_malloc(strlen((const char*)ip) + 1);
 
-                os_memcpy(clientIp, ip, strlen((const char*)ip));
+                os_memcpy(clientIp, ip, strlen((const char*)ip) + 1);
             }
             else
             {
@@ -3817,9 +4016,9 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
             if((ip != NULL) && (serverIp == NULL))
             {
 
-                serverIp = os_malloc(strlen((const char*)ip));
+                serverIp = os_malloc(strlen((const char*)ip) + 1);
 
-                os_memcpy(serverIp, ip, strlen((const char*)ip));
+                os_memcpy(serverIp, ip, strlen((const char*)ip) + 1);
             }
             else
             {
@@ -4170,7 +4369,7 @@ int32_t ParseCountycodeCmd(void *arg, uint8_t *country)
 
     if(help)
     {
-        printCountrycodeeUsage(arg);
+        printCountrycodeUsage(arg);
         return(-1);
     }
 
@@ -5229,6 +5428,247 @@ int32_t ParseBleSetBdAddressCmd(void *arg, uint8_t* addr_type)
     else if(!strcmp(addrTypeStr, RANDOM_str))
     {
         *addr_type = 1;
+    }
+
+    return(0);
+}
+
+/*!
+    \brief          Parse BLE set TX Power command.
+
+
+    \param          arg            -   Points to command line buffer.
+                                       Contains the command line typed by user.
+    \param          addr_type      -   Points to powerIndex
+
+    \return         Upon successful completion, the function shall return success status.
+                    In case of failure,this function would print error,
+                    and show the set scan policy command help menu.
+
+    \sa             cmdBleDisconnectCallback
+
+ */
+int32_t ParseBleSetTxPowerCmd(void *arg, uint8_t* powerIndex)
+{
+    char       cmdStr[CMD_BUFFER_LEN + 1];
+    char       *token = NULL;
+    int        powerDbmReq = 0;
+    uint8_t    help = FALSE;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, p_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                powerDbmReq = atoi((const char*) token);
+            }
+        }
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        printBleSetTxPwrUsage(NULL);
+        return(-1);
+    }
+
+    if (powerDbmReq <= -20) {
+        *powerIndex = 0;
+    }
+    else if ((powerDbmReq > -20) && (powerDbmReq <= -10)) {
+        *powerIndex = 1;
+    }
+    else if ((powerDbmReq > -10) && (powerDbmReq <= -5)) {
+        *powerIndex = 2;
+    }
+    else if ((powerDbmReq > -5) && (powerDbmReq <= 0)) {
+        *powerIndex = 3;
+    }
+    else if ((powerDbmReq > 0) && (powerDbmReq <= 5)) {
+        *powerIndex = 4;
+    }
+    else if ((powerDbmReq > 5) && (powerDbmReq <= 10)) {
+        *powerIndex = 5;
+    }
+    else if (powerDbmReq > 10) {
+        *powerIndex = 6;
+    }
+
+    return(0);
+}
+
+/*!
+    \brief          Parse BLE connection update params command.
+
+
+    \param          arg            -   Points to command line buffer.
+                                       Contains the command line typed by user.
+    \param          params         -   Points to connection parameters to update
+
+    \return         Upon successful completion, the function shall return success status.
+                    In case of failure,this function would print error,
+                    and show the set scan policy command help menu.
+
+    \sa             cmdBleDisconnectCallback
+
+ */
+int32_t ParseBleConnUpdateCmd(void *arg, ConnUpdateParams_t* params)
+{
+    char       cmdStr[CMD_BUFFER_LEN + 1];
+    char       *token = NULL;
+    uint8_t    help = FALSE;
+
+    memset(params, 0, sizeof(ConnUpdateParams_t));
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, h_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->connHandle = (uint16)atoi((const char*) token);
+            }
+        }
+        else if(!strcmp(token, n_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->interval_min_us = (uint32)(atof((const char*) token) * 1000);
+            }
+        }
+        else if(!strcmp(token, x_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->interval_max_us = (uint32)(atof((const char*) token) * 1000);
+            }
+        }
+        else if(!strcmp(token, t_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->supervision_timeout_us = (uint32)(atof((const char*) token) * 1000);
+            }
+        }
+        else if(!strcmp(token, l_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->latency = (uint32)atoi((const char*) token);
+            }
+        }
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        printBleConnUpdateUsage(NULL);
+        return(-1);
+    }
+
+    return(0);
+}
+
+int32_t ParseBleSetPhyCmd(void *arg, SetPhyParams_t* params)
+{
+    char       cmdStr[CMD_BUFFER_LEN + 1];
+    char       *token = NULL;
+    uint8_t    help = FALSE;
+
+    memset(params, 0, sizeof(SetPhyParams_t));
+    params->tx_phys_mask = 0x01;
+    params->rx_phys_mask = 0x01;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, h_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->connHandle = (uint16)atoi((const char*) token);
+            }
+        }
+        else if(!strcmp(token, tx_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->tx_phys_mask = (uint8)atoi((const char*) token);
+            }
+        }
+        else if(!strcmp(token, rx_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->rx_phys_mask = (uint8)atoi((const char*) token);
+            }
+        }
+        else if(!strcmp(token, o_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->phy_opts = (uint16)atoi((const char*) token);
+            }
+        }
+        else
+        {
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        printBleSetPhyUsage(NULL);
+        return(-1);
     }
 
     return(0);

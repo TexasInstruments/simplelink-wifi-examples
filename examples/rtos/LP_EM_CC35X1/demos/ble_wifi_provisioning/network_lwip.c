@@ -243,9 +243,12 @@ int update_arp(void* ip_addr)
         {
             result = ERR_CONN;
             //wait here some time for reply to be received
-            while(1)// TODO this should be changed to timeout instead of endless while
+            uint32_t timeout_ms = 3000; // 3 seconds timeout
+            uint32_t elapsed_ms = 0;
+            uint32_t sleep_interval_ms = 10; // Check every 10ms
+            while(elapsed_ms < timeout_ms)
             {
-                osi_uSleep(100);//set time to other thread to get the reply
+                osi_Sleep(sleep_interval_ms);//set time to other thread to get the reply
                 eth_ret = NULL;
                 ip4_ret = NULL;
                 arp_find = etharp_find_addr(pNetIf,(ip4_addr_t *)ip4_addr, &eth_ret,(const ip4_addr_t **)&ip4_ret);
@@ -261,6 +264,7 @@ int update_arp(void* ip_addr)
                        break;//found
                     }
                 }
+                elapsed_ms += sleep_interval_ms;
             }
         }
     }

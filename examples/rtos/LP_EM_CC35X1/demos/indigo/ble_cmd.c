@@ -514,6 +514,138 @@ int32_t printBleSetBdAddrUsage(void *arg)
 }
 
 /*!
+    \brief          Ble set tx power callback.
+
+    This routine shows how to set the BLE TX Power
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would return -1;
+
+    \sa             ParseCmd
+
+*/
+int32_t cmdBleSetTxPwrCallback(void *arg)
+{
+    int ret = 0;
+    uint8_t tx_power_index = 0;
+
+    ret = ParseBleSetTxPowerCmd(arg, &tx_power_index);
+
+    if (ret < 0)
+    {
+        return (-1);
+    }
+
+    return nimble_host_set_tx_power(tx_power_index);
+}
+
+/*!
+    \brief          Prints Ble set tx power command help menu.
+
+    \param          arg       -   Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdBleStartCallback
+*/
+int32_t printBleSetTxPwrUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(bleSetTxPwrStr);
+    UART_PRINT(bleSetTxPwrUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(bleSetTxPwrDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+/*!
+    \brief          Ble connection params update callback.
+
+    This routine shows how to update BLE connection params
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would return -1;
+
+    \sa             ParseCmd
+
+*/
+int32_t cmdBleConnUpdateCallback(void *arg)
+{
+    int ret = 0;
+    ConnUpdateParams_t params;
+
+    ret = ParseBleConnUpdateCmd(arg, &params);
+
+    if (ret < 0)
+    {
+        return (-1);
+    }
+
+    return nimble_host_gap_update_params(params.connHandle,
+                                         params.interval_min_us,
+                                         params.interval_max_us,
+                                         params.supervision_timeout_us,
+                                         params.latency,
+                                         0, 0);
+}
+
+/*!
+    \brief          Prints Ble connection params update command help menu.
+
+    \param          arg       -   Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdBleStartCallback
+*/
+int32_t printBleConnUpdateUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(bleConnUpdateStr);
+    UART_PRINT(bleConnUpdateUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(bleConnUpdateDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+int32_t cmdBleSetPhyCallback(void *arg)
+{
+    int ret = 0;
+    SetPhyParams_t params;
+
+    ret = ParseBleSetPhyCmd(arg, &params);
+
+    if (ret < 0)
+    {
+        return (-1);
+    }
+
+    return nimble_host_set_phy(params.connHandle,
+                               params.tx_phys_mask,
+                               params.rx_phys_mask,
+                               params.phy_opts);
+}
+
+int32_t printBleSetPhyUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(bleSetPhyStr);
+    UART_PRINT(bleSetPhyUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(bleSetPhyDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+/*!
     \brief          Ble start callback.
 
     This routine shows how to start the BLE.

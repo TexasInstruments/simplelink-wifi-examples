@@ -62,7 +62,7 @@ extern void udp_server_stop(session_conn_t* session_con);
 int32_t iperflwip_stop(void* args);
 
 
-#define MAX_SEND_BUFFER_SIZE (TCP_MSS)
+#define MAX_SEND_BUFFER_SIZE (1470)
 session_conn_t iperf_session[IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS] = {0};
 unsigned char send_buffer[MAX_SEND_BUFFER_SIZE];
 uint8_t send_buffer_initialized = 0;

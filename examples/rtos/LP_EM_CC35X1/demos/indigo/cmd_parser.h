@@ -223,6 +223,23 @@ typedef struct ExtScanEnable_t
 
 }ExtScanEnable_t;
 
+typedef struct ConnUpdateParams_t
+{
+    uint16 connHandle;
+    uint32 interval_min_us;
+    uint32 interval_max_us;
+    uint32 supervision_timeout_us;
+    uint32 latency;
+}ConnUpdateParams_t;
+
+typedef struct SetPhyParams_t
+{
+    uint16 connHandle;
+    uint8 tx_phys_mask;
+    uint8 rx_phys_mask;
+    uint16 phy_opts;
+}SetPhyParams_t;
+
 typedef struct SetInterfaceIpParams_t {
     WlanRole_e  roleType;
     uint32_t    ipMode;
@@ -297,6 +314,9 @@ int32_t ParseBleConnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type);
 int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type);
 int32_t ParseBleGetBdAddressCmd(void *arg, uint8_t* addr_type);
 int32_t ParseBleSetBdAddressCmd(void *arg, uint8_t* addr_type);
+int32_t ParseBleSetTxPowerCmd(void *arg, uint8_t* powerIndex);
+int32_t ParseBleConnUpdateCmd(void *arg, ConnUpdateParams_t* params);
+int32_t ParseBleSetPhyCmd(void *arg, SetPhyParams_t* params);
 int32_t ParseBleConnectedPeersCmd();
 int32_t ParseBleTestModeCmd(void *arg, uint8_t *enable);
 int32_t ParseSetInterfaceIpCmd(void *arg, SetInterfaceIpParams_t *params);
@@ -314,6 +334,9 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams);
 int32_t ParseDelProfileCmd(void *arg);
 int32_t ParseGetProfileCmd(void *arg);
 int32_t ParseProfileConnectCmd(void *arg);
+
+int32_t ParseCsiSolicCmd(void *arg, WlanCfgCsiSol_t* csiSolConfig);
+int32_t ParseCsiSolicSetMacCmd(void *arg, WlanCfgCsiSolSetMac_t* csiSolMacSet);
 #endif
 
 void FreeConnectCmd(ConnectCmd_t *ConnectParams);

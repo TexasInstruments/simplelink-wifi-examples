@@ -91,6 +91,7 @@ static const uint8_t END          = 'F';
 static const uint8_t DEL          = '3';
 static const uint8_t WHITESPACE   = ' ';
 static const uint8_t BACKSPACE    = '\b';
+static const uint8_t ALT_BACKSPACE = 0x7f;
 static const uint8_t TAB          = '\t';
 static const uint8_t RETURN       = '\r';
 static const uint8_t NEW_LINE     = '\n';
@@ -683,7 +684,7 @@ int GetCmd(char *charBuf, unsigned int maxLen, const char *linePrefix)
                 }
             }
         }
-        else if (ch == BACKSPACE)
+        else if ((ch == BACKSPACE) || (ch == ALT_BACKSPACE))
         {
             if (pos > 0)
             {
@@ -992,4 +993,24 @@ void putch(char ch)
 {
     size_t bytesWritten;
     UART2_write(uartHandle, &ch, 1, &bytesWritten);
+}
+
+//*****************************************************************************
+//
+//! Deinitialize the UART terminal
+//!
+//! This function deinitializes the terminal by closing the UART handle
+//! and deleting the lock object. This is the opposite of InitTerm().
+//!
+//! \return none
+//
+//*****************************************************************************
+void DeinitTerm(void)
+{
+    if (uartHandle != NULL)
+    {
+        UART2_close(uartHandle);
+        uartHandle = NULL;
+    }
+    osi_LockObjDelete(&LockObj);
 }

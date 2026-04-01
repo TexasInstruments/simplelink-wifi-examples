@@ -83,7 +83,7 @@ typedef struct
 #error IPERF_LWIP_TCP_MAX_IDLE_SEC must fit into an u8_t
 #endif
 
-#define IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS 5
+#define IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS 10
 #define LOCAL_UDP_CLIENT_PORT  5006
 
 //FreeRtos provides only pdMS_TO_TICK

@@ -60,7 +60,6 @@ SECTIONS
 {
     /* Reserved for bootloader metadata - application starts at 0x2000 */
     .reserved (0x14000000) (NOLOAD) : {
-        __image_start = .;
         . += 0x2000;
     } > FLASH_INT_VEC
     
@@ -114,7 +113,7 @@ SECTIONS
         __ramfunc_end__ = .;
     } > TCM_CRAM_NON_SECURE AT> FLASH_NON_SECURE 
     
-    /* Data section */
+    /* Data section - moved to DRAM to save TCM space */
     .data : ALIGN(4) {
         __data_load__ = LOADADDR(.data);
         __data_start__ = .;
@@ -122,40 +121,89 @@ SECTIONS
         *(.data.*)
         . = ALIGN(4);
         __data_end__ = .;
-    } > TCM_DRAM_NON_SECURE AT> FLASH_NON_SECURE
-    
+    } > DRAM_NON_SECURE AT> FLASH_NON_SECURE
+
     /* Exception handling sections */
     .ARM.exidx : {
         __exidx_start = .;
         *(.ARM.exidx* .gnu.linkonce.armexidx.*)
         __exidx_end = .;
     } > FLASH_NON_SECURE
-    
+
     .ARM.extab : {
         *(.ARM.extab* .gnu.linkonce.armextab.*)
     } > FLASH_NON_SECURE
 
-    
-    /* System memory section */
+
+    /* System memory section and specific BSS subsections in DRAM */
     .sysmem : {
         __SYSMEM_START__ = .;
         *(.sysmem)
         . = ALIGN(4);
         __SYSMEM_END__ = .;
     } > DRAM_NON_SECURE
-    
-    /* BSS sections */
+
+    /* Specific BSS subsections in DRAM (matching TI Clang layout) */
+    .bss.ucHeap : {
+        *(.bss.ucHeap)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.pool_acl_buf : {
+        *(.bss.pool_acl_buf)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.ble_l2cap_chan_mem : {
+        *(.bss.ble_l2cap_chan_mem)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.os_msys_1_data : {
+        *(.bss.os_msys_1_data)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    /* Large BSS subsections moved to DRAM to save TCM space (~57KB total) */
+    /* Note: In GCC these are .bss subsections, in TI Clang they are .common */
+    .bss.lwip_heap : {
+        *(.bss.ram_heap)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.app_data : {
+        *(.bss.app_CB)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.wifi_data : {
+        *(.bss.gCmeSsid)
+        *(.bss.gRsnDB)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    .bss.nv_buffer : {
+        *(.bss.tBuffer)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    /* Move COMMON symbols to DRAM to save TCM space */
+    .common : ALIGN(4) {
+        *(COMMON)
+        . = ALIGN(4);
+    } > DRAM_NON_SECURE
+
+    /* Main BSS section (non-common) in TCM_DRAM */
     .bss : {
         __bss_start__ = .;
         *(.shbss)
         *(.bss)
         *(.bss.*)
-        *(COMMON)
         . = ALIGN(4);
         __bss_end__ = .;
-    } > DRAM_NON_SECURE  
-    
-    
+    } > TCM_DRAM_NON_SECURE
+
+
     /* Stack section */
     .stack (NOLOAD) : ALIGN(8) {
         _stack = .;
