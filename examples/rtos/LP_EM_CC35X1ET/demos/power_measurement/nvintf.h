@@ -202,6 +202,13 @@ typedef uint32_t (*NVINTF_getFreeNV)(void);
 typedef uint32_t (*NVINTF_sanityCheck)(void);
 #endif
 
+#ifdef ENABLE_WRITE_ERASE_IN_PROGRESS_FLAG
+//! Function pointer definition for the NVINTF_writeEraseInProgress() function
+typedef uint32_t (*NVINTF_writeEraseInProgress)(void);
+
+uint32_t NVOCMP_writeEraseInProgressApi(void);
+#endif
+
 //! Structure of NV API function pointers
 typedef struct nvintf_nvfuncts_t
 {
@@ -238,6 +245,10 @@ typedef struct nvintf_nvfuncts_t
 #ifdef ENABLE_SANITY_CHECK
     //! Sanity Check function
     NVINTF_sanityCheck sanityCheck;
+#endif
+#ifdef ENABLE_WRITE_ERASE_IN_PROGRESS_FLAG
+    //! Write Erase in progress function
+    NVINTF_writeEraseInProgress writeEraseInProgress;
 #endif
 } NVINTF_nvFuncts_t;
 

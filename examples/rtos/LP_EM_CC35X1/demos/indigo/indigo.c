@@ -188,11 +188,6 @@ cmdAction_t gCmdList[] =
 /* Get DHCP Server mode */
 { GetDhcpServerStr,     cmdGetDhcpServerCallback,   printGetDhcpServerUsage    },
 
-// #ifdef CC35XX
-// /* Sleep Test */
-// { SleepTestStr,         cmdSleepTestCallback,       printSleepTestUsage         },
-// #endif
-
 // /* Set Long sleep interval     */
 // { SetLsiStr,                 cmdSetLsiCallback,      printSetLsiUsage      },
 

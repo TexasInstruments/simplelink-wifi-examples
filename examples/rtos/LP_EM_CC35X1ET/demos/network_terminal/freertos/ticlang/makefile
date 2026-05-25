@@ -29,6 +29,9 @@ CFLAGS += -I../.. \
     -I. \
     $(addprefix @,$(SYSCFG_OPT_FILES)) \
     -DSNTP_SUPPORT \
+    -DMBEDTLS_CONFIG_FILE=\"config-hsm.h\" \
+    -DNVOCMP_SPS_USE_CBC \
+    -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\"config-psa-crypto-hsm.h\" \
     -Ofast \
     -DCC35XX \
     -DNVOCMP_POSIX_MUTEX \

@@ -654,6 +654,7 @@ typedef struct
   #define TKDK_SIZE 		32
   #define PSA_KEY_ID_SPS    PSA_KEY_ID_USER_MAX - 2
   #define SPS_KEY_SIZE    	32
+  const uint8_t labelHUK[]= "ThisIsALabelForNVOCMPKeyToEncryptAndDecryptDataPayload";
   const uint8_t label[]   = "ThisIsALabelForNVOCMPKeyToEncryptAndDecryptDataPayload";
 #endif
 
@@ -718,8 +719,18 @@ NVOCMP_initAction_t gAction;
 uint8_t NVOCMP_size;
 
 #ifdef ENABLE_SPS
+#ifdef NVOCMP_SPS_USE_CBC
+static psa_algorithm_t spsAlg = PSA_ALG_CBC_NO_PADDING;
+// CBC stores a 16-byte IV before the ciphertext in flash
+#define NVOCMP_SPS_CIPHER_OVERHEAD  NVOCMP_AES_BLOCK_SIZE
+#else
 static psa_algorithm_t spsAlg = PSA_ALG_ECB_NO_PADDING;
+// ECB has no IV overhead
+#define NVOCMP_SPS_CIPHER_OVERHEAD  0
+#endif
 static psa_key_id_t    spsKeyID;
+// Number of bytes processed per PSA cipher chunk; must be a multiple of NVOCMP_AES_BLOCK_SIZE
+#define NVOCMP_SPS_CHUNK_SIZE  (NVOCMP_AES_BLOCK_SIZE * 2)
 #endif
 
 //*****************************************************************************
@@ -808,6 +819,15 @@ static void       NVOCMP_copyItem(uint8_t srcPg, uint8_t dstPg, uint16_t sOfs, u
 static psa_status_t NVOCMP_setupKeyDerivation(psa_key_derivation_operation_t *derivation, psa_algorithm_t alg, psa_key_id_t keyID);
 static psa_status_t NVOCMP_deriveTrustedKey(void);
 static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize);
+static psa_status_t NVOCMP_spsEncryptAndWrite(uint8_t dstPg, uint16_t dstOff,
+                                               const uint8_t *pBuf, uint16_t plainLen,
+                                               uint16_t paddedLen, uint8_t *pCRC);
+static uint8_t      NVOCMP_spsDecryptFromFlash(uint8_t pg, uint16_t iOfs,
+                                               uint16_t lenEncrypted,
+                                               uint16_t ofs, uint16_t len, void *pBuf);
+static bool         NVOCMP_spsDecryptAndCompare(uint8_t pg, uint16_t iOfs,
+                                                uint16_t lenEncrypted,
+                                                const uint8_t *pBuf, uint16_t plainLen);
 #endif
 
 //*****************************************************************************
@@ -1947,6 +1967,7 @@ static bool NVOCMP_expectCompApi(uint16_t len)
     {
         iLen  += (NVOCMP_AES_BLOCK_SIZE - (len % NVOCMP_AES_BLOCK_SIZE));
     }
+    iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
     dstPg = NVOCMP_getDstPage(&NVOCMP_nvHandle, iLen);
 
@@ -2413,7 +2434,7 @@ static void NVOCMP_initNv(NVOCMP_nvHandle_t *pNvHandle)
       else if(noPgNact)
       {
         pgXdst = pgNact;
-        NVOCMP_changePageState(pNvHandle, pNvHandle->tailPage, NVOCMP_PGXDST);
+        NVOCMP_changePageState(pNvHandle, pgXdst, NVOCMP_PGXDST);
         action = NVOCMP_NORMAL_RESUME;
       }
       else
@@ -2463,11 +2484,30 @@ static void NVOCMP_initNv(NVOCMP_nvHandle_t *pNvHandle)
         if(pNvHandle->actOffset > NVOCMP_PGDATAOFS + NVOCMP_ITEMHDRLEN)
         {
           NVOCMP_readHeader(pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN , &iHdr, false);
-          if(iHdr.stats & NVOCMP_FOLLOWBIT)
+
+          /* If the Follow up flag and active item, check if another
+           * instance exist and put it inactive.
+           */
+          if ((iHdr.stats & NVOCMP_FOLLOWBIT) && (iHdr.stats & NVOCMP_ACTIVEIDBIT))
           {
-            status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iHdr.len,
+            int iLen = iHdr.len;
+#ifdef ENABLE_SPS
+            // Need to add padding for encryption to have block size data.
+            if ((iHdr.len % NVOCMP_AES_BLOCK_SIZE) > 0)
+            {
+                iLen += (NVOCMP_AES_BLOCK_SIZE - (iHdr.len % NVOCMP_AES_BLOCK_SIZE));
+            }
+            iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
+#endif
+            status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iLen,
                             &iHdr, NVOCMP_FINDSTRICT, NULL);
-            if((status == NVINTF_SUCCESS) && (iHdr.hofs > 0))
+
+            /* Make sure it is successful and that it didn't wrap
+             * around to find the same item
+             */
+            if ((status == NVINTF_SUCCESS) && (iHdr.hofs > 0) &&
+                !(iHdr.hpage == pNvHandle->actPage &&
+                  iHdr.hofs == pNvHandle->actOffset - NVOCMP_ITEMHDRLEN))
             {
               NVOCMP_setItemInactive(pNvHandle, iHdr.hpage, iHdr.hofs);
             }
@@ -2683,7 +2723,16 @@ static void NVOCMP_initNv(NVOCMP_nvHandle_t *pNvHandle)
             {
               /* Cache current active page value before search starts */
               prevactPage = pNvHandle->actPage;
-              status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iHdr.len,
+              int iLen = iHdr.len;
+#ifdef ENABLE_SPS
+              // Need to add padding for encryption to have block size data.
+              if ((iHdr.len % NVOCMP_AES_BLOCK_SIZE) > 0)
+              {
+                  iLen += (NVOCMP_AES_BLOCK_SIZE - (iHdr.len % NVOCMP_AES_BLOCK_SIZE));
+              }
+              iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
+#endif
+              status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iLen,
                               &iHdr, NVOCMP_FINDSTRICT, NULL);
 
               /* If the current active page is different than previous, then
@@ -2804,7 +2853,16 @@ static void NVOCMP_initNv(NVOCMP_nvHandle_t *pNvHandle)
         NVOCMP_readHeader(pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN , &iHdr, false);
         if(iHdr.stats & NVOCMP_FOLLOWBIT)
         {
-          status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iHdr.len,
+          int iLen = iHdr.len;
+#ifdef ENABLE_SPS
+          // Need to add padding for encryption to have block size data.
+          if ((iHdr.len % NVOCMP_AES_BLOCK_SIZE) > 0)
+          {
+              iLen += (NVOCMP_AES_BLOCK_SIZE - (iHdr.len % NVOCMP_AES_BLOCK_SIZE));
+          }
+          iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
+#endif
+          status = NVOCMP_findItem(pNvHandle, pNvHandle->actPage, pNvHandle->actOffset - NVOCMP_ITEMHDRLEN - iLen,
                           &iHdr, NVOCMP_FINDSTRICT, NULL);
           if((status == NVINTF_SUCCESS) && (iHdr.hofs > 0))
           {
@@ -2980,6 +3038,7 @@ static uint8_t NVOCMP_addItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *iH
     {
         iLen += (NVOCMP_AES_BLOCK_SIZE - (iHdr->len % NVOCMP_AES_BLOCK_SIZE));
     }
+    iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
     dstPg = NVOCMP_getDstPage(pNvHandle, iLen);
 
@@ -3014,6 +3073,20 @@ static uint8_t NVOCMP_addItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *iH
     bool changed = false;
     if((iHdr->hofs) && (iHdr->len))
     {
+#ifdef ENABLE_SPS
+      /* Flash stores ciphertext; decrypt before comparing to plaintext pBuf. */
+      {
+          uint16_t lenEncrypted = iHdr->len;
+          if ((iHdr->len % NVOCMP_AES_BLOCK_SIZE) > 0)
+          {
+              lenEncrypted = iHdr->len + (NVOCMP_AES_BLOCK_SIZE - (iHdr->len % NVOCMP_AES_BLOCK_SIZE));
+          }
+          lenEncrypted += NVOCMP_SPS_CIPHER_OVERHEAD;
+          uint16_t iOfsEnc = iHdr->hofs - lenEncrypted;
+          changed = NVOCMP_spsDecryptAndCompare(iHdr->hpage, iOfsEnc, lenEncrypted,
+                                                pBuf, iHdr->len);
+      }
+#else
       #define NVOCMP_COMPARE_SIZE   32
       uint8_t readBuf[NVOCMP_COMPARE_SIZE];
       uint16_t iOfs = (iHdr->hofs - iHdr->len);
@@ -3034,6 +3107,7 @@ static uint8_t NVOCMP_addItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *iH
         }
         dOfs += len2cmp;
       } while(dOfs < iHdr->len);
+#endif
     }
     else
     {
@@ -3209,13 +3283,6 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
     uint16_t iLen;
     NVOCMP_pageHdr_t pageHdr;
 
-#ifdef ENABLE_SPS
-    uint8_t ciphertext[MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
-    uint8_t plaintext[MAX_PAYLOAD_LENGTH];
-    psa_status_t encStatus;
-    size_t     outputLength;
-#endif
-
     NVOCMP_read(dstPg, NVOCMP_PGHDROFS, (uint8_t *)&pageHdr, NVOCMP_PGHDRLEN);
     if(pageHdr.state == NVOCMP_PGRDY)
     {
@@ -3238,6 +3305,7 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
     {
         iLen += (NVOCMP_AES_BLOCK_SIZE - (pHdr->len % NVOCMP_AES_BLOCK_SIZE));
     }
+    iLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
 
     if((dstOff + iLen) <= FLASH_PAGE_SIZE)
@@ -3268,31 +3336,12 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
         hOfs = dstOff + dLen;
 
 #ifdef ENABLE_SPS
-        // Update item length & data length to accomodate ECB block restriction.
+        // Update dLen for AES block alignment; hOfs accounts for ciphertext + cipher overhead (IV).
         if ((pHdr->len % NVOCMP_AES_BLOCK_SIZE) > 0)
         {
             dLen = pHdr->len + (NVOCMP_AES_BLOCK_SIZE - (pHdr->len % NVOCMP_AES_BLOCK_SIZE));
-            hOfs = dstOff + dLen;
         }
-
-        // Copy item data and padding to input buffer.
-        if (pHdr->len > MAX_PAYLOAD_LENGTH)
-        {
-            NVOCMP_failW = NVINTF_ENCRYPTION_FAIL;
-            return;
-        }
-
-        memset(plaintext, 0x00, MAX_PAYLOAD_LENGTH);
-        memcpy(plaintext, pBuf, pHdr->len);
-
-        // Encrypt the data before writing to flash using PSA API
-        encStatus = psa_cipher_encrypt (spsKeyID, spsAlg, plaintext, dLen, ciphertext, sizeof(ciphertext), &outputLength);
-        if (encStatus != PSA_SUCCESS)
-        {
-          // Handle error, when PSA encrypt fails.
-          NVOCMP_failW = NVINTF_ENCRYPTION_FAIL;
-          return;
-        }
+        hOfs = dstOff + dLen + NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
 
         if (iLen <= NVOCMP_SMALLITEM)
@@ -3333,7 +3382,16 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
             // Write header/item separately
             // Calculate CRC on data portion
 #ifdef ENABLE_SPS
-            newCRC = NVOCMP_doRAMCRC(ciphertext, dLen, 0);
+            {
+                psa_status_t encStatus;
+                encStatus = NVOCMP_spsEncryptAndWrite(dstPg, dstOff, pBuf,
+                                                      pHdr->len, dLen, &newCRC);
+                if (encStatus != PSA_SUCCESS)
+                {
+                    NVOCMP_failW = NVINTF_ENCRYPTION_FAIL;
+                    return;
+                }
+            }
 #else
             newCRC = NVOCMP_doRAMCRC(pBuf, dLen, 0);
 #endif
@@ -3354,8 +3412,7 @@ static void NVOCMP_writeItem(NVOCMP_nvHandle_t *pNvHandle, NVOCMP_itemHdr_t *pHd
             cHdr[6] = NVOCMP_SIGNATURE;
 
 #ifdef ENABLE_SPS
-            // Write data
-            NVOCMP_failW = NVOCMP_write(dstPg, dstOff, ciphertext, dLen);
+            // Write data (SPS path: data already written by NVOCMP_spsEncryptAndWrite)
 #else
             // Write data
             NVOCMP_failW = NVOCMP_write(dstPg, dstOff, pBuf, dLen);
@@ -3492,23 +3549,17 @@ static uint8_t NVOCMP_readItem(NVOCMP_itemHdr_t *iHdr, uint16_t ofs, uint16_t le
 #endif
 #endif
 
-#ifdef ENABLE_SPS
-  uint8_t plaintext[MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
-  uint8_t ciphertext [MAX_PAYLOAD_LENGTH];
-  uint16_t lenEncrypted;
-  psa_status_t decStatus;
-  size_t   outputLength;
-#endif
-
     iOfs = (iHdr->hofs - iHdr->len);
 
 #ifdef ENABLE_SPS
-    /* Update item offset for encrypted data item.
-     * Update len for the read since encryption added padding data.
-     */
-    if ((len % NVOCMP_AES_BLOCK_SIZE) > 0)
+    /* Adjust iOfs to start of cipher data (IV for CBC, ciphertext for ECB). */
     {
-        iOfs = (iHdr->hofs - (iHdr->len + (NVOCMP_AES_BLOCK_SIZE - iHdr->len % NVOCMP_AES_BLOCK_SIZE)));
+        uint16_t paddedLen = iHdr->len;
+        if ((iHdr->len % NVOCMP_AES_BLOCK_SIZE) > 0)
+        {
+            paddedLen = iHdr->len + (NVOCMP_AES_BLOCK_SIZE - iHdr->len % NVOCMP_AES_BLOCK_SIZE);
+        }
+        iOfs = iHdr->hofs - paddedLen - NVOCMP_SPS_CIPHER_OVERHEAD;
     }
 #endif
 
@@ -3533,16 +3584,15 @@ static uint8_t NVOCMP_readItem(NVOCMP_itemHdr_t *iHdr, uint16_t ofs, uint16_t le
             {
 #endif
 #ifdef ENABLE_SPS
-              // Update len for the read since encryption added padding data.
-                if ((len % NVOCMP_AES_BLOCK_SIZE) > 0)
+            {
+                uint16_t lenEncrypted = iHdr->len;
+                if ((iHdr->len % NVOCMP_AES_BLOCK_SIZE) > 0)
                 {
-                    lenEncrypted = len + (NVOCMP_AES_BLOCK_SIZE - (len % NVOCMP_AES_BLOCK_SIZE));
+                    lenEncrypted = iHdr->len + (NVOCMP_AES_BLOCK_SIZE - (iHdr->len % NVOCMP_AES_BLOCK_SIZE));
                 }
-                else
-                {
-                    lenEncrypted = len;
-                }
-                NVOCMP_read(iHdr->hpage, dOfs, ciphertext, lenEncrypted);
+                lenEncrypted += NVOCMP_SPS_CIPHER_OVERHEAD;
+                err = NVOCMP_spsDecryptFromFlash(iHdr->hpage, iOfs, lenEncrypted, ofs, len, pBuf);
+            }
 #else
               // Copy NV data block to caller's buffer
               NVOCMP_read(iHdr->hpage, dOfs, (uint8_t *)pBuf, len);
@@ -3550,25 +3600,6 @@ static uint8_t NVOCMP_readItem(NVOCMP_itemHdr_t *iHdr, uint16_t ofs, uint16_t le
 #ifndef NVOCMP_RAM_OPTIMIZATION
             }
 #endif
-
-#ifdef ENABLE_SPS
-            /* Data item has been read from flash and it is in the buffer.
-             * Need to decrypt before returning back to caller.
-             * Decrypt using PSA API.
-             */
-            decStatus = psa_cipher_decrypt (spsKeyID, spsAlg, ciphertext, lenEncrypted, plaintext, sizeof(plaintext), &outputLength);
-            if (decStatus != PSA_SUCCESS)
-            {
-              // Handle error, when PSA decrypt fails.
-              NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
-              return NVINTF_DECRYPTION_FAIL;
-            }
-
-            // Copy encrypted data into buffer.
-            memcpy(pBuf, plaintext, len);
-
-#endif
-
         }
         else
         {
@@ -3952,6 +3983,7 @@ static int8_t NVOCMP_findItem(NVOCMP_nvHandle_t *pNvHandle, uint8_t pg, uint16_t
                   {
                       ofs -= (NVOCMP_AES_BLOCK_SIZE - (iHdr.len % NVOCMP_AES_BLOCK_SIZE));
                   }
+                  ofs -= NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
               }
               else
@@ -4092,6 +4124,7 @@ static int8_t NVOCMP_findItem(NVOCMP_nvHandle_t *pNvHandle, uint8_t pg, uint16_t
                   {
                       ofs -= (NVOCMP_AES_BLOCK_SIZE - (iHdr.len % NVOCMP_AES_BLOCK_SIZE));
                   }
+                  ofs -= NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
               }
               else
@@ -4700,12 +4733,14 @@ static NVOCMP_compactStatus_t NVOCMP_compact(NVOCMP_nvHandle_t *pNvHandle)
             crcOff = srcOff - NVOCMP_ITEMHDRLEN - dataLen;
 
 #ifdef ENABLE_SPS
-            // Update item size and CRC offset for encrypted data item, since encryption added padding.
+            // Update item size and CRC offset for AES padding + cipher overhead (IV for CBC).
             if ((dataLen % NVOCMP_AES_BLOCK_SIZE) > 0)
             {
                 itemSize += (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
                 crcOff   -= (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
             }
+            itemSize += NVOCMP_SPS_CIPHER_OVERHEAD;
+            crcOff   -= NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
 
             // Check if length is safe
@@ -4792,11 +4827,12 @@ static NVOCMP_compactStatus_t NVOCMP_compact(NVOCMP_nvHandle_t *pNvHandle)
               }
               NVOCMP_ALERT(srcOff > dataLen, "Offset overflow: srcOff")
 #ifdef ENABLE_SPS
-              // Update data length for encrypted data item, since encryption added padding.
+              // Update data length for AES padding + cipher overhead (IV for CBC).
               if ((dataLen % NVOCMP_AES_BLOCK_SIZE) > 0)
               {
                   dataLen += (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
               }
+              dataLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
               srcOff -= dataLen;
             }
@@ -4940,12 +4976,14 @@ static NVOCMP_compactStatus_t NVOCMP_compact(NVOCMP_nvHandle_t *pNvHandle)
             crcOff = srcOff - NVOCMP_ITEMHDRLEN - dataLen;
 
 #ifdef ENABLE_SPS
-            // Update item size and CRC offset for encrypted data item, since encryption added padding.
+            // Update item size and CRC offset for AES padding + cipher overhead (IV for CBC).
             if ((dataLen % NVOCMP_AES_BLOCK_SIZE) > 0)
             {
                 itemSize += (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
                 crcOff   -= (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
             }
+            itemSize += NVOCMP_SPS_CIPHER_OVERHEAD;
+            crcOff   -= NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
 
             // Check if length is safe
@@ -5014,11 +5052,12 @@ static NVOCMP_compactStatus_t NVOCMP_compact(NVOCMP_nvHandle_t *pNvHandle)
               }
               NVOCMP_ALERT(srcOff > dataLen, "Offset overflow: srcOff")
 #ifdef ENABLE_SPS
-              // Update data length for encrypted data item, since encryption added padding.
+              // Update data length for AES padding + cipher overhead (IV for CBC).
               if ((dataLen % NVOCMP_AES_BLOCK_SIZE) > 0)
               {
                   dataLen += (NVOCMP_AES_BLOCK_SIZE - (dataLen % NVOCMP_AES_BLOCK_SIZE));
               }
+              dataLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
               srcOff -= dataLen;
             }
@@ -5255,11 +5294,12 @@ static uint8_t NVOCMP_verifyCRC(uint16_t iOfs, uint16_t len, uint8_t crc, uint8_
 #endif
 
 #ifdef ENABLE_SPS
-    // Update len for the CRC Calculation since encryption added padding data.
+    // Update crcLen for AES padding + cipher overhead (IV for CBC).
     if ((len % NVOCMP_AES_BLOCK_SIZE) > 0)
     {
         crcLen += (NVOCMP_AES_BLOCK_SIZE - (len % NVOCMP_AES_BLOCK_SIZE));
     }
+    crcLen += NVOCMP_SPS_CIPHER_OVERHEAD;
 #endif
     // CRC calculations stop at the length field of header
     // So the last byte must be done separately
@@ -5437,7 +5477,6 @@ static uint32_t NVOCMP_sanityCheckApi (void)
 static psa_status_t NVOCMP_setupKeyDerivation(psa_key_derivation_operation_t *derivation, psa_algorithm_t alg, psa_key_id_t keyID)
 {
     psa_status_t status;
-    uint64_t value = 1U;
 
     /* Make sure we're deriving from HUK or from the TKDK */
     if ((keyID != PSA_KEY_ID_HSM_HUK) && (keyID != PSA_KEY_ID_HSM_TKDK))
@@ -5455,8 +5494,15 @@ static psa_status_t NVOCMP_setupKeyDerivation(psa_key_derivation_operation_t *de
 
       if (status == PSA_SUCCESS)
       {
-          /* Set input label */
-          status = psa_key_derivation_input_bytes(derivation, PSA_KEY_DERIVATION_INPUT_LABEL, label, sizeof(label));
+        /* Set input label */
+        if (keyID == PSA_KEY_ID_HSM_HUK)
+        {
+            status = psa_key_derivation_input_bytes(derivation, PSA_KEY_DERIVATION_INPUT_LABEL, labelHUK, sizeof(labelHUK));
+        }
+        else
+        {
+            status = psa_key_derivation_input_bytes(derivation, PSA_KEY_DERIVATION_INPUT_LABEL, label, sizeof(label));
+        }
       }
     }
 
@@ -5482,35 +5528,41 @@ static psa_status_t NVOCMP_deriveTrustedKey(void)
   psa_key_derivation_operation_t derivation = PSA_KEY_DERIVATION_OPERATION_INIT;
   psa_key_id_t outputKeyID;
 
-  /* The TKDK is derived from the HUK via a CMAC-based KDF */
-  status = NVOCMP_setupKeyDerivation(&derivation, PSA_ALG_SP800_108_COUNTER_CMAC, PSA_KEY_ID_HSM_HUK);
+  /* Test first to see if the TKDK has already been derived by reading back attributes */
+  status = psa_get_key_attributes(PSA_KEY_ID_HSM_TKDK, &attributes);
 
-  if (status == PSA_SUCCESS)
+  /* If TKDK has not been derived then derive it */
+  if (status == PSA_ERROR_INVALID_HANDLE)
   {
-      /* Configure attributes for output key */
-      attributes = PSA_KEY_ATTRIBUTES_INIT;
-      /* The TKDK performs derivations with an HMAC-based KDF */
-      psa_set_key_algorithm(&attributes, PSA_ALG_SP800_108_COUNTER_HMAC(PSA_ALG_SHA_256));
-      /* Constant size TKDK */
-      psa_set_key_bits(&attributes, PSA_BYTES_TO_BITS(TKDK_SIZE));
-      /* The TKDK can only be used for derivation */
-      psa_set_key_type(&attributes, PSA_KEY_TYPE_DERIVE);
-      psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_DERIVE);
-      psa_set_key_id(&attributes, PSA_KEY_ID_HSM_TKDK);
+    /* The TKDK is derived from the HUK via a CMAC-based KDF */
+    status = NVOCMP_setupKeyDerivation(&derivation, PSA_ALG_SP800_108_COUNTER_CMAC, PSA_KEY_ID_HSM_HUK);
 
-      /* TKDK lifetime only support Asset store location and persistence */
-      psa_set_key_lifetime(&attributes,
-                          PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION(PSA_KEY_PERSISTENCE_HSM_ASSET_STORE,
-                                                                          PSA_KEY_LOCATION_HSM_ASSET_STORE));
+    if (status == PSA_SUCCESS)
+    {
+        /* Configure attributes for output key */
+        attributes = PSA_KEY_ATTRIBUTES_INIT;
+        /* The TKDK performs derivations with an HMAC-based KDF */
+        psa_set_key_algorithm(&attributes, PSA_ALG_SP800_108_COUNTER_HMAC(PSA_ALG_SHA_256));
+        /* Constant size TKDK */
+        psa_set_key_bits(&attributes, PSA_BYTES_TO_BITS(TKDK_SIZE));
+        /* The TKDK can only be used for derivation */
+        psa_set_key_type(&attributes, PSA_KEY_TYPE_DERIVE);
+        psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_DERIVE);
+        psa_set_key_id(&attributes, PSA_KEY_ID_HSM_TKDK);
 
-      /* Perform the key derivation */
-      status = psa_key_derivation_output_key(&attributes, &derivation, &outputKeyID);
-      /* outputKeyID should be equal to PSA_KEY_ID_HSM_TKDK */
+        /* TKDK lifetime only support Asset store location and persistence */
+        psa_set_key_lifetime(&attributes,
+                            PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION(PSA_KEY_PERSISTENCE_HSM_ASSET_STORE,
+                                                                            PSA_KEY_LOCATION_HSM_ASSET_STORE));
 
-      /* Clean up */
-      psa_key_derivation_abort(&derivation);
+        /* Perform the key derivation */
+        status = psa_key_derivation_output_key(&attributes, &derivation, &outputKeyID);
+        /* outputKeyID should be equal to PSA_KEY_ID_HSM_TKDK */
+
+        /* Clean up */
+        psa_key_derivation_abort(&derivation);
+    }
   }
-
   return status;
 }
 
@@ -5531,7 +5583,6 @@ static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize)
     psa_key_derivation_operation_t derivation = PSA_KEY_DERIVATION_OPERATION_INIT;
     /* Attributes for key to be derived from TKDK, after the TKDK is derived */
     psa_key_attributes_t attributes           = PSA_KEY_ATTRIBUTES_INIT;
-    size_t capacity;
 
     /* Derive TKDK - it can be used via its reserved Key ID if successful */
     status = NVOCMP_deriveTrustedKey();
@@ -5544,7 +5595,7 @@ static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize)
         if (status == PSA_SUCCESS)
         {
             /* Set up attributes of key to derive from TKDK */
-            psa_set_key_algorithm(&attributes, PSA_ALG_ECB_NO_PADDING);
+            psa_set_key_algorithm(&attributes, spsAlg);
             psa_set_key_bits(&attributes, PSA_BYTES_TO_BITS(derivedKeySize));
             psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
             psa_set_key_usage_flags(&attributes, (PSA_KEY_USAGE_ENCRYPT | PSA_KEY_USAGE_DECRYPT));
@@ -5564,5 +5615,353 @@ static psa_status_t NVOCMP_keyDerivationFromTkdk(uint32_t derivedKeySize)
 
     return status;
 }
+
+/******************************************************************************
+ * @fn      NVOCMP_spsEncryptAndWrite
+ *
+ * @brief   Encrypt plaintext item and write ciphertext to flash.
+ *          Computes CRC over the ciphertext bytes and returns via *pCRC.
+ *          Caller must then continue the CRC over the 5 header bytes.
+ *
+ * @param   dstPg    - destination flash page
+ * @param   dstOff   - destination flash offset (start of data area)
+ * @param   pBuf     - plaintext data buffer
+ * @param   plainLen - plaintext length (pHdr->len)
+ * @param   paddedLen - AES-block-aligned length (dLen)
+ * @param   pCRC     - output: CRC8 over ciphertext (seed 0)
+ *
+ * @return  PSA_SUCCESS, or PSA error code on encrypt failure
+ */
+static psa_status_t NVOCMP_spsEncryptAndWrite(uint8_t dstPg, uint16_t dstOff,
+                                               const uint8_t *pBuf, uint16_t plainLen,
+                                               uint16_t paddedLen, uint8_t *pCRC)
+{
+    uint8_t chunkBuf[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    uint8_t chunkBufOut[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    psa_cipher_operation_t op = PSA_CIPHER_OPERATION_INIT;
+    psa_status_t status;
+    uint16_t srcOfs = 0;
+    uint16_t dstFlashOfs = dstOff;
+    uint8_t crc = 0;
+
+    status = psa_cipher_encrypt_setup(&op, spsKeyID, spsAlg);
+    if (status != PSA_SUCCESS)
+	{
+	    return status;
+	}
+
+#ifdef NVOCMP_SPS_USE_CBC
+    {
+        uint8_t iv[NVOCMP_AES_BLOCK_SIZE];
+        status = psa_generate_random(iv, sizeof(iv));
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return status;
+		}
+        status = psa_cipher_set_iv(&op, iv, sizeof(iv));
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return status;
+		}
+        /* Write IV to flash; include it in the CRC */
+        crc = NVOCMP_doRAMCRC(iv, sizeof(iv), crc);
+        NVOCMP_failW = NVOCMP_write(dstPg, dstFlashOfs, iv, sizeof(iv));
+        if (NVOCMP_failW != NVINTF_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return PSA_ERROR_STORAGE_FAILURE;
+		}
+        dstFlashOfs += NVOCMP_AES_BLOCK_SIZE;
+    }
+#endif
+
+    while (srcOfs < paddedLen)
+    {
+        uint16_t chunkIn  = paddedLen - srcOfs;
+        size_t   chunkOut = 0;
+
+        if (chunkIn > NVOCMP_SPS_CHUNK_SIZE)
+		{
+		    chunkIn = NVOCMP_SPS_CHUNK_SIZE;
+		}
+
+        /* Build plaintext chunk: real bytes then zero-pad */
+        uint16_t realBytes = (srcOfs < plainLen) ? plainLen - srcOfs : 0;
+        if (realBytes > chunkIn)
+		{
+		    realBytes = chunkIn;
+		}
+        memcpy(chunkBuf, pBuf + srcOfs, realBytes);
+        if (realBytes < chunkIn)
+        {
+            memset(chunkBuf + realBytes, 0x00, chunkIn - realBytes);
+            memset(chunkBufOut + realBytes, 0x00, chunkIn - realBytes);
+        }
+
+        status = psa_cipher_update(&op, chunkBuf, chunkIn, chunkBufOut, sizeof(chunkBufOut), &chunkOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return status;
+		}
+
+        crc = NVOCMP_doRAMCRC(chunkBufOut, (uint16_t)chunkOut, crc);
+        NVOCMP_failW = NVOCMP_write(dstPg, dstFlashOfs, chunkBufOut, (uint16_t)chunkOut);
+        if (NVOCMP_failW != NVINTF_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return PSA_ERROR_STORAGE_FAILURE;
+		}
+
+        srcOfs      += (uint16_t)chunkIn;
+        dstFlashOfs += (uint16_t)chunkOut;
+    }
+
+    /* Finish (ECB has no extra output, but call for correctness) */
+    {
+        size_t finishOut = 0;
+        status = psa_cipher_finish(&op, chunkBufOut, sizeof(chunkBufOut), &finishOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return status;
+		}
+        if (finishOut > 0)
+        {
+            crc = NVOCMP_doRAMCRC(chunkBufOut, (uint16_t)finishOut, crc);
+            NVOCMP_failW = NVOCMP_write(dstPg, dstFlashOfs, chunkBufOut, (uint16_t)finishOut);
+            if (NVOCMP_failW != NVINTF_SUCCESS)
+            {
+                psa_cipher_abort(&op);
+                return PSA_ERROR_STORAGE_FAILURE;
+            }
+        }
+    }
+
+    *pCRC = crc;
+    return status;
+}
+
+/******************************************************************************
+ * @fn      NVOCMP_spsDecryptFromFlash
+ *
+ * @brief   Read ciphertext from flash, decrypt it, and copy the window
+ *          [ofs, ofs+len) of the resulting plaintext to caller's buffer.
+ *
+ * @param   pg           - flash page
+ * @param   iOfs         - offset to start of ciphertext in flash
+ * @param   lenEncrypted - total ciphertext length (AES-block-padded)
+ * @param   ofs          - byte offset into plaintext to start copying from
+ * @param   len          - number of plaintext bytes to copy to pBuf
+ * @param   pBuf         - destination buffer
+ *
+ * @return  NVINTF_SUCCESS or NVINTF_DECRYPTION_FAIL
+ */
+static uint8_t NVOCMP_spsDecryptFromFlash(uint8_t pg, uint16_t iOfs,
+                                           uint16_t lenEncrypted,
+                                           uint16_t ofs, uint16_t len, void *pBuf)
+{
+    uint8_t chunkBuf[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    uint8_t chunkBufOut[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    psa_cipher_operation_t op = PSA_CIPHER_OPERATION_INIT;
+    psa_status_t status;
+    uint16_t srcFlashOfs = iOfs;
+    uint16_t remaining   = lenEncrypted;
+    uint16_t plainOfs    = 0;   /* byte position in reconstructed plaintext */
+
+    status = psa_cipher_decrypt_setup(&op, spsKeyID, spsAlg);
+    if (status != PSA_SUCCESS)
+    {
+        NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
+        return NVINTF_DECRYPTION_FAIL;
+    }
+
+#ifdef NVOCMP_SPS_USE_CBC
+    {
+        uint8_t iv[NVOCMP_AES_BLOCK_SIZE];
+        NVOCMP_read(pg, srcFlashOfs, iv, sizeof(iv));
+        status = psa_cipher_set_iv(&op, iv, sizeof(iv));
+        if (status != PSA_SUCCESS)
+        {
+            psa_cipher_abort(&op);
+            NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
+            return NVINTF_DECRYPTION_FAIL;
+        }
+        srcFlashOfs += NVOCMP_AES_BLOCK_SIZE;
+        remaining   -= NVOCMP_AES_BLOCK_SIZE;
+    }
+#endif
+
+    while (remaining > 0)
+    {
+        uint16_t chunkIn  = (remaining > NVOCMP_SPS_CHUNK_SIZE) ? NVOCMP_SPS_CHUNK_SIZE : remaining;
+        size_t   chunkOut = 0;
+
+        NVOCMP_read(pg, srcFlashOfs, chunkBuf, chunkIn);
+
+        status = psa_cipher_update(&op, chunkBuf, chunkIn, chunkBufOut, sizeof(chunkBufOut), &chunkOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
+			return NVINTF_DECRYPTION_FAIL;
+		}
+
+        /* Copy the part of this plaintext chunk that falls within [ofs, ofs+len) */
+        if (chunkOut > 0)
+        {
+            uint16_t chunkStart = plainOfs;
+            uint16_t chunkEnd   = plainOfs + (uint16_t)chunkOut;
+            uint16_t copyStart  = (chunkStart < ofs) ? ofs : chunkStart;
+            uint16_t copyEnd    = (chunkEnd > (ofs + len)) ? (ofs + len) : chunkEnd;
+            if (copyStart < copyEnd)
+            {
+                memcpy((uint8_t *)pBuf + (copyStart - ofs),
+                       chunkBufOut + (copyStart - chunkStart),
+                       copyEnd - copyStart);
+            }
+            plainOfs += (uint16_t)chunkOut;
+        }
+
+        srcFlashOfs += chunkIn;
+        remaining   -= chunkIn;
+    }
+
+    /* Finish */
+    {
+        size_t finishOut = 0;
+        status = psa_cipher_finish(&op, chunkBufOut, sizeof(chunkBufOut), &finishOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			NVOCMP_failW = NVINTF_DECRYPTION_FAIL;
+			return NVINTF_DECRYPTION_FAIL;
+		}
+        if (finishOut > 0)
+        {
+            uint16_t chunkStart = plainOfs;
+            uint16_t chunkEnd   = plainOfs + (uint16_t)finishOut;
+            uint16_t copyStart  = (chunkStart < ofs) ? ofs : chunkStart;
+            uint16_t copyEnd    = (chunkEnd > (ofs + len)) ? (ofs + len) : chunkEnd;
+            if (copyStart < copyEnd)
+            {
+                memcpy((uint8_t *)pBuf + (copyStart - ofs),
+                       chunkBufOut + (copyStart - chunkStart),
+                       copyEnd - copyStart);
+            }
+        }
+    }
+
+    return NVINTF_SUCCESS;
+}
+
+/******************************************************************************
+ * @fn      NVOCMP_spsDecryptAndCompare
+ *
+ * @brief   Read ciphertext from flash, decrypt, and compare against plaintext.
+ *          Returns true (changed) on decrypt failure so item gets rewritten.
+ *
+ * @param   pg           - flash page
+ * @param   iOfs         - offset to start of ciphertext in flash
+ * @param   lenEncrypted - total ciphertext length (AES-block-padded)
+ * @param   pBuf         - plaintext to compare against
+ * @param   plainLen     - length of plaintext (pHdr->len)
+ *
+ * @return  true if item has changed (or on decrypt failure), false if same
+ */
+static bool NVOCMP_spsDecryptAndCompare(uint8_t pg, uint16_t iOfs,
+                                         uint16_t lenEncrypted,
+                                         const uint8_t *pBuf, uint16_t plainLen)
+{
+    uint8_t chunkBuf[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    uint8_t chunkBufOut[NVOCMP_SPS_CHUNK_SIZE] __attribute__((aligned(4)));
+    psa_cipher_operation_t op = PSA_CIPHER_OPERATION_INIT;
+    psa_status_t status;
+    uint16_t srcFlashOfs = iOfs;
+    uint16_t remaining   = lenEncrypted;
+    uint16_t plainOfs    = 0;
+
+    status = psa_cipher_decrypt_setup(&op, spsKeyID, spsAlg);
+    if (status != PSA_SUCCESS)
+	{
+	    return true;
+    }
+
+#ifdef NVOCMP_SPS_USE_CBC
+    {
+        uint8_t iv[NVOCMP_AES_BLOCK_SIZE];
+        NVOCMP_read(pg, srcFlashOfs, iv, sizeof(iv));
+        status = psa_cipher_set_iv(&op, iv, sizeof(iv));
+        if (status != PSA_SUCCESS)
+	    {
+		    psa_cipher_abort(&op);
+			return true;
+		}
+        srcFlashOfs += NVOCMP_AES_BLOCK_SIZE;
+        remaining   -= NVOCMP_AES_BLOCK_SIZE;
+    }
+#endif
+
+    while (remaining > 0)
+    {
+        uint16_t chunkIn  = (remaining > NVOCMP_SPS_CHUNK_SIZE) ? NVOCMP_SPS_CHUNK_SIZE : remaining;
+        size_t   chunkOut = 0;
+
+        NVOCMP_read(pg, srcFlashOfs, chunkBuf, chunkIn);
+
+        status = psa_cipher_update(&op, chunkBuf, chunkIn, chunkBufOut, sizeof(chunkBufOut), &chunkOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return true;
+		}
+
+        /* Compare this plaintext chunk against pBuf */
+        if (chunkOut > 0)
+        {
+            uint16_t cmpLen = (uint16_t)chunkOut;
+            if (plainOfs + cmpLen > plainLen)
+			{
+			    cmpLen = plainLen - plainOfs;
+			}
+            if (cmpLen > 0 && memcmp(chunkBufOut, pBuf + plainOfs, cmpLen) != 0)
+            {
+                psa_cipher_abort(&op);
+                return true;
+            }
+            plainOfs += (uint16_t)chunkOut;
+        }
+
+        srcFlashOfs += chunkIn;
+        remaining   -= chunkIn;
+    }
+
+    {
+        size_t finishOut = 0;
+        status = psa_cipher_finish(&op, chunkBufOut, sizeof(chunkBufOut), &finishOut);
+        if (status != PSA_SUCCESS)
+		{
+		    psa_cipher_abort(&op);
+			return true;
+		}
+        if (finishOut > 0)
+        {
+            uint16_t cmpLen = (uint16_t)finishOut;
+            if (plainOfs + cmpLen > plainLen)
+			{
+				cmpLen = plainLen - plainOfs;
+			}
+            if (cmpLen > 0 && memcmp(chunkBufOut, pBuf + plainOfs, cmpLen) != 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 #endif // #ifdef ENABLE_SPS
 //*****************************************************************************

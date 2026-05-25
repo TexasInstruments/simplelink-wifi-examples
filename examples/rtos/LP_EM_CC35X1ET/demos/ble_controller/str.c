@@ -264,13 +264,7 @@ const char setLsiUsageStr[]                      = " [-help] [-n <number of DTIM
 const char *wlanSetLsiDetailsStr                 = "Set Long Sleep Interval, allow STA to wake up every N DTIMs\n\r";
 const char *wlanSetLsi_n_optionDetailsStr        = "\n\r\t-n\tNumber of DTIMs to wake upon\n\r";
 
-#ifdef CC35XX
-/* Sleep test*/
-const char SleepTestStr[]                              = "test_sleep";
-const char SleepTestUsageStr[]                         = " [-help] [-t number of seconds to sleep]\n\r";
-const char *sleepTestDetailsStr                  = "Set the test sleep period\n\r";
-const char *sleepTest_t_optionDetailsStr         = "\n\r\t-t\tnumber of seconds to sleep\n\r";
-#endif
+
 
 /* wlan start */
 const char wlanStartStr[]                      = "wlan_start";

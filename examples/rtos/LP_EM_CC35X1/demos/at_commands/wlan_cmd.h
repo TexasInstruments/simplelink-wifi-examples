@@ -193,9 +193,6 @@ int32_t cmdWlanP2PListenCallback(void *arg);
 
 int32_t cmdWlanP2PCancelCallback(void *arg);
 
-int32_t cmdSleepTestCallback(void *arg);
-
-int32_t printSleepTestUsage(void *arg);
 
 int32_t cmdStartApWpsCallback(void *arg);
 

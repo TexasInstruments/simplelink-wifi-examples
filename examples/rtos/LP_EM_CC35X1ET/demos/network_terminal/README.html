@@ -46,15 +46,27 @@
 <tbody>
 <tr class="odd">
 <td><a href="#wlan-commands">WLAN</a></td>
-<td align="left">Includes link layer functions such as scan, connect, etc.</td>
+<td align="left">Includes link layer functions such as scan, connect, power management, vendor IEs, and more.</td>
 </tr>
 <tr class="even">
-<td><a href="#socket-commands">Socket</a></td>
-<td align="left">Showcases a variety of socket APIs responsible for sending and receiving data.</td>
+<td><a href="#network-commands">Network</a></td>
+<td align="left">ping, iperf, and SNTP.</td>
 </tr>
 <tr class="odd">
+<td><a href="#device-commands">Device</a></td>
+<td align="left">Device time configuration and retrieval.</td>
+</tr>
+<tr class="even">
+<td><a href="#p2p-commands">P2P</a></td>
+<td align="left">Wi-Fi Direct peer-to-peer connection management.</td>
+</tr>
+<tr class="odd">
+<td><a href="#csi-commands">CSI</a></td>
+<td align="left">Channel State Information capture and configuration.</td>
+</tr>
+<tr class="even">
 <td><a href="#ble-commands">BLE</a></td>
-<td align="left">Provides basic BLE commands.</td>
+<td align="left">BLE advertising, scanning, connections, and device management.</td>
 </tr>
 </tbody>
 </table>
@@ -72,9 +84,10 @@
     Flow Control: None</code></pre>
 <p>Once the application completes its initialization and the network processor is up, the application banner will be displayed, showing version details:</p>
 <pre><code>******************************************************************
-******************   Osprey Network Terminal   *******************
-*******************      Version x.x.x.x      ********************
-******************************************************************</code></pre>
+***************** Network Terminal             *******************
+***************** upper_mac_X.X.X.X            *******************
+******************************************************************
+Compiled with XXXX</code></pre>
 <p>At this point, a menu showing the available commands will be printed, followed by a command prompt, indicating that the application is ready for user input.</p>
 <h2 id="application-overview">Application Overview</h2>
 <p>Network Terminal is a command-line interface (CLI) application used to demonstrate the networking capabilities of the CC35xx device. It offers a list of commands that are fed to the application via UART, then parsed and dispatched.</p>
@@ -87,20 +100,58 @@
 Available commands:
 
 help                clear               wlan_ap_role_up     wlan_ap_role_down   
-wlan_sta_role_up    wlan_sta_role_down  wlan_connect        wlan_disconnect     
-wlan_scan           wlan_get_mac        wlan_set_mac        wlan_get_ps         
-wlan_set_ps         wlan_set_pm         wlan_set_LSI        wlan_start          
-wlan_stop           ble_adv_cfg         ble_adv_enable      ble_scan_cfg        
-ble_scan_enable     ble_connect         ble_disconnect      ble_peers           
-ble_start           ble_stop            ble_test_mode       calibrator          
-send                recv                socket_show         kill                
+wlan_sta_role_up    wlan_sta_role_down  wlan_connect        wlan_set_early_term 
+wlan_get_early_term wlan_disconnect     wlan_scan           wlan_get_mac        
+wlan_set_mac        wlan_get_ps         wlan_set_ps         wlan_set_pm         
+wlan_set_if_ip      wlan_get_if_ip      wlan_set_dhcp       wlan_get_dhcp       
+wlan_set_LSI        wlan_get_fw_ver     wlan_start          
+wlan_stop           iperf               iperf_stop          ble_adv_cfg         
+ble_adv_enable      ble_scan_cfg        ble_scan_enable     ble_connect         
+ble_disconnect      ble_peers           ble_delete_bonds    ble_get_bd_addr     
+ble_set_bd_addr     ble_set_tx_pwr      ble_conn_update     ble_set_phy         
+ble_start           ble_stop            csi_enable          csi_stop            
+csi_disable         csi_get_results     csi_config          csi_set_mac         
+calibrator          sntp_config_servers sntp_update         set_date_time       
+get_date_time       vend_IE_add         vend_IE_remove      set_peer_aging      
+p2p_role_up         p2p_role_down       p2p_find            p2p_connect         
+p2p_stop_find       p2p_group_remove    p2p_set_channel     p2p_get_channel     
+p2p_listen          p2p_cancel          start_ap_wps        wlan_set_con_policy 
+wlan_get_con_policy wlan_add_profile    wlan_del_profile    wlan_get_profile    
+wlan_set_dwell_time wlan_profile_connect ping               ping_stop           
+set_cstm_reg_domain get_cstm_reg_domain 
 ================================================================================</code></pre>
+<h2 id="general-commands">General Commands</h2>
+<ul>
+<li><a href="#help">help</a></li>
+<li><a href="#clear">clear</a></li>
+</ul>
+<hr />
+<h4 id="help"><strong>help</strong></h4>
+<p>This command displays help information. You can get more detailed information about a specific command name by providing it as a parameter.</p>
+<pre><code>Usage:
+        help [command name]
+
+Description:
+        To know more about the command name.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="clear"><strong>clear</strong></h4>
+<p>This command clears the terminal screen.</p>
+<pre><code>Usage:
+        clear [-help]
+
+Description:
+        To clear the terminal screen.</code></pre>
+<hr />
 <h2 id="wlan-commands">WLAN Commands</h2>
 <ul>
 <li><a href="#wlan_start">wlan_start</a></li>
 <li><a href="#wlan_stop">wlan_stop</a></li>
 <li><a href="#wlan_sta_role_up">wlan_sta_role_up</a></li>
 <li><a href="#wlan_sta_role_down">wlan_sta_role_down</a></li>
+<li><a href="#wlan_ap_role_up">wlan_ap_role_up</a></li>
+<li><a href="#wlan_ap_role_down">wlan_ap_role_down</a></li>
 <li><a href="#wlan_scan">wlan_scan</a></li>
 <li><a href="#wlan_connect">wlan_connect</a></li>
 <li><a href="#wlan_disconnect">wlan_disconnect</a></li>
@@ -108,16 +159,45 @@ send                recv                socket_show         kill
 <li><a href="#wlan_set_mac">wlan_set_mac</a></li>
 <li><a href="#wlan_get_ps">wlan_get_ps</a></li>
 <li><a href="#wlan_set_ps">wlan_set_ps</a></li>
+<li><a href="#wlan_set_pm">wlan_set_pm</a></li>
+<li><a href="#wlan_set_lsi">wlan_set_LSI</a></li>
+<li><a href="#wlan_get_fw_ver">wlan_get_fw_ver</a></li>
+<li><a href="#wlan_set_early_term">wlan_set_early_term</a></li>
+<li><a href="#wlan_get_early_term">wlan_get_early_term</a></li>
+<li><a href="#set_peer_aging">set_peer_aging</a></li>
+<li><a href="#vend_ie_add">vend_IE_add</a></li>
+<li><a href="#vend_ie_remove">vend_IE_remove</a></li>
+<li><a href="#start_ap_wps">start_ap_wps</a></li>
+<li><a href="#wlan_set_if_ip">wlan_set_if_ip</a></li>
+<li><a href="#wlan_get_if_ip">wlan_get_if_ip</a></li>
+<li><a href="#wlan_set_dhcp">wlan_set_dhcp</a></li>
+<li><a href="#wlan_get_dhcp">wlan_get_dhcp</a></li>
+<li><a href="#wlan_set_con_policy">wlan_set_con_policy</a></li>
+<li><a href="#wlan_get_con_policy">wlan_get_con_policy</a></li>
+<li><a href="#wlan_add_profile">wlan_add_profile</a></li>
+<li><a href="#wlan_del_profile">wlan_del_profile</a></li>
+<li><a href="#wlan_get_profile">wlan_get_profile</a></li>
+<li><a href="#wlan_set_dwell_time">wlan_set_dwell_time</a></li>
+<li><a href="#wlan_profile_connect">wlan_profile_connect</a></li>
+<li><a href="#set_cstm_reg_domain">set_cstm_reg_domain</a></li>
+<li><a href="#get_cstm_reg_domain">get_cstm_reg_domain</a></li>
 </ul>
 <hr />
 <h4 id="wlan_start"><strong>wlan_start</strong></h4>
 <p>This command turns on the WLAN device, initialize the upper MAC thread, and initialize the SPI interface.</p>
-<blockquote>
-<p><strong>Note</strong>: This command is called by the <strong>main function</strong>, and is used only if the user has called the wlan_stop command first.</p>
-</blockquote>
+<pre><code>Usage:
+        wlan_start [-help]
+
+Description:
+        Turn on the WLAN device and initialize interfaces.</code></pre>
 <hr />
 <h4 id="wlan_stop"><strong>wlan_stop</strong></h4>
-<p>This command turns off the WLAN device and deactivates the SPI interface.</p>
+<p>This command turns off the WLAN device and deactivates the SPI interface. It supports both Recovery and non-Recovery modes.</p>
+<pre><code>Usage:
+        wlan_stop [-help]
+
+Description:
+        Turn off the WLAN device and deactivate SPI interface.</code></pre>
 <hr />
 <h4 id="wlan_sta_role_up"><strong>wlan_sta_role_up</strong></h4>
 <p>This command adds and starts the station role on the device:</p>
@@ -126,10 +206,12 @@ send                recv                socket_show         kill
 <li>Adding a new WLAN role ID by dispatching <strong>CMD_ROLE_START</strong> to the CC35xx device.</li>
 </ol>
 <pre><code>Usage: 
-        wlan_sta_role_up [-help] 
+        wlan_sta_role_up [-help] [-r &lt;STA Regulatory Domain [&quot;US&quot; &quot;JP&quot; &quot;EU&quot; &quot;00&quot; &quot;CS&quot;]&gt;]
 
 Description:
-        Role up device as STA.</code></pre>
+        Role up device as STA.
+        Default Parameter: &quot;00&quot;
+        Note: CC350X devices do not support 5GHz band.</code></pre>
 <blockquote>
 <p><strong>Note</strong>: This command is used to start the device in station mode after it is powered on and all modules are initialized.</p>
 </blockquote>
@@ -142,16 +224,48 @@ Description:
 <li>Remove the STA WLAN role ID by dispatching <strong>CMD_ROLE_DISABLE</strong> to the CC35xx device.</li>
 </ol>
 <hr />
+<h4 id="wlan_ap_role_up"><strong>wlan_ap_role_up</strong></h4>
+<p>This command adds and starts the Access Point role on the device. It receives the following parameters:</p>
+<pre><code>Usage:
+        wlan_ap_role_up [-help] [-s &lt;&quot;ssid name&quot;&gt;] [-t &lt;security type&gt;] [-p &lt;&quot;password&quot;&gt;]
+                        [-h &lt;hidden AP&gt;] [-txp &lt;Tx power for 2.4GHz channels only [0-15]&gt;]
+                        [-c &lt;Wlan channel&gt;] [-l &lt;STA connection limit [1-4]&gt;]
+                        [-r &lt;AP Regulatory Domain [&quot;US&quot; &quot;JP&quot; &quot;00&quot;]&gt;]
+                        [-w &lt;SAE PWE type: 0=hunting-and-pecking, 1=hash-to-element, 2=both&gt;]
+                        [-a &lt;SAE anti clogging threshold: DEFAULT, ALWAYS, LOW&gt;]
+                        [-b &lt;Transition disable: 0=Default, 1=Enabled&gt;]
+
+Description:
+        Role up device as AP.
+        Security types: [OPEN, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3]
+        Note: CC350X devices do not support 5GHz, therefore choosing a 5GHz operating channel will fail.
+
+        -t      Type of security (security type = [OPEN, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3])
+        -w      SAE PWE Type (0=hunting-and-pecking, 1=hash-to-element, 2=both)
+        -a      SAE anti clogging threshold (DEFAULT, ALWAYS, LOW)
+        -b      Transition disable (0=Default, 1=Enabled)
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>wlan_ap_role_up -s &quot;MyNetwork&quot; -t WPA2 -p &quot;password&quot; -c 6</code></pre>
+<hr />
+<h4 id="wlan_ap_role_down"><strong>wlan_ap_role_down</strong></h4>
+<p>This command removes and stops the Access Point role on the device.</p>
+<pre><code>Usage:
+        wlan_ap_role_down [-help]
+
+Description:
+        Role down AP device.</code></pre>
+<hr />
 <h4 id="wlan_scan"><strong>wlan_scan</strong></h4>
 <p>This command allows a user to retrieve scan results from the network processor.</p>
 <pre><code>Usage: 
-  scan [-help] [-n &lt;number of APs to display&gt;]
+  wlan_scan [-help] [-n &lt;number of APs to display&gt;]
 
   -n        Maximum number of scan results to show
   -help     Display this help.</code></pre>
 <p>Once the <strong>wlan_scan</strong> command has successfully completed, an event <code>WLAN_EVENT_SCAN_RESULT</code> will be triggered and the available devices will be printed to the UART console. Please refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</p>
 <p>Example:</p>
-<pre><code>scan -n 20
+<pre><code>wlan_scan -n 20
 
 ---------------------------------------------------------------------------------------------
     |               SSID               |       BSSID       | RSSI  | Ch | Hidden | Security |
@@ -168,15 +282,21 @@ Description:
 <p>This command allows a user to connect to an AP. It receives the following parameters:</p>
 <ol>
 <li>SSID (Optional): The requested SSID of the AP. The application expects this parameter to be inside quotation marks (&quot; “).</li>
-<li>Security Type: The device supports four modes: <code>[OPEN, WPA2, WPA3, WPS]</code>.</li>
+<li>Security Type: Supports modes are: <code>[OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPS, WPA2/WPA3]</code>.</li>
 <li>Password (Optional): The application expects this parameter to be inside quotation marks (&quot; “).</li>
 </ol>
-<p>When one of the <code>[OPEN, WPA2, WPA3]</code> <em>Security Types</em> is given, the connection is based on the <em>SSID</em> parameter, and hence this parameter is required. However, for <code>[WPS]</code>, the <em>SSID</em> parameter is not allowed.</p>
+<p>When one of the <code>[OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3]</code> <em>Security Types</em> is given, the connection is based on the <em>SSID</em> parameter, and hence this parameter is required. However, for <code>[WPS]</code>, the <em>SSID</em> parameter is not allowed.</p>
 <pre><code>Usage: 
   wlan_connect [-help] [-s &lt;&quot;ssid name&quot;&gt;] [-t &lt;security type&gt;] [-p &lt;&quot;password&quot;&gt;]
+               [-ip &lt;static ip&gt;] [-gw &lt;static gw&gt;] [-dns &lt;static dns&gt;]
+               [-e &lt;enterprise EAP method: TLS, TTLS_MSCHAP, PEAP0_MSCHAP&gt;]
+               [-i &lt;enterprise identity&gt;] [-k &lt;enterprise TLS key size, e.g. 192&gt;]
+
     -s      SSID
-    -t      Type of security (security type = [OPEN, WPA/WPA2])
-    -p      Password in ASCII characters </code></pre>
+    -t      Type of security (security type = [OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPS, WPA2/WPA3])
+    -p      Password in ASCII characters (pin in case of WPS)
+    -e      Enterprise connection EAP method
+    -i      Enterprise identity</code></pre>
 <blockquote>
 <p><strong>Note:</strong> This command is blocking, and the timeout is configured by <code>WLAN_EVENT_TOUT</code> in <code>wlan_cmd.c</code>. For WPS, the timeout is two minutes.</p>
 </blockquote>
@@ -192,23 +312,27 @@ Description:
 <hr />
 <h4 id="wlan_disconnect"><strong>wlan_disconnect</strong></h4>
 <p>This command allows a user to disconnect from an AP, if currently connected to one.</p>
+<pre><code>Usage:
+        wlan_disconnect [-help]
+
+Description:
+        Disconnect from the currently connected AP.</code></pre>
 <ul>
-<li>Expected Host Events:<br />
-<code>WLAN_EVENT_DISCONNECT</code>: This event also prints details about the disconnected AP, such as SSID and BSSID. Refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</li>
+<li>Expected Host Events: <code>WLAN_EVENT_DISCONNECT</code>: This event also prints details about the disconnected AP, such as SSID and BSSID. Refer to <code>WlanEventHandler()</code> implemented in <code>network_terminal.c</code> for more info.</li>
 </ul>
 <hr />
 <h4 id="wlan_get_mac"><strong>wlan_get_mac</strong></h4>
 <p>This command allows a user to get the device MAC address. It receives the following parameter:</p>
 <ol>
-<li>Role Type: There are two role types available: 0 for Station and 2 for Access Point (AP).</li>
+<li>Role Type: There are three role types available: 0 for Station, 2 for Access Point (AP), 3 for Device.</li>
 </ol>
 <pre><code>Usage: 
         wlan_get_mac [-help] [-i &lt;RoleType&gt;] 
 
 Description:
-        Get MacAddress. role type 0 - STA , 2 - AP 
+        Get MacAddress. role type 0 - STA , 2 - AP, 3 - Device
 
-        -i      RoleType, if role type does not exists error is return
+        -i      RoleType, if role type not found then error is returned
 
         -help   Display this help</code></pre>
 <blockquote>
@@ -236,11 +360,11 @@ Description:
         -m      MacAddress, if MAC address is not valid, an error is returned
 
         -help   Display this help</code></pre>
-<p>To apply the changes, you must run <code>wlan_sta_role_down</code> and then <code>wlan_sta_role_up</code>.</p>
+<blockquote>
+<p><strong>Note</strong>: The MAC address must be set before the role is brought up. If the role is already up, use wlan_sta_role_down first, then wlan_set_mac, then wlan_sta_role_up.</p>
+</blockquote>
 <p>Example:</p>
 <pre><code>wlan_set_mac -i 0 -m AA:BB:CC:DD:EE:FF
-
-wlan_sta_role_down
 
 wlan_sta_role_up
 
@@ -250,10 +374,13 @@ wlan_get_mac -i 0
 <hr />
 <h4 id="wlan_get_ps"><strong>wlan_get_ps</strong></h4>
 <p>This command allows a user to get the current power save mode.</p>
-<pre><code>Usage: 
-        wlan_get_ps [-help] 
+<pre><code>Usage:
+        wlan_get_ps [-help]
+
 Description:
-        Get current power save mode. 0 - Auto PS , 1 - Active mode, 2 - power save mode</code></pre>
+        Get current power save mode. 0 - Auto PS, 1 - Active mode, 2 - Power Save mode
+
+        -help   Display this help</code></pre>
 <blockquote>
 <p><strong>Note:</strong> The device starts in Active mode.</p>
 </blockquote>
@@ -269,116 +396,678 @@ Description:
 Description:
         Set power save mode. 0 - Auto PS , 1 - Active mode, 2 - power save mode
 
-        -m      Mode, if device not started error is return
+        -m      Mode, if device not started error is returned
 
         -help   Display this help</code></pre>
 <hr />
-<h2 id="socket-commands">Socket Commands</h2>
-<ul>
-<li><a href="#send">send</a></li>
-<li><a href="#recv">recv</a></li>
-<li><a href="#socket_show">socket_show</a></li>
-<li><a href="#kill">kill</a></li>
-</ul>
-<hr />
-<h4 id="send"><strong>send</strong></h4>
-<p>This command demonstrates sending data in packets using the networking API. It allows a user to open UDP or TCP <strong>client</strong> sockets and send packets in various configurations. It receives the following parameters:</p>
-<ol>
-<li>Protocol: TCP/UDP</li>
-<li>Port Number</li>
-<li>Blocking vs. Non-blocking option</li>
-<li>Number of packets to transmit. Setting this to 0 will send infinite packets</li>
-</ol>
+<h4 id="wlan_set_pm"><strong>wlan_set_pm</strong></h4>
+<p>This command sets the device’s power management mode.</p>
 <pre><code>Usage:
-        send [-help] [-c &lt;server ip address&gt;] [-u] [-p &lt;port number&gt;]  [-nb] [-n &lt;number of packets&gt;]  
-        
-        -c      Run in client mode and connect to mentioned server - IP should be in '.' format 
-        -u      Use UDP rather than TCP
-        -p      Port number to send/receive data (Default is 5001)
-        -nb     Create non-blocking socket rather than blocking
-        -n      Number of packets to transmit (Default is 1000)
-        -V      Use IPv6 rather than IPv4</code></pre>
-<p>Once all packets have been sent or the timeout has expired (see <code>RECEIVE_TIMEOUT</code> in <code>network_terminal.h</code>), the application will return to the main menu.</p>
-<p>Example:</p>
-<pre><code>send -c 10.0.0.10 -u -p 5001 -n 1500</code></pre>
-<p><strong>Infinity option</strong> - Setting the number of packets to 0:</p>
-<ul>
-<li>This option will initiate a new task.</li>
-<li>The task will continuously send packets in an infinite loop.</li>
-<li>For more details on managing this option, refer to the <a href="#kill">kill</a> and <a href="#socket_show">socket_show</a> commands.</li>
-</ul>
-<hr />
-<h4 id="recv"><strong>recv</strong></h4>
-<p>This command demonstrates the reception of data in packets using the networking API.</p>
-<p>This command allows a user to open UDP or TCP <strong>server</strong> sockets and receive packets in various configurations. It receives the following parameters:</p>
-<ol>
-<li>Protocol: TCP/UDP</li>
-<li>Port Number</li>
-<li>Blocking vs. Non-blocking option</li>
-<li>Number of packets to transmit. Setting this to 0 will receive infinite packets</li>
-</ol>
-<pre><code>Usage:
-        recv [-help] [-u] [-p &lt;port number&gt;] [-nb] [-n &lt;number of packets&gt;]          
-
-        -u      Use UDP rather than TCP
-        -p      Port number to send/receive data (Default is 5001)
-        -nb     Create non-blocking socket rather than blocking
-        -n      Number of packets to transmit (Default is 1000)
-        -V      Use IPv6 rather than IPv4</code></pre>
-<p>Once all packets have been received or the timeout has expired (refer to <code>RECEIVE_TIMEOUT</code> in <code>network_terminal.h</code>), the application will return to the main menu.</p>
-<p>Example:</p>
-<pre><code>recv -u -p 5001 -n 1500</code></pre>
-<p><strong>Infinity option</strong> - Setting the number of packets to 0:</p>
-<ul>
-<li>This option will initiate a new task.</li>
-<li>The task will continuously receive packets in an infinite loop.</li>
-<li>For more details on managing this option, refer to the <a href="#kill">kill</a> and <a href="#socket_show">socket_show</a> commands.</li>
-</ul>
-<hr />
-<h4 id="socket_show"><strong>socket_show</strong></h4>
-<p>This command allows the user to display the currently running socket processes.</p>
-<ul>
-<li>Each process has a unique ID and a descriptive name.</li>
-</ul>
-<pre><code>Example:
-socket_show 
-
-         Process running: 
-
-        ---id 0          UDP client
-        ---id 1          UDP server
-</code></pre>
-<hr />
-<h4 id="kill"><strong>kill</strong></h4>
-<p>This command allows a user to close specific running socket processes by their ID.</p>
-<pre><code>Usage:
-        kill [-help] [-i &lt;id&gt;]
+        wlan_set_pm [-help] [-m &lt;PowerManagementMode&gt;]
 
 Description:
-        kill available running process by id        </code></pre>
-<pre><code>Example:
+        Set power management mode:
+                0 - Always active mode
+                1 - Power down mode (light / fast sleep)
+                2 - ELP mode (Deep / Max sleep)
 
-kill -i 0
-kill -i 1</code></pre>
+        -m      Mode, if device not started error is returned
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_set_lsi"><strong>wlan_set_LSI</strong></h4>
+<p>This command sets the Long Sleep Interval, allowing the STA to wake up every N DTIMs.</p>
+<pre><code>Usage:
+        wlan_set_LSI [-help] [-n &lt;number of DTIMs [1-10]&gt;]
+
+Description:
+        Set Long Sleep Interval, allow STA to wake up every N DTIMs
+
+        -n      Number of DTIMs to wake upon
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_get_fw_ver"><strong>wlan_get_fw_ver</strong></h4>
+<p>This command retrieves the firmware and PHY version from the device.</p>
+<pre><code>Usage:
+        wlan_get_fw_ver [-help]
+
+Description:
+        Get fw and phy version from the device</code></pre>
+<hr />
+<h4 id="wlan_set_early_term"><strong>wlan_set_early_term</strong></h4>
+<p>This command sets the connection scan early termination setting.</p>
+<pre><code>Usage:
+        wlan_set_early_term [-help] [-e &lt;EarlyTermSetting&gt;]
+
+Description:
+        Set connection scan early termination setting. 0 - Disabled, 1 - Enabled
+
+        -e      Early termination setting (0=Disabled, 1=Enabled)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_get_early_term"><strong>wlan_get_early_term</strong></h4>
+<p>This command retrieves the current connection scan early termination setting.</p>
+<pre><code>Usage:
+        wlan_get_early_term [-help]
+
+Description:
+        Get current connection scan early termination setting. 0 - Disabled, 1 - Enabled</code></pre>
+<hr />
+<h4 id="set_peer_aging"><strong>set_peer_aging</strong></h4>
+<p>This command configures the timeout for receiving the peer aging async event. This event is raised when a connected STA has been inactive for the configured duration.</p>
+<pre><code>Usage:
+        set_peer_aging [-help] [-t &lt;Peer Aging timeout, milliseconds; 0 to stop&gt;]
+
+Description:
+        Configure timeout for getting Peer aging async event.
+
+        -t      Peer aging timeout in milliseconds (0 to disable)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="vend_ie_add"><strong>vend_IE_add</strong></h4>
+<p>This command adds an example vendor IE (Information Element) to the vendor IE list.</p>
+<pre><code>Usage:
+        vend_IE_add [-help]
+
+Description:
+        Add example vendor IE to the vendor IE list.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="vend_ie_remove"><strong>vend_IE_remove</strong></h4>
+<p>This command removes the example vendor IE from the vendor IE list.</p>
+<pre><code>Usage:
+        vend_IE_remove [-help]
+
+Description:
+        Remove the example vendor IE from the vendor IE list.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="start_ap_wps"><strong>start_ap_wps</strong></h4>
+<p>This command starts a WPS session on the AP. It supports Push Button Configuration (PBC) and PIN methods.</p>
+<pre><code>Usage:
+        start_ap_wps [-help] [-w &lt;wps_method [0 1]&gt; 0=PBC 1=PIN] [-p &lt;pin_code&gt;]
+
+Description:
+        Start an AP WPS session
+
+        -w      WPS method (0=PBC, 1=PIN)
+        -p      8-digit PIN code, required for WPS PIN method
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>start_ap_wps -w 0
+start_ap_wps -w 1 -p 12345678</code></pre>
+<hr />
+<h4 id="wlan_set_if_ip"><strong>wlan_set_if_ip</strong></h4>
+<p>This command sets the IP configuration for a given network interface (STA or AP).</p>
+<pre><code>Usage:
+        wlan_set_if_ip [-help] [-i &lt;RoleType&gt;] [-ip &lt;IP Mode&gt;] [-c &lt;ip address&gt;]
+                       [-v &lt;Netmask&gt;] [-gw &lt;gw&gt;]
+
+Description:
+        role type: 0 - STA, 2 - AP
+        IP Mode:   0 - DHCP, 1 - STATIC</code></pre>
+<p>Example:</p>
+<pre><code>wlan_set_if_ip -i 0 -ip 1 -c 192.168.1.100 -v 255.255.255.0 -gw 192.168.1.1</code></pre>
+<hr />
+<h4 id="wlan_get_if_ip"><strong>wlan_get_if_ip</strong></h4>
+<p>This command retrieves the current IP configuration for a given network interface.</p>
+<pre><code>Usage:
+        wlan_get_if_ip [-help] [-i &lt;RoleType&gt;]
+
+Description:
+        Get IP configuration for a network interface.
+        Role type: 0 - STA, 2 - AP
+
+        -i      Role type (0=STA, 2=AP)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_set_dhcp"><strong>wlan_set_dhcp</strong></h4>
+<p>This command configures the DHCP server parameters for the AP interface.</p>
+<pre><code>Usage:
+        wlan_set_dhcp [-help] [-t &lt;Lease Time&gt;] [-s &lt;IP Start Address&gt;] [-e &lt;IP End Address&gt;]
+
+Description:
+        Set DHCP server parameters.
+        Lease Time must be greater than 0.
+        The range must not include the AP's IP address.
+        The range must be in the same subnet as the AP.
+
+        -t      Lease time in seconds
+
+        -s      IP address range start
+
+        -e      IP address range end
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_get_dhcp"><strong>wlan_get_dhcp</strong></h4>
+<p>This command retrieves the current DHCP server configuration.</p>
+<pre><code>Usage:
+        wlan_get_dhcp [-help]
+
+Description:
+        Get current DHCP server configuration: Lease Time, IP Start Address, IP End Address.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_set_con_policy"><strong>wlan_set_con_policy</strong></h4>
+<p>This command sets the WLAN connection policy, controlling auto-connect and fast-connect behavior.</p>
+<pre><code>Usage:
+        wlan_set_con_policy [-help] [-a &lt;Auto connect&gt;] [-f &lt;Fast Connect&gt;] [-p &lt;fast persistent&gt;]
+
+Description:
+        Connection Policy Set.
+
+        -a      1 - Auto connect enable
+        -f      1 - Fast connect enable
+        -p      1 - Fast connect persistent enable
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_get_con_policy"><strong>wlan_get_con_policy</strong></h4>
+<p>This command retrieves the current WLAN connection policy settings.</p>
+<pre><code>Usage:
+        wlan_get_con_policy [-help]
+
+Description:
+        Get current WLAN connection policy settings.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_add_profile"><strong>wlan_add_profile</strong></h4>
+<p>This command adds a WLAN connection profile. Profiles can be used later to connect automatically or manually.</p>
+<pre><code>Usage:
+        wlan_add_profile [-help] [-s &lt;&quot;ssid name&quot;&gt;] [-t &lt;security type&gt;] [-p &lt;&quot;password&quot;&gt;]
+                         [-ent &lt;enterprise user name&gt;] [-pr &lt;priority&gt;] [-h &lt;hidden AP&gt;]
+
+Description:
+        Add Profile.
+
+        -s      SSID
+        -t      Type of security (security type = [OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3])
+        -p      Password in ASCII characters
+        -pr     0 - 15 priority
+        -h      Scan SSID: Hidden - 1, Wildcard - 0
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_del_profile"><strong>wlan_del_profile</strong></h4>
+<p>This command deletes a stored WLAN profile by index.</p>
+<pre><code>Usage:
+        wlan_del_profile [-help] [-i &lt;ProfileIndex&gt;]
+
+Description:
+        Delete Profile.
+
+        -i      Profile index</code></pre>
+<hr />
+<h4 id="wlan_get_profile"><strong>wlan_get_profile</strong></h4>
+<p>This command retrieves the stored information for a WLAN profile by index.</p>
+<pre><code>Usage:
+        wlan_get_profile [-help] [-i &lt;ProfileIndex&gt;]
+
+Description:
+        Get stored WLAN profile information.
+
+        -i      Profile index
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_profile_connect"><strong>wlan_profile_connect</strong></h4>
+<p>This command triggers a connection using a stored WLAN profile.</p>
+<pre><code>Usage:
+        wlan_profile_connect [-help] [-i &lt;ProfileIndex&gt;]
+
+Description:
+        Connect using a stored WLAN profile.
+
+        -i      Profile index
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="wlan_set_dwell_time"><strong>wlan_set_dwell_time</strong></h4>
+<p>This command sets the scan dwell time parameters for active and passive scanning.</p>
+<pre><code>Usage:
+        wlan_set_dwell_time [-help]
+                            [-min_dwell_active &lt;min dwell msecs&gt;]
+                            [-max_dwell_active &lt;max dwell msecs&gt;]
+                            [-min_dwell_passive &lt;min dwell msecs&gt;]
+                            [-max_dwell_passive &lt;max dwell msecs&gt;]
+                            [-dwell_dfs_passive &lt;dwell msecs&gt;]
+
+Description:
+        Set scan dwell time parameters for active and passive scanning.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="set_cstm_reg_domain"><strong>set_cstm_reg_domain</strong></h4>
+<p>This command sets a custom regulatory domain rule in the WLAN regulatory domain database. Up to 7 rules can be applied.</p>
+<pre><code>Usage:
+        set_cstm_reg_domain [-help] [-i &lt;index&gt;] [-b &lt;band&gt;] [-p &lt;power&gt;] [-d &lt;dfs&gt;]
+                            [-n &lt;num_of_channels&gt;] [-bm &lt;channels_bitmap&gt;] [-r]
+
+Description:
+        Set a regulatory domain rule to the WLAN regulatory domain DB.
+        A rule is a set of adjacent channels identified by a minimum channel,
+        maximum channel, and leaps of 20 MHz between them.
+        Note: Only 7 rules can be applied.
+
+        -i      Rule index. Range is [0,6]. Mandatory
+        -b      Rule band. 0 for 2.4 GHz, 1 for 5 GHz. Mandatory
+        -p      Max TX power. Up to 21 dBm. Mandatory
+        -d      DFS. Specifies whether the channels are DFS channels. Non-DFS is default
+        -n      Number of channels in rule. Max is 32. Mandatory
+        -bm     Bitmap (hex format) representing the channels in the rule.
+                Starting from the LSB, each bit represents a channel in leaps
+                of 20 MHz bandwidth. Mandatory
+        -r      Reset rule entry at given rule index
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="get_cstm_reg_domain"><strong>get_cstm_reg_domain</strong></h4>
+<p>This command retrieves a custom regulatory domain rule from the WLAN regulatory domain database.</p>
+<pre><code>Usage:
+        get_cstm_reg_domain [-help] [-i &lt;index&gt;]
+
+Description:
+        Get a regulatory domain rule from the WLAN regulatory domain DB.
+        Returns a structure filled with the rule's content.
+
+        -i      Rule index to retrieve. Range is [0,6]
+
+        -help   Display this help</code></pre>
+<hr />
+<h2 id="network-commands">Network Commands</h2>
+<ul>
+<li><a href="#ping">ping</a></li>
+<li><a href="#ping_stop">ping_stop</a></li>
+<li><a href="#iperf">iperf</a></li>
+<li><a href="#iperf_stop">iperf_stop</a></li>
+<li><a href="#sntp_config_servers">sntp_config_servers</a></li>
+<li><a href="#sntp_update">sntp_update</a></li>
+</ul>
+<hr />
+<h4 id="ping"><strong>ping</strong></h4>
+<p>This command starts a ping session to a target IP address.</p>
+<pre><code>Usage:
+        ping [-help] &lt;target_ip&gt; [-c &lt;count&gt;] [-i &lt;interval&gt;] [-s &lt;data_size&gt;] [-I &lt;source_address&gt;]
+
+Description:
+        Start a ping session. Target IP must be the first argument.
+        In order to stop, run &quot;ping_stop&quot; with the ping session id.
+
+        -c      Stop after sending count ECHO_REQUEST packets.
+                Default is 10 packets. Use 0 for infinite count.
+
+        -i      Wait interval milliseconds between sending each packet.
+                Default is 1000 ms. Range: 100 - 120,000 ms.
+
+        -s      Number of data bytes to be sent.
+                Default is 56 (64 ICMP bytes including 8-byte header).
+                Max is 1452 bytes.
+
+        -I      Set source address to specified interface address (numeric IP format).
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="ping_stop"><strong>ping_stop</strong></h4>
+<p>This command stops a running ping session.</p>
+<pre><code>Usage:
+        ping_stop [-help] [-i &lt;session_id&gt;]
+
+Description:
+        Stop a running ping session.
+
+        -i      Session ID to stop (0 to list all active sessions)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="iperf"><strong>iperf</strong></h4>
+<p>This command runs an iperf throughput test. It supports both TCP and UDP, client and server modes.</p>
+<pre><code>Usage:
+        iperf [-help] [-s] [-c &lt;server ip address&gt;] [-p &lt;port number&gt;]
+              [-u] [-i &lt;interval (sec)&gt;] [-t &lt;time in sec; &gt;99999 = endless&gt;]
+              [-b &lt;max UDP bandwidth (Mbps); 0=no limit&gt;] [-B &lt;server ip&gt;]
+              [-l &lt;packet length (bytes)&gt;]
+
+Description:
+        Send/receive iperf packets over network.
+
+        -s      Run in server mode
+        -c      Run in client mode and connect to the specified server IP
+        -p      Port number (default: 5001)
+        -u      Use UDP rather than TCP
+        -i      Report interval in seconds
+        -t      Duration to run in seconds (&gt;99999 for endless)
+        -b      Max UDP client bandwidth in Mbps (0 = no limit)
+        -B      Bind server to a specific local IP
+        -l      Packet length in bytes</code></pre>
+<p>Example:</p>
+<pre><code>iperf -s -u -p 5001
+iperf -c 192.168.1.10 -u -p 5001 -t 10</code></pre>
+<hr />
+<h4 id="iperf_stop"><strong>iperf_stop</strong></h4>
+<p>This command stops a running iperf process.</p>
+<pre><code>Usage:
+        iperf_stop [-help] [-n &lt;process number&gt;]
+
+Description:
+        Stop a running iperf process.
+
+        -n      Process ID (0 to list all active processes)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="sntp_config_servers"><strong>sntp_config_servers</strong></h4>
+<p>This command configures up to three SNTP server IP addresses used for time synchronization.</p>
+<pre><code>Usage:
+        sntp_config_servers [-help] [-s &lt;server ip&gt;]
+
+Description:
+        Configure NTP servers. Up to 3 servers can be specified.
+
+        -s      Server IP address (can be specified up to 3 times)
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>sntp_config_servers -s 10.167.188.21 -s 219.239.35.0</code></pre>
+<hr />
+<h4 id="sntp_update"><strong>sntp_update</strong></h4>
+<p>This command triggers an immediate SNTP time synchronization using the configured servers.</p>
+<pre><code>Usage:
+        sntp_update [-help]
+
+Description:
+        Trigger SNTP time synchronization from configured servers.
+
+        -help   Display this help</code></pre>
+<hr />
+<h2 id="device-commands">Device Commands</h2>
+<ul>
+<li><a href="#set_date_time">set_date_time</a></li>
+<li><a href="#get_date_time">get_date_time</a></li>
+</ul>
+<hr />
+<h4 id="set_date_time"><strong>set_date_time</strong></h4>
+<p>This command manually sets the current date and time on the device.</p>
+<pre><code>Usage:
+        set_date_time [-help] [-t &lt;yyyy-mm-ddThh:mm:ss&gt;]
+
+Description:
+        Set current date and time.
+
+        -t      Date and time in ISO 8601 format (e.g. 2024-06-15T14:30:00)</code></pre>
+<p>Example:</p>
+<pre><code>set_date_time -t 2024-06-15T14:30:00</code></pre>
+<hr />
+<h4 id="get_date_time"><strong>get_date_time</strong></h4>
+<p>This command retrieves the current date and time from the device.</p>
+<pre><code>Usage:
+        get_date_time [-help]
+
+Description:
+        Get current date and time from the device.
+
+        -help   Display this help</code></pre>
+<hr />
+<h2 id="p2p-commands">P2P Commands</h2>
+<ul>
+<li><a href="#p2p_role_up">p2p_role_up</a></li>
+<li><a href="#p2p_role_down">p2p_role_down</a></li>
+<li><a href="#p2p_find">p2p_find</a></li>
+<li><a href="#p2p_stop_find">p2p_stop_find</a></li>
+<li><a href="#p2p_connect">p2p_connect</a></li>
+<li><a href="#p2p_group_remove">p2p_group_remove</a></li>
+<li><a href="#p2p_set_channel">p2p_set_channel</a></li>
+<li><a href="#p2p_get_channel">p2p_get_channel</a></li>
+<li><a href="#p2p_listen">p2p_listen</a></li>
+<li><a href="#p2p_cancel">p2p_cancel</a></li>
+</ul>
+<hr />
+<h4 id="p2p_role_up"><strong>p2p_role_up</strong></h4>
+<p>This command starts the device in Wi-Fi Direct (P2P) device role.</p>
+<pre><code>Usage:
+        p2p_role_up [-help] [-r &lt;AP Regulatory Domain [&quot;US&quot; &quot;JP&quot; &quot;00&quot;]&gt;]
+                    [-c &lt;oper channel&gt;] [-o &lt;oper reg class&gt;]
+                    [-s &lt;listen channel&gt;] [-m &lt;listen reg class&gt;]
+                    [-i &lt;Go intent [0-15]&gt;]
+
+Description:
+        P2P Role up.
+
+        -i      GO intent: 0 - 15
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_role_down"><strong>p2p_role_down</strong></h4>
+<p>This command stops the Wi-Fi Direct (P2P) device role.</p>
+<pre><code>Usage:
+        p2p_role_down [-help]
+
+Description:
+        Stop the Wi-Fi Direct (P2P) device role.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_find"><strong>p2p_find</strong></h4>
+<p>This command starts a P2P device discovery scan to find nearby Wi-Fi Direct peers.</p>
+<pre><code>Usage:
+        p2p_find [-help] [-n &lt;number of devices to scan&gt;]
+
+Description:
+        Scan for available P2P devices.
+
+        -n      Maximum number of devices to discover
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_stop_find"><strong>p2p_stop_find</strong></h4>
+<p>This command stops an ongoing P2P device discovery scan.</p>
+<pre><code>Usage:
+        p2p_stop_find [-help]
+
+Description:
+        Stop P2P device discovery scan.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_connect"><strong>p2p_connect</strong></h4>
+<p>This command initiates a connection to a discovered P2P peer device.</p>
+<pre><code>Usage:
+        p2p_connect [-help]
+                    [-m &lt;peer_macAddress&gt;]
+                    [-w &lt;wps_method [0/1/2]&gt;]
+                    [-p &quot;&lt;pin_code&gt;&quot;]
+                    [-t &lt;timeout in seconds&gt;]
+
+Description:
+        P2P connect.
+
+        -w      WPS Method: 0=PBC, 1=PIN DISPLAY, 2=PIN keypad
+        -p      PIN: 8 digits
+        -t      Timeout in seconds
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>p2p_connect -m AA:BB:CC:DD:EE:FF -w 0
+p2p_connect -m AA:BB:CC:DD:EE:FF -w 1 -p 12345678 -t 60</code></pre>
+<hr />
+<h4 id="p2p_group_remove"><strong>p2p_group_remove</strong></h4>
+<p>This command removes (tears down) the current P2P group.</p>
+<pre><code>Usage:
+        p2p_group_remove [-help]
+
+Description:
+        Remove the current P2P group.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_set_channel"><strong>p2p_set_channel</strong></h4>
+<p>This command sets the P2P operating and listen channels.</p>
+<pre><code>Usage:
+        p2p_set_channel [-help] [-c &lt;oper channel&gt;] [-o &lt;oper reg class&gt;]
+                        [-s &lt;listen channel&gt;] [-m &lt;listen reg class&gt;] [-i &lt;Go intent&gt;]
+
+Description:
+        Set P2P operating and listen channels.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_get_channel"><strong>p2p_get_channel</strong></h4>
+<p>This command retrieves the current P2P operating and listen channel configuration.</p>
+<pre><code>Usage:
+        p2p_get_channel [-help]
+
+Description:
+        Get P2P operating and listen channel configuration.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_listen"><strong>p2p_listen</strong></h4>
+<p>This command puts the device into P2P listen mode, making it discoverable to other P2P devices.</p>
+<pre><code>Usage:
+        p2p_listen [-help]
+
+Description:
+        Put device into P2P listen mode to be discoverable.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="p2p_cancel"><strong>p2p_cancel</strong></h4>
+<p>This command cancels an ongoing P2P connection or group formation attempt.</p>
+<pre><code>Usage:
+        p2p_cancel [-help]
+
+Description:
+        Cancel ongoing P2P connection or group formation.
+
+        -help   Display this help</code></pre>
+<hr />
+<h2 id="csi-commands">CSI Commands</h2>
+<p>Channel State Information (CSI) provides physical layer channel measurements that can be used for sensing applications.</p>
+<ul>
+<li><a href="#csi_enable">csi_enable</a></li>
+<li><a href="#csi_stop">csi_stop</a></li>
+<li><a href="#csi_disable">csi_disable</a></li>
+<li><a href="#csi_get_results">csi_get_results</a></li>
+<li><a href="#csi_config">csi_config</a></li>
+<li><a href="#csi_set_mac">csi_set_mac</a></li>
+</ul>
+<hr />
+<h4 id="csi_enable"><strong>csi_enable</strong></h4>
+<p>This command initializes and enables CSI data capture.</p>
+<pre><code>Usage:
+        csi_enable [-help]
+
+Description:
+        Initialize and enable CSI data capture.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="csi_stop"><strong>csi_stop</strong></h4>
+<p>This command stops ongoing CSI data capture without disabling the CSI subsystem.</p>
+<pre><code>Usage:
+        csi_stop [-help]
+
+Description:
+        Stop ongoing CSI data capture.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="csi_disable"><strong>csi_disable</strong></h4>
+<p>This command disables and de-initializes the CSI subsystem.</p>
+<pre><code>Usage:
+        csi_disable [-help]
+
+Description:
+        Disable and de-initialize the CSI subsystem.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="csi_get_results"><strong>csi_get_results</strong></h4>
+<p>This command retrieves the captured CSI data results.</p>
+<pre><code>Usage:
+        csi_get_results [-help]
+
+Description:
+        Retrieve captured CSI data results.
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="csi_config"><strong>csi_config</strong></h4>
+<p>This command configures CSI solicitation settings, including enabling solicited CSI and the solicitation period.</p>
+<pre><code>Usage:
+        csi_config [-help] [-s &lt;enable Solicitation [0/1]&gt;] [-p &lt;Period time&gt;]
+
+Description:
+        Configure CSI solicitation settings.
+
+        -s      Enable solicited CSI (0=disabled, 1=enabled)
+
+        -p      CSI solicitation period in time units
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="csi_set_mac"><strong>csi_set_mac</strong></h4>
+<p>This command adds or removes a MAC address from the CSI solicitation target list.</p>
+<pre><code>Usage:
+        csi_set_mac [-help] [-a &lt;add/remove [0/1]&gt;] [-m &lt;&quot;MAC ADDRESS&quot;&gt;]
+
+Description:
+        Add or remove MAC address from CSI solicitation target list.
+
+        -a      Action (0=remove, 1=add)
+
+        -m      MAC address in format AA:BB:CC:DD:EE:FF
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>csi_set_mac -a 1 -m AA:BB:CC:DD:EE:FF
+csi_set_mac -a 0 -m AA:BB:CC:DD:EE:FF</code></pre>
+<hr />
 <h2 id="ble-commands">BLE commands</h2>
 <ul>
 <li><a href="#ble_start">ble_start</a></li>
-<li><a href="#ble_stop">ble_stop</a></li>
+<li><p><a href="#ble_stop">ble_stop</a></p></li>
 <li><a href="#ble_adv_cfg">ble_adv_cfg</a></li>
-<li><a href="#ble_adv_enable">ble_adv_enable</a></li>
+<li><p><a href="#ble_adv_enable">ble_adv_enable</a></p></li>
 <li><a href="#ble_scan_cfg">ble_scan_cfg</a></li>
-<li><a href="#ble_scan_enable">ble_scan_enable</a></li>
+<li><p><a href="#ble_scan_enable">ble_scan_enable</a></p></li>
 <li><a href="#ble_connect">ble_connect</a></li>
-<li><a href="#ble_disconnect">ble_disconnect</a></li>
+<li><p><a href="#ble_disconnect">ble_disconnect</a></p></li>
 <li><a href="#ble_peers">ble_peers</a></li>
-<li><a href="#ble_test_mode">ble_test_mode</a></li>
+<li><p><a href="#ble_delete_bonds">ble_delete_bonds</a></p></li>
+<li><a href="#ble_get_bd_addr">ble_get_bd_addr</a></li>
+<li><p><a href="#ble_set_bd_addr">ble_set_bd_addr</a></p></li>
+<li><a href="#ble_set_tx_pwr">ble_set_tx_pwr</a></li>
+<li><p><a href="#ble_conn_update">ble_conn_update</a></p></li>
+<li><p><a href="#ble_set_phy">ble_set_phy</a></p></li>
 </ul>
 <hr />
 <h4 id="ble_start"><strong>ble_start</strong></h4>
 <p>This command turns on the BLE controller and host, and initializes the BLE interface.</p>
+<pre><code>Usage:
+        ble_start [-help]
+
+Description:
+        Start BLE controller and host.</code></pre>
 <hr />
 <h4 id="ble_stop"><strong>ble_stop</strong></h4>
 <p>This command stops the BLE controller and host.</p>
+<pre><code>Usage:
+        ble_stop [-help]
+
+Description:
+        Stop BLE controller and host.
+
+        -help   Display this help</code></pre>
 <hr />
 <h4 id="ble_adv_cfg"><strong>ble_adv_cfg</strong></h4>
 <p>This command configures the BLE advertising instance. It receives the following parameters:</p>
@@ -395,7 +1084,9 @@ kill -i 1</code></pre>
 Description:
         Configure a specific advertise instance.
         Can be used with no parameters.
-        Default Parameters: instance 0, extended, 100ms interval, 1M PHY    
+        Default Parameters: instance 0, extended, 100ms interval, 1M PHY
+
+        -help   Display this help
 
 Example:
         ble_adv_cfg
@@ -410,13 +1101,15 @@ Example:
 <li>Set the maximum number of advertising events.</li>
 </ol>
 <pre><code>Usage:
-        ble_adv_enable [-e &lt;enable [0/1]&gt;] [-i &lt;instance&gt;] [-d &lt;duration (10ms units)&gt;] [-m &lt;max events]
+        ble_adv_enable [-e &lt;enable [0/1]&gt;] [-i &lt;instance&gt;] [-d &lt;duration (10ms units)&gt;] [-m &lt;max events&gt;]
 
 Description:
         Enable or disable a specific advertise instance.
         Can be called only after a previous ble_adv_cfg command.
         Can be used with no parameters.
-        Default Parameters: enable with no expiration and max events 0  
+        Default Parameters: enable with no expiration and max events 0
+
+        -help   Display this help
 
 Example:
         ble_adv_enable
@@ -431,12 +1124,14 @@ Example:
 <li>PHY (physical layer) settings.</li>
 </ol>
 <pre><code>Usage:
-        ble_scan_cfg [-i &lt;scan interval (ms)&gt;] [-w &lt;scan window (ms)&gt;] [-p &lt;phy [ 1:1M/4:coded/5:mixed]&gt;]
+        ble_scan_cfg [-i &lt;scan interval (ms)&gt;] [-w &lt;scan window (ms)&gt;] [-p &lt;phy [1:1M/4:coded/5:mixed]&gt;]
 
 Description:
-        Configure BLE scan
+        Configure BLE scan.
         Can be used with no parameters.
-        Default Parameters: Default Parameters: extended 1M PHY, scan interval of 100ms and scan window of 50ms
+        Default Parameters: extended 1M PHY, scan interval of 100ms and scan window of 50ms
+
+        -help   Display this help
 
 Example:
         ble_scan_cfg
@@ -453,22 +1148,24 @@ Example:
         ble_scan_enable [-e &lt;enable [0/1]&gt;] [-f &lt;filter duplicate [0/1/2]&gt;] [-p &lt;period (sec)&gt;]
 
 Description:
-        Enable or disable Ble scan.
+        Enable or disable BLE scan.
         Can be called only after a previous ble_scan_cfg command.
         Can be used with no parameters.
         Default Parameters: enable with scan duration of 3s, scan period 0s and no filter duplicate
+
+        -help   Display this help
 
 Example:
         ble_scan_enable
         ble_scan_enable -e 1 -f 0 -p 0
         ble_scan_enable -e 0
-        
+
 --------------------------------------------------------------
 | ID |        NAME      |    PEER ADDRESS   |  TYPE  |  RSSI |
 --------------------------------------------------------------
 | 0  | Simple Peripheal | A4:10:3E:C8:70:17 | PUBLIC |  -56  |
-| 1  | Simple Central   | A4:2B:83:43:DA:90 | PUBLIC |  -70  | 
-| 2  | Basic Peripheral | C0:03:DE:10:FC:43 | RANDOM |  -62  | 
+| 1  | Simple Central   | A4:2B:83:43:DA:90 | PUBLIC |  -70  |
+| 2  | Basic Peripheral | C0:03:DE:10:FC:43 | RANDOM |  -62  |
 --------------------------------------------------------------</code></pre>
 <hr />
 <h4 id="ble_connect"><strong>ble_connect</strong></h4>
@@ -478,10 +1175,16 @@ Example:
 <li>Address Type: The type of address used by the BLE device. Options are <code>[PUBLIC, RANDOM]</code>.</li>
 </ol>
 <pre><code>Usage:
-        ble_connect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]
+        ble_connect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]&gt;]
 
 Description:
-        Connect to a BLE peer device
+        Connect to a BLE peer device.
+
+        -b      Bluetooth device address
+
+        -t      Address type (PUBLIC or RANDOM)
+
+        -help   Display this help
 
 Example:
         ble_connect -b A4:38:25:11:53:18 -t PUBLIC</code></pre>
@@ -493,28 +1196,36 @@ Example:
 <li>Address Type: The type of address used by the BLE device. Options are <code>[PUBLIC, RANDOM]</code>.</li>
 </ol>
 <pre><code>Usage:
-        ble_disconnect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]
+        ble_disconnect [-b &lt;bd address&gt;] [-t &lt;address type [PUBLIC/RANDOM]&gt;]
 
 Description:
         Disconnect from a BLE peer device.
         Can be used with no parameters.
-        Default action when no parameters is to disconnect all peers
+        Default action when no parameters is to disconnect all peers.
+
+        -b      Bluetooth device address
+
+        -t      Address type (PUBLIC or RANDOM)
+
+        -help   Display this help
 
 Example:
         ble_disconnect
-        ble_disconnect -b A4:38:25:11:53:18 -t PUBLIC</code></pre>
+        ble_disconnect -b A4:38:25:11:53:18</code></pre>
 <hr />
 <h4 id="ble_peers"><strong>ble_peers</strong></h4>
 <p>This command displays the list of all connected BLE peer devices.</p>
 <pre><code>Usage:
-        ble_peers
+        ble_peers [-help]
 
 Description:
-        Display the list of all connected BLE peer devices with their attributes
+        Display the list of all connected BLE peer devices with their attributes.
+
+        -help   Display this help
 
 Example:
         ble_peers
-            
+
 -------------------------------------------------------------
 | Handle |   PEER ADDRESS    |  TYPE  |  OWN ROLE  | BONDED?|
 -------------------------------------------------------------
@@ -523,20 +1234,148 @@ Example:
 | 2      | C0:03:DE:10:FC:43 | RANDOM | PERIPHERAL | NO     |
 -------------------------------------------------------------</code></pre>
 <hr />
-<h4 id="ble_test_mode"><strong>ble_test_mode</strong></h4>
-<p>This command sets the device into test mode (controller only mode). It receives the following parameter:</p>
-<ol>
-<li>Enable or disable test mode.</li>
-</ol>
+<h4 id="ble_delete_bonds"><strong>ble_delete_bonds</strong></h4>
+<p>This command deletes all stored BLE bonding information.</p>
 <pre><code>Usage:
-        ble_test_mode [-e &lt;enable&gt;]
+        ble_delete_bonds [-help]
 
 Description:
-        Enter into a controller only )no host) mode running over UART interface for testing purposes
+        Delete all stored BLE bonding information.
 
-Example:
-        ble_test_mode -e 1
-        ble_test_mode -e 0</code></pre>
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="ble_get_bd_addr"><strong>ble_get_bd_addr</strong></h4>
+<p>This command retrieves the device’s Bluetooth Device Address (BD_ADDR).</p>
+<pre><code>Usage:
+        ble_get_bd_addr [-help] [-t &lt;address type [PUBLIC/RANDOM]&gt;]
+
+Description:
+        Get device's Bluetooth Device Address (BD_ADDR).
+
+        -t      Address type (PUBLIC or RANDOM)
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="ble_set_bd_addr"><strong>ble_set_bd_addr</strong></h4>
+<p>This command sets the device’s Bluetooth Device Address (BD_ADDR).</p>
+<pre><code>Usage:
+        ble_set_bd_addr [-help] [-t &lt;address type [PUBLIC/RANDOM]&gt;] [-m &lt;BD_ADDR&gt;]
+
+Description:
+        Set device's Bluetooth Device Address (BD_ADDR).
+
+        -t      Address type (PUBLIC or RANDOM)
+
+        -m      New BD_ADDR in format AA:BB:CC:DD:EE:FF
+
+        -help   Display this help</code></pre>
+<hr />
+<h4 id="ble_set_tx_pwr"><strong>ble_set_tx_pwr</strong></h4>
+<p>This command sets the BLE transmit power level.</p>
+<pre><code>Usage:
+        ble_set_tx_pwr [-help] [-p &lt;power (dBm): -20, -10, -5, 0, 5, 10, 20&gt;]
+
+Description:
+        Set BLE transmit power level. Value will be rounded down to nearest valid step.
+
+        -p      Power level in dBm (-20, -10, -5, 0, 5, 10, or 20)
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>ble_set_tx_pwr -p 0
+ble_set_tx_pwr -p 10</code></pre>
+<hr />
+<h4 id="ble_conn_update"><strong>ble_conn_update</strong></h4>
+<p>This command updates the connection parameters for an active BLE connection.</p>
+<pre><code>Usage:
+        ble_conn_update [-help] [-h &lt;conn handle&gt;] [-n &lt;interval min (ms)&gt;] [-x &lt;interval max (ms)&gt;]
+                        [-t &lt;supervision timeout (ms)&gt;] [-l &lt;latency&gt;]
+
+Description:
+        Update connection parameters for an active BLE connection.
+        Intervals support decimal values (e.g. 7.5).
+
+        -h      Connection handle
+
+        -n      Minimum interval in milliseconds
+
+        -x      Maximum interval in milliseconds
+
+        -t      Supervision timeout in milliseconds
+
+        -l      Connection latency
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>ble_conn_update -h 0 -n 20 -x 40 -t 1000 -l 0</code></pre>
+<hr />
+<h4 id="ble_set_phy"><strong>ble_set_phy</strong></h4>
+<p>This command sets the preferred PHY for an active BLE connection.</p>
+<pre><code>Usage:
+        ble_set_phy [-help] [-h &lt;conn handle&gt;] [-tx &lt;tx phy mask&gt;] [-rx &lt;rx phy mask&gt;]
+                    [-o &lt;coded phy opts: 0=any, 1=S2, 2=S8&gt;]
+
+Description:
+        Set preferred PHY for an active BLE connection.
+        PHY mask: 1=1M, 2=2M, 4=CODED (combine with +, e.g. 3=1M+2M).
+
+        -h      Connection handle
+
+        -tx     TX PHY mask (1=1M, 2=2M, 4=CODED)
+
+        -rx     RX PHY mask (1=1M, 2=2M, 4=CODED)
+
+        -o      Coded PHY options (0=any, 1=S2, 2=S8)
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>ble_set_phy -h 0 -tx 2 -rx 2
+ble_set_phy -h 0 -tx 4 -rx 4 -o 2</code></pre>
+<hr />
+<h2 id="calibrator">Calibrator</h2>
+<ul>
+<li><a href="#calibrator">calibrator</a></li>
+</ul>
+<hr />
+<h4 id="calibrator-1"><strong>calibrator</strong></h4>
+<p>This command provides a suite of RF calibration and radio testing actions. Each action has its own parameters accessible via <code>-help</code>.</p>
+<pre><code>Usage: 
+        calibrator[-help] [ACTIONS] 
+
+Description:
+        Calibrator - a tool for testing.
+        Supported Calibrator actions:
+                power_mode
+                tune_channel
+                start_tx
+                stop_tx
+                tx_tone_start
+                tx_tone_stop
+                start_rx
+                stop_rx
+                get_rx_stats
+                set_tx_params
+                get_tx_params
+                set_tb_tx
+                rate_override
+                beacon_rssi
+                gi_ltf
+                uplink_mu
+                oper_mode
+                mcs_rate
+                uplink_mu_data
+                psm
+                power_head
+                trans_omi
+                ba_enable
+                la
+                set_manual_calib
+        Use -help with action to get help for a specific action
+
+        -help   Display this help</code></pre>
+<p>Example:</p>
+<pre><code>calibrator start_tx -help
+calibrator tune_channel -ch 6</code></pre>
 <hr />
 <!-- Close div from before_body_template.html -->
 </div>

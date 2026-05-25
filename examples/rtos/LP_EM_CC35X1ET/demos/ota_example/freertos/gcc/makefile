@@ -32,6 +32,9 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/utils/FWU" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/utils/FWU/headers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/utils/FWU/headers/fwu/1.0/psa" \
+    -DMBEDTLS_CONFIG_FILE=\"config-hsm.h\" \
+    -DNVOCMP_SPS_USE_CBC \
+    -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\"config-psa-crypto-hsm.h\" \
     -O3 \
     -DCC35XX \
     -DNVOCMP_POSIX_MUTEX \

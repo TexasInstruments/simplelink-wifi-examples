@@ -24,6 +24,9 @@
             -I${PROJECT_ROOT}/${ConfigName}
             -I${PROJECT_LOC}/atcmd
             -I${PROJECT_LOC}/atcmd/utils
+            -DMBEDTLS_CONFIG_FILE=\&quot;config-hsm.h\&quot;
+            -DNVOCMP_SPS_USE_CBC
+            -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\&quot;config-psa-crypto-hsm.h\&quot;
             -Ofast
             -DCC35XX
             -DNVOCMP_POSIX_MUTEX

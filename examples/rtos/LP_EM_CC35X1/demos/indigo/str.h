@@ -195,13 +195,6 @@ extern const char setLsiUsageStr[];
 extern const char *wlanSetLsiDetailsStr;
 extern const char *wlanSetLsi_n_optionDetailsStr;
 
-#ifdef CC35XX
-extern const char SleepTestStr[];
-extern const char SleepTestUsageStr[];
-extern const char *sleepTestDetailsStr;
-extern const char *sleepTest_t_optionDetailsStr;
-#endif
-
 extern const char wlanStartStr[]      ;
 extern const char wlanStartUsageStr[] ;
 extern const char *wlanStartDetailsStr;

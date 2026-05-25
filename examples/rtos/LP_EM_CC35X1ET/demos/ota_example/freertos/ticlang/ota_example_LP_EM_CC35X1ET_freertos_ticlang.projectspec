@@ -26,6 +26,9 @@
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/utils/FWU
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/utils/FWU/headers
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/utils/FWU/headers/fwu/1.0/psa
+            -DMBEDTLS_CONFIG_FILE=\&quot;config-hsm.h\&quot;
+            -DNVOCMP_SPS_USE_CBC
+            -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\&quot;config-psa-crypto-hsm.h\&quot;
             -Ofast
             -DCC35XX
             -DNVOCMP_POSIX_MUTEX
