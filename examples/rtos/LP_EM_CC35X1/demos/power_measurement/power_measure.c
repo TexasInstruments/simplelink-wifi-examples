@@ -67,6 +67,12 @@
 #include "host/ble_gap.h"
 
 //*****************************************************************************
+// Defines
+//*****************************************************************************
+
+#define BLE_CONN_SETUP_SETTLE_MS    3000
+
+//*****************************************************************************
 // Globals
 //*****************************************************************************
 
@@ -74,6 +80,7 @@ PowerMeasure_AppData PowerMeasure_appData = {0};  /* Initialize all fields to 0 
 uint32_t g_Status = 0;
 static volatile bool g_LwipInitialized = false;
 OsiSyncObj_t bleConnSyncObj = NULL;
+OsiSyncObj_t bleSetupEventSyncObj = NULL;
 
 //*****************************************************************************
 // Static globals
@@ -110,8 +117,13 @@ static void extraGapEventCallback(void *event, void *arg)
     switch (bleGapEvent->type)
     {
         case BLE_GAP_EVENT_CONNECT:
-            /* Signal sync object */
             osi_SyncObjSignal(&bleConnSyncObj);
+            break;
+        case BLE_GAP_EVENT_ADV_COMPLETE:
+        case BLE_GAP_EVENT_CONN_UPDATE:
+        case BLE_GAP_EVENT_PAIRING_COMPLETE:
+        case BLE_GAP_EVENT_ENC_CHANGE:
+            osi_SyncObjSignal(&bleSetupEventSyncObj);
             break;
         default:
             break;
@@ -131,8 +143,11 @@ static void extraGapEventCallback(void *event, void *arg)
 //! \return none
 //!
 //*****************************************************************************
-void NetworkStatusCallback(WlanRole_e roleid, uint32_t address)
+void NetworkStatusCallback(WlanRole_e roleid, uint32_t address, uint32_t local_ipv6[4], uint32_t global_ipv6[4])
 {
+    (void)local_ipv6;  /* suppress unused-parameter warning */
+    (void)global_ipv6; /* suppress unused-parameter warning */
+
     if (roleid == WLAN_ROLE_STA && address != 0)
     {
         SET_STATUS_BIT(g_Status, STATUS_BIT_IP_ACQUIRED);
@@ -750,7 +765,7 @@ int32_t configSimplelinkToUseCase(void)
         {
             /* All Always Connected sub-modes use the same WiFi power configuration */
             /* Enable WiFi power save mode */
-            WlanPowerSave_e psMode = WLAN_STATION_POWER_SAVE_MODE;
+            WlanPowerSave_e psMode = WLAN_STATION_AUTO_PS_MODE;
             ret = Wlan_Set(WLAN_SET_POWER_SAVE, &psMode);
             if (ret < 0)
             {
@@ -941,13 +956,8 @@ void sleepMode(void)
     vTaskDelay(pdMS_TO_TICKS(100)); // Allow UART to flush
     DeinitTerm();
 
-    /* Stay in low power mode indefinitely */
-    /* vTaskDelay() blocks the task, allowing FreeRTOS tickless idle */
-    /* Power policy will transition CPU to SLEEP/LPDS automatically */
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(SLEEP_IDLE_TIME_MSEC));
-    }
+    /* Suspend this task indefinitely - only the WiFi IRQ task runs, CPU enters tickless idle */
+    vTaskSuspend(NULL);
 }
 
 //*****************************************************************************
@@ -1049,12 +1059,8 @@ void alwaysConnected(void)
             vTaskDelay(pdMS_TO_TICKS(100)); // Allow UART to flush
             DeinitTerm();
 
-            /* CPU sleeps via vTaskDelay(), wakes for LWIP timer events */
-            /* LWIP remains active and processes network traffic */
-            while (1)
-            {
-                vTaskDelay(pdMS_TO_TICKS(SLEEP_IDLE_TIME_MSEC));
-            }
+            /* Suspend this task indefinitely - CPU enters tickless idle */
+            vTaskSuspend(NULL);
         }
         break;
 
@@ -1071,12 +1077,8 @@ void alwaysConnected(void)
             vTaskDelay(pdMS_TO_TICKS(100)); // Allow UART to flush
             DeinitTerm();
 
-            /* CPU sleeps deeply - no LWIP timer wake events */
-            /* Only WiFi DTIM interrupts will wake the CPU */
-            while (1)
-            {
-                vTaskDelay(pdMS_TO_TICKS(SLEEP_IDLE_TIME_MSEC));
-            }
+            /* Suspend this task indefinitely — only the WiFi IRQ task runs, CPU enters tickless idle */
+            vTaskSuspend(NULL);
         }
         break;
         default:
@@ -1158,8 +1160,45 @@ static void getBLEAdvParams(void)
 //*****************************************************************************
 static void setBLEConnParams(void)
 {
+    char input[4];
+
     /* 100 ms advertising interval for connection mode */
     PowerMeasure_appData.bleAdvInterval_us = 100000;
+
+    /* Ask user whether to delete existing bond information */
+    UART_PRINT("Delete existing bond information? [y/N]: ");
+    GetCmd(input, sizeof(input), "");
+    UART_PRINT("\n\r");
+    PowerMeasure_appData.bleDeleteBonds = (input[0] == 'y' || input[0] == 'Y');
+}
+
+//*****************************************************************************
+//
+//! Open BLE transport and start NimBLE host
+//!
+//! \param  None
+//!
+//! \return 0 on success, negative on error
+//!
+//*****************************************************************************
+int32_t bleHostStart(void)
+{
+    int32_t ret;
+
+    /* Open BLE transport */
+    BleIf_OpenTransport();
+
+    /* Start NimBLE host (also enables the controller) */
+    ret = nimble_host_start();
+    if (ret != 0)
+    {
+        UART_PRINT("[ERROR] Failed to start NimBLE host: %ld\n\r", ret);
+        return ret;
+    }
+
+    UART_PRINT("NimBLE host started\n\r");
+
+    return 0;
 }
 
 //*****************************************************************************
@@ -1177,30 +1216,7 @@ int32_t bleStartAdvertisement(void)
     ExtAdvCfg_t advCfg;
     ExtAdvEnable_t advEnable;
 
-    UART_PRINT("BLE Advertisement mode: Legacy 1M advertising\n\r");
-    UART_PRINT("Interval: %.2f ms\n\r", (float)PowerMeasure_appData.bleAdvInterval_us / 1000.0f);
-    UART_PRINT("Press reset to restart\n\r\n");
-
-    /* Configure power settings for BLE */
-    ret = configSimplelinkToUseCase();
-    if (ret < 0)
-    {
-        UART_PRINT("[ERROR] Failed to configure power settings\n\r");
-        return ret;
-    }
-
-    /* Open BLE transport */
-    BleIf_OpenTransport();
-
-    /* Start NimBLE host (also enables the controller) */
-    ret = nimble_host_start();
-    if (ret != 0)
-    {
-        UART_PRINT("[ERROR] Failed to start NimBLE host: %ld\n\r", ret);
-        return ret;
-    }
-
-    UART_PRINT("NimBLE host started\n\r");
+    UART_PRINT("\n\rAdvertise Interval: %.2f ms\n\r", (float)PowerMeasure_appData.bleAdvInterval_us / 1000.0f);
 
     /* Configure extended advertising */
     memset(&advCfg, 0, sizeof(advCfg));
@@ -1280,6 +1296,24 @@ void bleAdvertisementMode(void)
 {
     int32_t ret = 0;
 
+    UART_PRINT("Enter BLE Advertisement mode\n\r");
+
+    /* Configure power settings for BLE advertisement mode */
+    ret = configSimplelinkToUseCase();
+    if (ret < 0)
+    {
+        UART_PRINT("[ERROR] Failed to configure power settings\n\r");
+        return;
+    }
+
+    /* Start the BLE */
+    ret = bleHostStart();
+    if (ret < 0)
+    {
+        return;
+    }
+
+    /* Start Advertisement */
     ret = bleStartAdvertisement();
     if (ret < 0)
     {
@@ -1296,10 +1330,8 @@ void bleAdvertisementMode(void)
     DeinitTerm();
 
     /* Stay in advertising mode indefinitely */
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(SLEEP_IDLE_TIME_MSEC));
-    }
+    /* Suspend this task indefinitely - CPU enters tickless idle */
+    vTaskSuspend(NULL);
 }
 
 //*****************************************************************************
@@ -1315,15 +1347,47 @@ void bleConnectionMode(void)
 {
     int32_t ret;
 
-	ret = osi_SyncObjCreate(&(bleConnSyncObj));
-    if (ret != 0)
+    UART_PRINT("Enter BLE Connection mode\n\r");
+    
+    /* Configure power settings for BLE connection mode */
+    ret = configSimplelinkToUseCase();
+    if (ret < 0)
     {
-        UART_PRINT("[ERROR] Failed to create sync object: %ld\n\r", ret);
+        UART_PRINT("[ERROR] Failed to configure power settings\n\r");
         return;
     }
 
+    ret = osi_SyncObjCreate(&(bleConnSyncObj));
+    if (ret != 0)
+    {
+        UART_PRINT("[ERROR] Failed to create BLE connection sync object: %ld\n\r", ret);
+        return;
+    }
+
+    ret = osi_SyncObjCreate(&(bleSetupEventSyncObj));
+    if (ret != 0)
+    {
+        UART_PRINT("[ERROR] Failed to create BLE setup event sync object: %ld\n\r", ret);
+        return;
+    }
+
+    /* Register extra GAP event callbacks */
     register_extra_gap_event_cb(extraGapEventCallback);
 
+    /* Start the BLE */
+    ret = bleHostStart();
+    if (ret < 0)
+    {
+        return;
+    }
+
+    /* Delete all bond information if requested */
+    if (PowerMeasure_appData.bleDeleteBonds)
+    {
+        nimble_host_delete_all_bond_info();
+    }
+
+    /* Start Advertisement */
     ret = bleStartAdvertisement();
     if (ret < 0)
     {
@@ -1339,6 +1403,13 @@ void bleConnectionMode(void)
         return;
     }
 
+    /* Wait until no BLE setup events for BLE_CONN_SETUP_SETTLE_MS (pairing, enc, conn update) */
+    while (osi_SyncObjWait(&(bleSetupEventSyncObj), BLE_CONN_SETUP_SETTLE_MS) == OSI_OK)
+    {
+        /* event arrived, keep waiting */
+    }
+
+    /* Stop the advertisement started after connection */
     bleStopAdvertisement();
 
     /* Close UART to reduce power consumption */
@@ -1348,10 +1419,8 @@ void bleConnectionMode(void)
     DeinitTerm();
     
     /* Stay in connection mode indefinitely */
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(SLEEP_IDLE_TIME_MSEC));
-    }
+    /* Suspend this task indefinitely - CPU enters tickless idle */
+    vTaskSuspend(NULL);
 }
 
 //*****************************************************************************

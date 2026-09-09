@@ -303,17 +303,16 @@ int32_t cmdBleDisconnectCallback(void *arg)
 {
     int ret = 0;
     uint8_t bdAddr[6] = {0};
-    uint8_t addr_type = 0;
 
     /* Call the command parser */
-    ret = ParseBleDisconnectCmd(arg, bdAddr, &addr_type);
+    ret = ParseBleDisconnectCmd(arg, bdAddr);
 
     if (ret < 0)
     {
         return (-1);
     }
 
-    return nimble_host_ext_disconnect(bdAddr, addr_type);
+    return nimble_host_ext_disconnect(bdAddr);
 }
 
 /*!

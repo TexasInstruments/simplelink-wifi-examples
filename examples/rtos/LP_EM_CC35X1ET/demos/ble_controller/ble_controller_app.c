@@ -67,9 +67,6 @@
 //LWIP
 #include "network_lwip.h"
 
-//SOCKET
-#include "socket_examples.h"
-
 //ERRORS
 #include "errors.h"
 
@@ -326,12 +323,6 @@ void *myzalloc(size_t len)
 }
 
 
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
-
 void *ble_controller_entry(void *args)
 {
 #ifdef CC33XX
@@ -352,9 +343,6 @@ void *ble_controller_entry(void *args)
     wlan_TurnOffWlan();
 #elif defined(CC35XX)
     int32_t             RetVal = -1;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
-    //HWREG(ICACHE_BASE + 0x4) |= 0x80000000  ;//OSPREY_MX-38, this is for 64M cache, instead CRAM
 
     Board_init();
 

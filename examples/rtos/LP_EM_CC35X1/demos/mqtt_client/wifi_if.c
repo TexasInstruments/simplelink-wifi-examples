@@ -54,11 +54,6 @@
 #include <unistd.h>
 #include <stdarg.h>
 /* TI-DRIVERS Header files */
-
-//#include <ti/drivers/SPI.h>
-//#include <ti/drivers/GPIO.h>
-
-
 #include "wifi_if.h"
 #include "tcpip_if.h"
 
@@ -162,7 +157,7 @@ void NET_logEthFrame(logType_e type, char *pIfName, uint32_t nBytes, uint8_t * p
 
     msecs = 2*osi_GetTimeMS(); //tick factor 2 correction
 
-    offset = sprintf(&buff[0], "%d.%d sec | ", msecs/1000, msecs%1000);
+    offset = sprintf(&buff[0], "%lu.%lu sec | ", (unsigned long)msecs/1000, (unsigned long)msecs%1000);
     offset += sprintf(&buff[offset], "%s (%4lu) | ", pTypeStr, (unsigned long)nBytes);
 
 #if ETH_LOG
@@ -665,12 +660,7 @@ void OnWifiDriverEvent(WlanEvent_t *pWlanEvent)
         CLR_STATUS_BIT(m_wifiCtx.Status, STATUS_BIT_STA_CONNECTION);
         CLR_STATUS_BIT(m_wifiCtx.Status, STATUS_BIT_IP_ACQUIRED);
         CLR_STATUS_BIT(m_wifiCtx.Status, STATUS_BIT_IPV6_ACQUIRED);
-#if 0
-        killAllProcess();
-        staif = network_get_sta_if();
 
-        network_set_down(staif);
-#endif
         /* If ping operation is running, release it. */
         if(IS_PING_RUNNING(m_wifiCtx.Status))
         {
@@ -834,6 +824,7 @@ static int TcpipCB_send(void *hNetif, uint8_t *pPayload, int16_t payloadLen, uin
 static void WiFiCB_receive(WlanRole_e role, uint8_t *inBuf, uint32_t inLen)
 {
     void *hNetIf;
+    int rc = OSI_OK;
 
     if(role == WLAN_ROLE_STA)
     {
@@ -844,20 +835,15 @@ static void WiFiCB_receive(WlanRole_e role, uint8_t *inBuf, uint32_t inLen)
         UART_PRINT("WiFiCB_receive:: Unknown Role = %d\r\n", role);
         return;
     }
-
-#ifdef TCPIP_IF_ZERO_COPY
-#error
-#else
-    int rc = OSI_OK;
+    
     //UART_PRINT("IP Receive (len = %d) :: payload[0:3] = 0x%x:0x%x:0x%x:0x%x\r\n", inLen, *inBuf, *(inBuf+1), *(inBuf+2), *(inBuf+3));
     LOG_WIFI(LOG_RX, "WIFI", inLen, inBuf);
-      rc = TCPIP_IF_receive(hNetIf, inBuf, inLen);
+    rc = TCPIP_IF_receive(hNetIf, inBuf, inLen);
      if (rc != OSI_OK)
      {
          // If an error occurred, make sure the pbuf gets freed.
          UART_PRINT("LWIP Receive Error (%d)\r\n", rc);
      }
-#endif
 }
 
 
@@ -929,7 +915,7 @@ int WIFI_IF_start(WifiEventHandler_f handler, WifiServiceLevel_e level, unsigned
         {
             RoleUpStaCmd_t RoleUpStaParams;
             memset(&RoleUpStaParams, 0, sizeof(RoleUpStaCmd_t));
-            strncpy((char *)RoleUpStaParams.countryDomain, (char *)"00", 2);
+            strncpy((char *)RoleUpStaParams.countryDomain, (char *)"00", 3);
             UART_PRINT("\n\tChosen domain is WW\n");
 
             TCPIP_IF_setInterfaceState(m_wifiCtx.hStaNetif, E_TCPIP_IF_UP);
@@ -1030,15 +1016,10 @@ int WIFI_IF_reset()
 int WIFI_IF_deinit()
 {
     int rc = WLAN_RET_CODE_DEV_NOT_STARTED;
-    /*** TBD - delete all pending connRequests ***/
 
     if(m_wifiCtx.bIsStarted)
     {
         m_wifiCtx.bIsStarted = false;
-#if 0
-        TCPIP_IF_deleteInterface(m_wifiCtx.hStaNetif);
-        m_wifiCtx.hStaNetif = 0;
-#endif
 
         rc = Wlan_Stop(TRUE);
     }
@@ -1117,9 +1098,13 @@ int WIFI_IF_connect(void *hConnReq, uint8_t netIdx, int8_t *password, uint8_t pa
         case 7:
             secType = WLAN_SEC_TYPE_WPA2_PLUS;
             break;
+        default:
+            UART_PRINT("WIFI_IF_connect: Unsupported security type %d\r\n", 
+                   WLAN_SCAN_RESULT_SEC_TYPE_BITMAP(m_wifiCtx.netEntries[netIdx-1].SecurityInfo));
+            return OSI_OPERATION_FAILED;
     }
 
-    rc = Wlan_Connect((const signed char *)m_wifiCtx.netEntries[netIdx-1].Ssid, strlen(m_wifiCtx.netEntries[netIdx-1].Ssid), NULL, secType, (int8_t *)password, passLen, 0);
+    rc = Wlan_Connect((const signed char *)m_wifiCtx.netEntries[netIdx-1].Ssid, strlen((char *)m_wifiCtx.netEntries[netIdx-1].Ssid), NULL, secType, (char *)password, passLen, 0);
 
     if(m_wifiCtx.currConnStatus < (WifiConnStatus_e)(WIFI_STATUS_CONNECTED + level))
     {

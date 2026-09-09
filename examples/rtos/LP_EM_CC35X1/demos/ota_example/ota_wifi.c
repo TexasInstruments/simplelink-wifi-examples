@@ -401,7 +401,7 @@ int OTA_WIFI_connect(void)
         return ret;
     }
 
-    /* Register STA network interface (first time only — reuse on reconnect) */
+    /* Register STA network interface (first time only - reuse on reconnect) */
     if (gStaNetif == NULL)
     {
         macAddr.roleType = WLAN_ROLE_STA;
@@ -437,7 +437,7 @@ int OTA_WIFI_connect(void)
     TCPIP_IF_setInterfaceState(gStaNetif, E_TCPIP_IF_UP);
 
     memset(&roleParams, 0, sizeof(roleParams));
-    strncpy((char *)roleParams.countryDomain, "00", 2);
+    strncpy((char *)roleParams.countryDomain, "00", 3);
 
     UART_PRINT("[OTA] Bringing up STA role...\n\r");
     ret = Wlan_RoleUp(WLAN_ROLE_STA, &roleParams, WLAN_WAIT_FOREVER);
@@ -448,7 +448,7 @@ int OTA_WIFI_connect(void)
     }
     UART_PRINT("[OTA] STA role up\n\r");
 
-    /* Scan for networks — loop allows re-scan if AP not found */
+    /* Scan for networks - loop allows re-scan if AP not found */
     while (1)
     {
         UART_PRINT("\n\r[OTA] Scanning for WiFi networks...\n\r");
@@ -524,7 +524,7 @@ int OTA_WIFI_connect(void)
             secName = "secured";
             break;
         }
-        UART_PRINT("[OTA] Network is %s — password required\n\r", secName);
+        UART_PRINT("[OTA] Network is %s - password required\n\r", secName);
         ret = GetCmd(cmdBuf, CMD_BUFFER_LEN, "Enter WiFi password: ");
         UART_PRINT("\n\r");
         if (ret <= 0)
@@ -535,7 +535,7 @@ int OTA_WIFI_connect(void)
     }
     else
     {
-        UART_PRINT("[OTA] Network is open — no password required\n\r");
+        UART_PRINT("[OTA] Network is open - no password required\n\r");
         cmdBuf[0] = '\0';
     }
 

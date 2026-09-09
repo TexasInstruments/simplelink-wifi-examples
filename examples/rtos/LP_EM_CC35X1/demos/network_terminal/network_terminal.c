@@ -46,7 +46,9 @@
 #include "FreeRTOS.h"
 
 //SOCKET
+#ifdef SOCKET_EXAMPLE
 #include "socket_examples.h"
+#endif
 #include "lwip_iperf_examples.h"
 
 /* Board Header files */
@@ -135,11 +137,13 @@ cmdAction_t gCmdList[] =
 /* Clear term */
 { clearStr,             cmdClearcallback,           printClearUsage             },
 
+#ifndef TI_STA_ONLY_BUILD
 /* Wlan RoleUpAp */
 { wlanRoleUpApStr,      cmdWlanRoleUpApCallback,    printWlanRoleUpApUsage      },
 
 /* Wlan RoleDwonAp */
 { wlanRoleDownApStr,    cmdWlanRoleDownApCallback,  printWlanRoleDownApUsage    },
+#endif
 
 /* Wlan RoleUpSta */
 { wlanRoleUpStaStr,     cmdWlanRoleUpStaCallback,   printWlanRoleUpStaUsage     },
@@ -158,6 +162,12 @@ cmdAction_t gCmdList[] =
 
 /* Wlan disconnect */
 { wlanDisconnectStr,    cmdWlanDisconnectCallback,  printWlanDisconnectUsage    },
+
+/* Wlan set TX power */
+{ SetTxPowerStr,        cmdWlanSetTxPowerCallback,  printWlanSetTxPowerUsage    },
+
+/* Wlan get TX power */
+{ GetTxPowerStr,        cmdWlanGetTxPowerCallback,  printWlanGetTxPowerUsage    },
 
 /* Scan */
 { scanStr,              cmdScanCallback,            printScanUsage              },
@@ -188,11 +198,18 @@ cmdAction_t gCmdList[] =
 /* Get Interface IP mode */
 { GetInterfaceIpStr,     cmdGetInterfaceIpCallback, printGetInterfaceIpUsage    },
 
+#ifndef TI_STA_ONLY_BUILD
 /* Set DHCP Server mode */
 { SetDhcpServerStr,     cmdSetDhcpServerCallback,   printSetDhcpServerUsage    },
 
 /* Get DHCP Server mode */
 { GetDhcpServerStr,     cmdGetDhcpServerCallback,   printGetDhcpServerUsage    },
+#endif
+
+/* Network Interface Configuration */
+#ifdef CC35XX
+{ IfconfigStr,          cmdIfconfigCallback,        printIfconfigUsage          },
+#endif
 
 /* Set Long sleep interval     */
 { SetLsiStr,                 cmdSetLsiCallback,      printSetLsiUsage      },
@@ -206,7 +223,7 @@ cmdAction_t gCmdList[] =
 /* wlan Stop */
 { wlanStopStr,          cmdWlanStopCallback,        printWlanStopUsage          },
 
-#ifndef CC35XX
+#ifdef SOCKET_EXAMPLE
 
 /* Send */
 { sendStr,              cmdSendCallback,               printSendUsage          },
@@ -218,17 +235,16 @@ cmdAction_t gCmdList[] =
 { showStr,              cmdShowCallback,            printShowUsage              },
 
 /* Kill available running thread */
-{ killStr,              cmdKillCallback,            printKillUsage              },
+{ killStr,              cmdKillCallback,            printKillUsage              }, 
 
 #endif
-#ifdef CC35XX
 
 { TestIperf,             cmdTestIperfCallback,           printTestIperfUsage      },
 
 { StopTestIperf,         cmdStopTestIperfCallback,       printStopTestIperfUsage  },
-
-#endif
-
+#ifdef CC35XX
+{ TestTlsIperf,          cmdTestTlsIperfCallback,        printTestTlsIperfUsage   },
+#endif // CC35XX
 
 /* ble AdvCfg */
 { bleAdvCfgStr,         cmdBleAdvCfgCallback,       printBleAdvCfgUsage         },
@@ -319,30 +335,37 @@ cmdAction_t gCmdList[] =
 {wlanConfigPeerAgingStr, cmdConfigStaAgingEventCallback, printConfiPeerAgingUsage },
 
 /*------------------ p2p ---------------------------*/
-/* P2P Device role up */
-{wlanRoleUpP2PStr, cmdWlanRoleUpP2PCallback, printWlanRoleUpP2PUsage },
+#ifndef TI_STA_ONLY_BUILD
 
-{wlanRoleDownP2PStr, cmdWlanRoleDownP2PCallback, printWlanRoleDownP2PUsage },
+{ wlanRoleUpP2PStr,       cmdWlanRoleUpP2PCallback,     printWlanRoleUpP2PUsage     },
 
-{wlanP2PFindStr,    cmdWlanP2PFindCallback,    printWlanP2PFindUsage },
+{wlanRoleDownP2PStr,      cmdWlanRoleDownP2PCallback,   printWlanRoleDownP2PUsage   },
 
-{wlanP2PConnectStr, cmdWlanP2PConnectCallback , printWlan2PConnectUsage },
+{ wlanP2PFindStr,         cmdWlanP2PFindCallback,       printWlanP2PFindUsage       },
 
-{wlanP2PStopFindStr, cmdWlanP2PFindStopCallback , printWlanP2PFindStopUsage },
+{ wlanP2PConnectStr,      cmdWlanP2PConnectCallback,    printWlan2PConnectUsage     },
 
-{wlanP2PGrpRemoveStr, cmdWlanP2PGrpRemoveCallback , printWlanP2PGrpRemoveUsage },
+{ wlanP2PStopFindStr,     cmdWlanP2PFindStopCallback,   printWlanP2PFindStopUsage   },
 
-{wlanP2PSetchannelStr, cmdWlanP2PSetChannelCallback , printWlanP2PSetChannelUsage },
+{ wlanP2PGrpRemoveStr,    cmdWlanP2PGrpRemoveCallback,  printWlanP2PGrpRemoveUsage  },
 
-{wlanP2PGetchannelStr, cmdWlanP2PGetChannelCallback , printWlanP2PGetChannelUsage },
+{ wlanP2PSetchannelStr,   cmdWlanP2PSetChannelCallback, printWlanP2PSetChannelUsage },
 
-{wlanP2PListenStr, cmdWlanP2PListenCallback, printWlanP2PListenUsage },
+{ wlanP2PGetchannelStr,   cmdWlanP2PGetChannelCallback, printWlanP2PGetChannelUsage },
 
-{wlanP2PCancelStr, cmdWlanP2PCancelCallback, printWlanP2PCancelUsage },
+{ wlanP2PListenStr,       cmdWlanP2PListenCallback,     printWlanP2PListenUsage     },
+
+{ wlanP2PCancelStr,       cmdWlanP2PCancelCallback,     printWlanP2PCancelUsage     },
+
+{wlanP2PGrpAddStr,        cmdWlanP2PGrpAddCallback,     printWlanP2PGrpAddUsage     },
+
+#endif
 
 /*------------------ p2p end ---------------------------*/
+#ifndef TI_STA_ONLY_BUILD
 /* Start AP WPS */
 {startApWpsStr, cmdStartApWpsCallback, printStartApWpsUsage },
+#endif
 
 /*------------ connection policy and profiles ----------------*/
 
@@ -368,11 +391,13 @@ cmdAction_t gCmdList[] =
 { wlanProfileConnectStr,  cmdWlanProfileConnectCallback,  printWlanProfileConnectUsage },
 
 /*----------- end connection policy and profiles -------------*/
+#endif // CC35XX
 
 { pingStartStr,           cmdPingStartCallback,           printPingStartUsage },
 
 { pingStopStr,            cmdPingStopCallback,            printPingStopUsage },
 
+#ifdef CC35XX
 { wlanSetRegDomEntryStr,  cmdWlanSetRegDomainEntryCallback, printWlanSetRegDomainEntryUsage },
 
 { wlanGetRegDomEntryStr,  cmdWlanGetRegDomainEntryCallback, printWlanGetRegDomainEntryUsage },
@@ -472,7 +497,7 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_STA_CONNECTION);
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_IP_ACQUIRED);
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_IPV6_ACQUIRED);
-#ifndef CC35XX
+#ifdef SOCKET_EXAMPLE
         killAllProcess();
 #endif
         staif = network_get_sta_if();
@@ -1088,8 +1113,6 @@ void PrintIPAddress(unsigned char ipv6,
                     void *ip)
 {
     uint32_t        *pIPv4;
-    uint8_t         *pIPv6;
-    int32_t          i=0;
 
     if(!ip)
     {
@@ -1098,14 +1121,9 @@ void PrintIPAddress(unsigned char ipv6,
 
     if(ipv6)
     {
-        pIPv6 = (uint8_t*) ip;
-
-        for(i = 0; i < 14; i+=2)
-        {
-            UART_PRINT("%02x%02x:", pIPv6[i], pIPv6[i+1]);
-        }
-
-        UART_PRINT("%02x%02x", pIPv6[i], pIPv6[i+1]);
+        char ipv6_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, ip, ipv6_str, sizeof(ipv6_str));
+        UART_PRINT("%s", ipv6_str);
     }
     else
     {
@@ -1131,6 +1149,21 @@ int32_t showAvailableCmd()
 {
     uint8_t i = 0;
 
+    printBorder('=', 80);
+#ifdef __clang__
+    UART_PRINT("\n\rCompiled with Clang\r\n");
+#elif defined(__GNUC__)
+    UART_PRINT("\n\rCompiled with GCC\r\n");
+#else
+    UART_PRINT("\n\rCompiled with an unknown compiler\r\n");
+#endif
+#if defined(SUPPORT_8_STREAMS_CONCURRENTLY)
+    UART_PRINT("LwIP Configuration: Up to 8 streams concurrently\r\n");
+#elif defined(SUPPORT_4_STREAMS_CONCURRENTLY)
+    UART_PRINT("LwIP Configuration: Up to 4 streams concurrently\r\n");
+#else
+    UART_PRINT("LwIP Configuration: Single stream\r\n");
+#endif
     printBorder('=', 80);
     UART_PRINT("\n\rAvailable commands:\n\r");
 
@@ -1175,13 +1208,6 @@ int32_t DisplayAppBanner(char* appName, char* appVersion)
     Report("***************** %-28s *******************\r\n", APPLICATION_NAME);
     Report("***************** %-28s *******************\r\n", APPLICATION_VERSION);
     Report("******************************************************************\r\n");
-#ifdef __clang__
-    Report("Compiled with Clang\r\n");
-#elif defined(__GNUC__)
-    Report("Compiled with GCC\r\n");
-#else
-    printf("Compiled with an unknown compiler\r\n");
-#endif
     return(0);
 }
 
@@ -1304,12 +1330,6 @@ void initCompletions()
 #endif
 
 
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
-
 void *network_terminal_entry(void *args)
 {
 #ifdef CC33XX
@@ -1334,9 +1354,6 @@ void *network_terminal_entry(void *args)
     wlan_TurnOffWlan();
 #elif defined(CC35XX)
     int32_t             RetVal = -1;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
-    //HWREG(ICACHE_BASE + 0x4) |= 0x80000000  ;//OSPREY_MX-38, this is for 64M cache, instead CRAM
 
     Board_init();
 

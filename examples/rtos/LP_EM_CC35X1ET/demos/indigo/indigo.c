@@ -45,8 +45,6 @@
 #include <stdlib.h>
 #include "FreeRTOS.h"
 
-//SOCKET
-#include "socket_examples.h"
 #include "lwip_iperf_examples.h"
 
 /* Board Header files */
@@ -215,72 +213,6 @@ cmdAction_t gCmdList[] =
 { killStr,              cmdKillCallback,            printKillUsage              },
 
 #endif
-// #ifdef CC35XX
-
-// { TestIperf,             cmdTestIperfCallback,           printTestIperfUsage      },
-
-// { StopTestIperf,         cmdStopTestIperfCallback,       printStopTestIperfUsage  },
-
-// #endif
-
-
-// /* ble AdvCfg */
-// { bleAdvCfgStr,         cmdBleAdvCfgCallback,       printBleAdvCfgUsage         },
-
-// /* ble AdvEnable */
-// { bleAdvEnableStr,      cmdBleAdvEnableCallback,    printBleAdvEnableUsage      },
-
-// /* ble ScanCfg */
-// { bleScanCfgStr,        cmdBleScanCfgCallback,      printBleScanCfgUsage        },
-
-// /* ble ScanEnable */
-// { bleScanEnableStr,     cmdBleScanEnableCallback,   printBleScanEnableUsage     },
-
-// /* ble Connect */
-// { bleConnectStr,        cmdBleConnectCallback,      printBleConnectUsage        },
-
-// /* ble Disconnect */
-// { bleDisconnectStr,     cmdBleDisconnectCallback,   printBleDisconnectUsage     },
-
-// /* ble Peers */
-// { blePeersStr,          cmdBlePeersCallback,        printBlePeersUsage          },
-
-// /* ble Delete Bonds */
-// { bleDeleteBondsStr,    cmdBleDeleteBondsCallback,  printBleDeleteBondsUsage    },
-
-///* ble Get BD address */
-//{ bleGetBdAddrStr,      cmdBleGetBdAddrCallback,    printBleGetBdAddrUsage      },
-//
-///* ble Set BD address */
-//{ bleSetBdAddrStr,      cmdBleSetBdAddrCallback,    printBleSetBdAddrUsage      },
-
-///* ble Start*/
-//{ bleStartStr,          cmdBleStartCallback,        printBleStartUsage          },
-
-// /* ble Stop*/
-// { bleStopStr,           cmdBleStopCallback,         printBleStopUsage           },
-
-// /* Set Ble Test Mode*/
-// { bleTestModeStr,       cmdBleTestModeCallback,     printBleTestModeUsage       },
-
-// #ifdef CC35XX
-// /*------------------ CSI ---------------------------*/
-// /* csi enable */
-// { csiEnableStr,            cmdCsiEnableCallback,       printCsiEnableUsage      },
-
-// /* csi stop */
-// {csiStopStr,            cmdCsiStopCallback,      printCsiStopUsage     },
-
-// /* csi disable */
-// { csiDisableStr,            cmdCsiDisableCallback,       printCsiDisableUsage      },
-
-// /* csi get results */
-// {csiGetResultsStr,         cmdCsiGetResultsCallback,   printCsiGetResultsUsage   },
-// #endif
-
-// /* Calibrator */
-// { calibratorStr,        cmdCalibratorCallback,         printCalibratorUsage        },
-
 
 #ifdef CC35XX
 // #ifdef SNTP_SUPPORT
@@ -300,26 +232,27 @@ cmdAction_t gCmdList[] =
 {wlanConfigPeerAgingStr, cmdConfigStaAgingEventCallback, printConfiPeerAgingUsage },
 
 /*------------------ p2p ---------------------------*/
-/* P2P Device role up */
-{wlanRoleUpP2PStr, cmdWlanRoleUpP2PCallback, printWlanRoleUpP2PUsage },
+{ wlanRoleUpP2PStr,       cmdWlanRoleUpP2PCallback,     printWlanRoleUpP2PUsage     },
 
-{wlanRoleDownP2PStr, cmdWlanRoleDownP2PCallback, printWlanRoleDownP2PUsage },
+{wlanRoleDownP2PStr,      cmdWlanRoleDownP2PCallback,   printWlanRoleDownP2PUsage   },
 
-{wlanP2PFindStr,    cmdWlanP2PFindCallback,    printWlanP2PFindUsage },
+{ wlanP2PFindStr,         cmdWlanP2PFindCallback,       printWlanP2PFindUsage       },
 
-{wlanP2PConnectStr, cmdWlanP2PConnectCallback , printWlan2PConnectUsage },
+{ wlanP2PConnectStr,      cmdWlanP2PConnectCallback,    printWlan2PConnectUsage     },
 
-{wlanP2PStopFindStr, cmdWlanP2PFindStopCallback , printWlanP2PFindStopUsage },
+{ wlanP2PStopFindStr,     cmdWlanP2PFindStopCallback,   printWlanP2PFindStopUsage   },
 
-{wlanP2PGrpRemoveStr, cmdWlanP2PGrpRemoveCallback , printWlanP2PGrpRemoveUsage },
+{ wlanP2PGrpRemoveStr,    cmdWlanP2PGrpRemoveCallback,  printWlanP2PGrpRemoveUsage  },
 
-{wlanP2PSetchannelStr, cmdWlanP2PSetChannelCallback , printWlanP2PSetChannelUsage },
+{ wlanP2PSetchannelStr,   cmdWlanP2PSetChannelCallback, printWlanP2PSetChannelUsage },
 
-{wlanP2PGetchannelStr, cmdWlanP2PGetChannelCallback , printWlanP2PGetChannelUsage },
+{ wlanP2PGetchannelStr,   cmdWlanP2PGetChannelCallback, printWlanP2PGetChannelUsage },
 
-{wlanP2PListenStr, cmdWlanP2PListenCallback, printWlanP2PListenUsage },
+{ wlanP2PListenStr,       cmdWlanP2PListenCallback,     printWlanP2PListenUsage     },
 
-{wlanP2PCancelStr, cmdWlanP2PCancelCallback, printWlanP2PCancelUsage },
+{ wlanP2PCancelStr,       cmdWlanP2PCancelCallback,     printWlanP2PCancelUsage     },
+
+{wlanP2PGrpAddStr,        cmdWlanP2PGrpAddCallback,     printWlanP2PGrpAddUsage     },
 
 /*------------------ p2p end ---------------------------*/
 /* Start AP WPS */
@@ -1271,12 +1204,6 @@ void initCompletions()
 #endif
 
 
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
-
 void *network_terminal_entry(void *args)
 {
 #ifdef CC33XX
@@ -1301,9 +1228,6 @@ void *network_terminal_entry(void *args)
     wlan_TurnOffWlan();
 #elif defined(CC35XX)
     int32_t             RetVal = -1;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
-    //HWREG(ICACHE_BASE + 0x4) |= 0x80000000  ;//OSPREY_MX-38, this is for 64M cache, instead CRAM
 
     Board_init();
 

@@ -71,11 +71,11 @@ typedef void (*ExtProv_stop_f)(void*);
  * 2 - SlWifiConn Thread
  * 3 - External Provisioning Thread (if needed)
  */
-#define SL_SPAWN_TASK_PRIORITY      (9)
+#define SL_SPAWN_THREAD_PRIORITY      (9)
 #define SL_SPAWN_STACK_SIZE         (2048)
-#define WIFI_CONN_TASK_PRIORITY     (9)
+#define WIFI_CONN_THREAD_PRIORITY     (9)
 #define WIFI_CONN_STACK_SIZE        (1200)
-#define EXT_PROV_TASK_PRIORITY      (9)
+#define EXT_PROV_THREAD_PRIORITY      (9)
 #define EXT_PROV_STACK_SIZE         (2048)
 
 typedef enum

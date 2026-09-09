@@ -36,24 +36,23 @@ FLASH_INT_VEC_SIZE = 0x2400; /* Including padding */
 
 
 MEMORY
-{   
+{
     /* Flash regions */
     FLASH_INT_VEC         (RX) : ORIGIN = 0x14000000, LENGTH = FLASH_INT_VEC_SIZE
     FLASH_NON_SECURE      (RX) : ORIGIN = 0x14000000 + FLASH_INT_VEC_SIZE, LENGTH = build_linker_toolbox_FLASH_SIZE - FLASH_INT_VEC_SIZE
-    
+
     /* RAM regions */
     TCM_CRAM_NON_SECURE   (RWX) : ORIGIN = 0x00000000, LENGTH = 0x00007FFF  /* 32KB */
-    CRAM_NON_SECURE       (RWX) : ORIGIN = 0x08000000, LENGTH = 0x0000FFFF  /* 64KB */
     TCM_DRAM_NON_SECURE   (RWX) : ORIGIN = 0x20000000, LENGTH = (build_linker_toolbox_PSRAM_SIZE == 0 ? 0x1FFFF : 0x0FFFF)  /* 64KB for PSRAM */  /* 128KB for NO-PSRAM */
     CONNECTIVITY_SHARED_MEM (RWX) : ORIGIN = 0x28000000, LENGTH = 0x000000FF
     BOOT_REPORT_SHARED_MEM  (RWX) : ORIGIN = 0x28000100, LENGTH = 0x00000CAF
     DRAM_NON_SECURE       (RWX) : ORIGIN = 0x28000DB0, LENGTH = 0x0007F24F  /* ~509KB */
-    PS_RAM                (RW)  : ORIGIN = 0x60000000, LENGTH = (build_linker_toolbox_PSRAM_SIZE > 0 ? build_linker_toolbox_PSRAM_SIZE : 0x1)    /* 8MB or 2MB or 0 MB Configure by sysconfig */ 
+    PS_RAM                (RW)  : ORIGIN = 0x60000000, LENGTH = (build_linker_toolbox_PSRAM_SIZE > 0 ? build_linker_toolbox_PSRAM_SIZE : 0x1)    /* 8MB or 2MB or 0 MB Configure by sysconfig */
 
     /* Logging data regions */
     LOG_DATA (R) : ORIGIN = 0x90000000, LENGTH = 0x40000        /* 256 KB */
     LOG_PTR  (R) : ORIGIN = 0x94000008, LENGTH = 0x40000        /* 256 KB */
-    
+
 }
 
 SECTIONS
@@ -62,7 +61,7 @@ SECTIONS
     .reserved (0x14000000) (NOLOAD) : {
         . += 0x2000;
     } > FLASH_INT_VEC
-    
+
     /* Vector table in flash */
     .resetVecs : {
         KEEP (*(.resetVecs))
@@ -84,11 +83,11 @@ SECTIONS
         *(.init)
         *(.fini*)
     } > FLASH_NON_SECURE
-    
+
     PROVIDE (__etext = .);
     PROVIDE (_etext = .);
     PROVIDE (etext = .);
-    
+
     .rodata : {
         *(.rodata)
         *(.rodata.*)
@@ -96,24 +95,40 @@ SECTIONS
         KEEP (*(.timestampPFormat))
         . = ALIGN(4);
     } > FLASH_NON_SECURE
-    
+
     .cinit : {
         *(.cinit)
     } > FLASH_NON_SECURE
-    
+
     .binit : {
         *(.binit)
     } > FLASH_NON_SECURE
-    
-    /* TI RAM functions - code that runs from RAM */
+
+    /* .TI.ramfunc is in TCM_CRAM. */
     .TI.ramfunc : ALIGN(4) {
         __ramfunc_load__ = LOADADDR(.TI.ramfunc);
         __ramfunc_start__ = .;
         *(.TI.ramfunc)
         __ramfunc_end__ = .;
-    } > TCM_CRAM_NON_SECURE AT> FLASH_NON_SECURE 
-    
-    /* Data section - moved to DRAM to save TCM space */
+    } > TCM_CRAM_NON_SECURE AT> FLASH_NON_SECURE
+
+    /* Exception handlers must be in TCM_CRAM — not accessible in Flash when OTFDE is disabled */
+    .text.Exception_handlerSpin : ALIGN(4) {
+        *(.text.Exception_handlerSpin)
+    } > TCM_CRAM_NON_SECURE AT> FLASH_NON_SECURE
+
+    /* .internalRAM and all subsections are in TCM_DRAM.
+     * DMA engine cannot reach Flash or PS_RAM on CC35xx. */
+    .tcm_data : ALIGN(4) {
+        __tcm_data_load__ = LOADADDR(.tcm_data);
+        __tcm_data_start__ = .;
+        *(.internalRAM)
+        *(.internalRAM.*)
+        . = ALIGN(4);
+        __tcm_data_end__ = .;
+    } > TCM_DRAM_NON_SECURE AT> FLASH_NON_SECURE
+
+    /* .data is in DRAM. CC35X1 has no PS_RAM. */
     .data : ALIGN(4) {
         __data_load__ = LOADADDR(.data);
         __data_start__ = .;
@@ -122,6 +137,26 @@ SECTIONS
         . = ALIGN(4);
         __data_end__ = .;
     } > DRAM_NON_SECURE AT> FLASH_NON_SECURE
+
+    /* .externalRAM_data is in TCM_DRAM. CC35X1 has no PS_RAM. */
+    .externalRAM_data : ALIGN(4) {
+        __externalRAM_load__ = LOADADDR(.externalRAM_data);
+        __externalRAM_start__ = .;
+        *(.externalRAM)
+        *(.externalRAM.*)
+        *(.externalRAM.data)
+        . = ALIGN(4);
+        __externalRAM_end__ = .;
+    } > TCM_DRAM_NON_SECURE AT> FLASH_NON_SECURE
+
+    /* CC35X1 has no PS_RAM. Section kept empty to satisfy startup symbol references.
+     * No AT> so startup never attempts a copy to 0x60000000. */
+    .psram_data : ALIGN(4) {
+        __psram_data_load__ = .;
+        __psram_data_start__ = .;
+        . = ALIGN(4);
+        __psram_data_end__ = .;
+    } > PS_RAM
 
     /* Exception handling sections */
     .ARM.exidx : {
@@ -135,7 +170,7 @@ SECTIONS
     } > FLASH_NON_SECURE
 
 
-    /* System memory section and specific BSS subsections in DRAM */
+    /* .sysmem (malloc heap) is in DRAM. */
     .sysmem : {
         __SYSMEM_START__ = .;
         *(.sysmem)
@@ -143,7 +178,7 @@ SECTIONS
         __SYSMEM_END__ = .;
     } > DRAM_NON_SECURE
 
-    /* Specific BSS subsections in DRAM (matching TI Clang layout) */
+    /* The following BSS subsections are in DRAM. */
     .bss.ucHeap : {
         *(.bss.ucHeap)
         . = ALIGN(4);
@@ -164,8 +199,7 @@ SECTIONS
         . = ALIGN(4);
     } > DRAM_NON_SECURE
 
-    /* Large BSS subsections moved to DRAM to save TCM space (~57KB total) */
-    /* Note: In GCC these are .bss subsections, in TI Clang they are .common */
+    /* In GCC these are .bss subsections; in TI Clang they are .common. */
     .bss.lwip_heap : {
         *(.bss.ram_heap)
         . = ALIGN(4);
@@ -187,13 +221,13 @@ SECTIONS
         . = ALIGN(4);
     } > DRAM_NON_SECURE
 
-    /* Move COMMON symbols to DRAM to save TCM space */
+    /* COMMON symbols are in DRAM. */
     .common : ALIGN(4) {
         *(COMMON)
         . = ALIGN(4);
     } > DRAM_NON_SECURE
 
-    /* Main BSS section (non-common) in TCM_DRAM */
+    /* .bss is in TCM_DRAM. */
     .bss : {
         __bss_start__ = .;
         *(.shbss)
@@ -203,8 +237,24 @@ SECTIONS
         __bss_end__ = .;
     } > TCM_DRAM_NON_SECURE
 
+    /* .externalRAM_bss is in TCM_DRAM. CC35X1 has no PS_RAM. */
+    .externalRAM_bss : {
+        __externalRAM_bss_start__ = .;
+        *(.externalRAM.bss)
+        . = ALIGN(4);
+        __externalRAM_bss_end__ = .;
+    } > TCM_DRAM_NON_SECURE
 
-    /* Stack section */
+    /* .psram_bss is in PS_RAM. */
+    .psram_bss : {
+        __psram_bss_start__ = .;
+        *(.psram_bss)
+        *(.psram_bss.*)
+        . = ALIGN(4);
+        __psram_bss_end__ = .;
+    } > PS_RAM
+
+    /* .stack is in TCM_DRAM. */
     .stack (NOLOAD) : ALIGN(8) {
         _stack = .;
         __stack = .;
@@ -213,23 +263,23 @@ SECTIONS
         _stack_end = .;
         __stack_end = .;
     } > TCM_DRAM_NON_SECURE
-    
+
     /* Connectivity shared status section */
     .connectivity_shared_status_section (NOLOAD) : ALIGN(4) {
         KEEP (*(.connectivity_shared_status_section))
     } > CONNECTIVITY_SHARED_MEM
-    
+
     /* boot report shared section */
     .boot_report_shared_section (NOLOAD) : ALIGN(4) {
         _Boot_report_address = .;
     } > BOOT_REPORT_SHARED_MEM
-    
-    
+
+
     /* Logging sections */
     .log_data (COPY) : ALIGN(4) {
         KEEP (*(.log_data))
     } > LOG_DATA
-    
+
     .log_ptr (COPY) : ALIGN(4) {
         KEEP (*(.log_ptr*))
     } > LOG_PTR

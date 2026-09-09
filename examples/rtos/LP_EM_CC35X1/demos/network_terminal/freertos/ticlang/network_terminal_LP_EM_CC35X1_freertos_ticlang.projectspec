@@ -14,6 +14,7 @@
         name="network_terminal_LP_EM_CC35X1_freertos_ticlang"
         configurations="Debug"
         toolChain="TICLANG"
+        cgtVersion="TICLANG_4.0.4.LTS"
         connection="TIXDS110_Connection.xml"
         device="Cortex M.CC35X1E"
         ignoreDefaultDeviceSettings="true"
@@ -28,6 +29,7 @@
             -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\&quot;config-psa-crypto-hsm.h\&quot;
             -Ofast
             -DCC35XX
+            -DDeviceFamily_CC35XX
             -DNVOCMP_POSIX_MUTEX
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/mbedtls/include
@@ -43,6 +45,7 @@
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/wifi_stack/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt
+            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/tools/TI_Containers
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-stack/src/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/ti_config/lwip-port/osi/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-contrib
@@ -56,7 +59,6 @@
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/nimble/nimble-src/nimble/host/util/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/nimble/nimble-src/nimble/transport/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/nimble/nimble-src/porting/nimble/include
-            -gdwarf-3
             -mcpu=cortex-m33
             -mfloat-abi=hard
             -mfpu=fpv5-sp-d16
@@ -64,6 +66,7 @@
         "
         linkerBuildOptions="
             -L${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
+            -Wl,--reread_libs
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lib/ticlang/lwip.a
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/hostap/lib/ticlang/hostap.a
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/nimble/lib/ticlang/nimble.a
@@ -72,7 +75,6 @@
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/lib/ticlang/wifi_host_driver.a
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_platform/cc35xx/lib/ticlang/wifi_platform_cc35xx.a
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/utils/FWU/lib/ticlang/FWU.a
-            -Wl,--reread_libs
             -L${PROJECT_BUILD_DIR}/syscfg
             -lti_utils_build_linker.cmd.genlibs
             -Wl,--rom_model
@@ -86,8 +88,7 @@
             --compiler ticlang
         "
         description="Terminal to operate connectivity commands for evaluation">
-
-    <property name="launch.loadSymbolsOnly" value="true"/>
+        <property name="launch.loadSymbolsOnly" value="true"/>
         <property name="buildProfile" value="release"/>
         <property name="isHybrid" value="true"/>
         <file path="../../ble_cmd.c" openOnCreation="false" excludeFromBuild="false" action="copy">
@@ -113,6 +114,20 @@
         <file path="../../lwip_iperf_udp_client.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../lwip_iperf_udp_server.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_client.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_client.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_server.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_server.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_ca_cert.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_server_cert.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../tls_iperf_server_key.h" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../network_lwip.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
@@ -149,10 +164,6 @@
         <file path="../../wlan_cmd.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../wlan_cmd.h" openOnCreation="false" excludeFromBuild="false" action="copy">
-        </file>
-        <file path="../../socket_examples.c" openOnCreation="false" excludeFromBuild="false" action="copy">
-        </file>
-        <file path="../../socket_examples.h" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../lwip_ping.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>

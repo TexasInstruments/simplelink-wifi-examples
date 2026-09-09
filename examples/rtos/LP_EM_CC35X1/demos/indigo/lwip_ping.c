@@ -30,7 +30,6 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef CC35XX
 
 #include <string.h>
 #include <stdio.h>
@@ -53,6 +52,9 @@
 #include "lwip/inet_chksum.h"
 #include "lwip/netif.h"
 #include "lwip/tcpip.h"
+#include "lwip/prot/icmp6.h"
+#include "lwip/ip6.h"
+#include "lwip/ip6_addr.h"
 
 #define LWIP_PING_MAX_NUM_OF_SESSIONS   2
 
@@ -140,29 +142,58 @@ static void lwip_ping_init(void *param)
     ip_addr_t source_ip;
     lwip_ping_session_t *ping_session = (lwip_ping_session_t *)param;
 
-    ping_session->target_ip.addr = htonl((unsigned int )ping_session->params.target_ip.ipv4);
     ping_session->seqno = 0;
     ping_session->icmp_id = ping_assign_cmp_id();
 
-    /* Init LWIP raw pcb */
-    ping_session->ping_pcb = raw_new(IP_PROTO_ICMP);
-    if (ping_session->ping_pcb == NULL)
+    if (ping_session->params.ipv6)
     {
-        ping_session->is_running = FALSE;
-        Report("\n\rlwip_ping: ERROR! Failed to create ping pcb\n\r");
-        return;
-    }
+        memcpy(&ping_session->target_ip.u_addr.ip6,
+               ping_session->params.target_ip.ipv6, 16);
+        ping_session->target_ip.type = IPADDR_TYPE_V6;
+        ip6_addr_assign_zone(&ping_session->target_ip.u_addr.ip6, IP6_UNICAST,
+                             network_netif_find_by_ip6((const uint8_t *)ping_session->target_ip.u_addr.ip6.addr));
 
-    source_ip.addr = htonl((unsigned int )ping_session->params.source_ip.ipv4);
-    if ((source_ip.addr != 0) && (is_ip_addr_in_net_list(&source_ip) != 0))
-    {
-        raw_remove(ping_session->ping_pcb);
-        ping_session->is_running = FALSE;
-        Report("\n\rlwip_ping: ERROR! Source IP address is not in netlist.\n\r");
-        return;
+        ping_session->ping_pcb = raw_new_ip_type(IPADDR_TYPE_V6, IP6_NEXTH_ICMP6);
+        if (ping_session->ping_pcb == NULL)
+        {
+            ping_session->is_running = FALSE;
+            Report("\n\rlwip_ping: ERROR! Failed to create ping pcb\n\r");
+            return;
+        }
+
+        /* lwIP computes the ICMPv6 pseudo-header checksum automatically */
+        ping_session->ping_pcb->chksum_reqd = 1;
+        ping_session->ping_pcb->chksum_offset = offsetof(struct icmp6_echo_hdr, chksum);
+
+        memset(&source_ip, 0, sizeof(source_ip));
+        source_ip.type = IPADDR_TYPE_V6;
+        err = raw_bind(ping_session->ping_pcb, &source_ip);
     }
-    
-    err = raw_bind(ping_session->ping_pcb, &source_ip);
+    else
+    {
+        ping_session->target_ip.type = IPADDR_TYPE_V4;
+        ping_session->target_ip.u_addr.ip4.addr = htonl((unsigned int)ping_session->params.target_ip.ipv4);
+
+        ping_session->ping_pcb = raw_new(IP_PROTO_ICMP);
+        if (ping_session->ping_pcb == NULL)
+        {
+            ping_session->is_running = FALSE;
+            Report("\n\rlwip_ping: ERROR! Failed to create ping pcb\n\r");
+            return;
+        }
+
+        memset(&source_ip, 0, sizeof(source_ip));  /* ensure type=IPADDR_TYPE_V4 */
+        source_ip.u_addr.ip4.addr = htonl((unsigned int)ping_session->params.source_ip.ipv4);
+        if ((source_ip.u_addr.ip4.addr != 0) && (is_ip_addr_in_net_list(&source_ip) != 0))
+        {
+            raw_remove(ping_session->ping_pcb);
+            ping_session->is_running = FALSE;
+            Report("\n\rlwip_ping: ERROR! Source IP address is not in netlist.\n\r");
+            return;
+        }
+
+        err = raw_bind(ping_session->ping_pcb, &source_ip);
+    }
     if (err != ERR_OK)
     {
         raw_remove(ping_session->ping_pcb);
@@ -191,35 +222,64 @@ static void lwip_ping_init(void *param)
 uint8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
 {
     lwip_ping_session_t *ping_session = (lwip_ping_session_t *)arg;
-    struct ip_hdr *iph = (struct ip_hdr *)p->payload;
-    uint16_t iphdr_len = IPH_HL(iph) * 4; // header length in bytes
-    struct icmp_echo_hdr *iecho = (struct icmp_echo_hdr *)((uint8_t *)p->payload + iphdr_len);
 
-    if (p->tot_len >= sizeof(struct icmp_echo_hdr) + sizeof(struct ip_hdr))
+    if (ping_session->params.ipv6)
     {
-        if ((iecho->id == lwip_htons(ping_session->icmp_id)) &&
-            (ICMPH_TYPE(iecho) == ICMP_ER))
+        /* lwIP restores the IPv6 header before calling raw_input, so
+         * p->payload points to the IPv6 header; skip it to reach ICMPv6. */
+        struct icmp6_echo_hdr *iecho6 = (struct icmp6_echo_hdr *)((uint8_t *)p->payload + IP6_HLEN);
+
+        if (p->len >= sizeof(struct icmp6_echo_hdr) + IP6_HLEN)
         {
-            if (ping_session->params.flags & PING_PRINT_RESPONSES)
+            if ((iecho6->id == lwip_htons(ping_session->icmp_id)) &&
+                (iecho6->type == ICMP6_TYPE_EREP))
             {
-                Report("\n\rping_session_id=%u: %u bytes from %s: icmp_id=%u icmp_seq=%u\n\r",
-                       ping_session->session_id,
-                       ping_session->params.payload_size + sizeof(struct icmp_echo_hdr),
-                       ipaddr_ntoa(addr),
-                       lwip_ntohs(iecho->id),
-                       lwip_ntohs(iecho->seqno));
+                if (ping_session->params.flags & PING_PRINT_RESPONSES)
+                {
+                    Report("\n\rping_session_id=%u: %u bytes from %s: icmp_id=%u icmp_seq=%u\n\r",
+                           ping_session->session_id,
+                           ping_session->params.payload_size + sizeof(struct icmp6_echo_hdr),
+                           ipaddr_ntoa(addr),
+                           lwip_ntohs(iecho6->id),
+                           lwip_ntohs(iecho6->seqno));
+                }
+
+                ping_session->packets_received++;
+                pbuf_free(p);
+                return 1;
             }
-            
-            ping_session->packets_received++;
+        }
+        return 0;
+    }
 
-            pbuf_free(p);
+    /* IPv4: p->payload includes the IP header */
+    {
+        struct ip_hdr *iph = (struct ip_hdr *)p->payload;
+        uint16_t iphdr_len = IPH_HL(iph) * 4;
+        struct icmp_echo_hdr *iecho = (struct icmp_echo_hdr *)((uint8_t *)p->payload + iphdr_len);
 
-            /* Packet eaten */
-            return 1;
+        if (p->tot_len >= sizeof(struct icmp_echo_hdr) + sizeof(struct ip_hdr))
+        {
+            if ((iecho->id == lwip_htons(ping_session->icmp_id)) &&
+                (ICMPH_TYPE(iecho) == ICMP_ER))
+            {
+                if (ping_session->params.flags & PING_PRINT_RESPONSES)
+                {
+                    Report("\n\rping_session_id=%u: %u bytes from %s: icmp_id=%u icmp_seq=%u\n\r",
+                           ping_session->session_id,
+                           ping_session->params.payload_size + sizeof(struct icmp_echo_hdr),
+                           ipaddr_ntoa(addr),
+                           lwip_ntohs(iecho->id),
+                           lwip_ntohs(iecho->seqno));
+                }
+
+                ping_session->packets_received++;
+                pbuf_free(p);
+                return 1;
+            }
         }
     }
 
-    /* Packet not eaten, no need to call pbuf_free() */
     return 0;
 }
 
@@ -229,6 +289,47 @@ void lwip_ping_send(void *ctx)
     struct pbuf *p = NULL;
     lwip_ping_session_t *ping_session = (lwip_ping_session_t *)ctx;
     err_t err;
+
+    if (ping_session->params.ipv6)
+    {
+        p = pbuf_alloc(PBUF_IP,
+                       sizeof(struct icmp6_echo_hdr) + ping_session->params.payload_size,
+                       PBUF_RAM);
+        if (!p)
+        {
+            return;
+        }
+
+        if ((p->len == p->tot_len) && (p->next == NULL))
+        {
+            struct icmp6_echo_hdr *iecho6 = (struct icmp6_echo_hdr *)p->payload;
+            uint8_t *payload_ptr = (uint8_t *)(iecho6 + 1);
+            uint16_t i;
+
+            iecho6->type   = ICMP6_TYPE_EREQ;
+            iecho6->code   = 0;
+            iecho6->chksum = 0; /* filled by lwIP via chksum_reqd */
+            iecho6->id     = lwip_htons(ping_session->icmp_id);
+            iecho6->seqno  = lwip_htons(ping_session->seqno);
+
+            for (i = 0; i < ping_session->params.payload_size; i++)
+            {
+                payload_ptr[i] = (uint8_t)(i % (UINT8_MAX + 1));
+            }
+
+            err = raw_sendto(ping_session->ping_pcb, p, &ping_session->target_ip);
+            if (err != ERR_OK)
+            {
+                pbuf_free(p);
+                return;
+            }
+            ping_session->packets_sent++;
+            ping_session->seqno++;
+        }
+
+        pbuf_free(p);
+        return;
+    }
 
     /* Allocate according to payload size */
     p = pbuf_alloc(PBUF_IP,
@@ -253,11 +354,6 @@ void lwip_ping_send(void *ctx)
         }
         ping_session->packets_sent++;
         ping_session->seqno++;
-
-        // Report("\n\rPing request sent to %s: id=%u seq=%u\n\r",
-        //        ipaddr_ntoa(&ping_session->target_ip),
-        //        ping_session->id,
-        //        ping_session->seqno - 1);
     }
 
     pbuf_free(p);
@@ -277,12 +373,9 @@ static void ping_send(lwip_ping_session_t *ping_session)
 void ping_session_task(void *arg)
 {
     lwip_ping_session_t *session = (lwip_ping_session_t *)arg;
-    char *target_ip_str;
-
-    target_ip_str = inet_ntoa(session->target_ip);
 
     Report("\n\rPING %s %d bytes of data.\n\r",
-           target_ip_str,
+           ipaddr_ntoa(&session->target_ip),
            session->params.payload_size);
     
     /* Start sending until session is stopped or if count is not 0 (infinite) and is reached */
@@ -420,4 +513,3 @@ int32_t lwip_ping_stop(int8_t session_id)
     }
 }
 
-#endif // CC35XX

@@ -197,18 +197,17 @@ void ButtonSw2EventHandler(BUTTON_IF_events_bm events)
 
     if (events & BUTTON_IF_EV_CLICKED)
     {
-        //UART_PRINT("APP_BTN_HANDLER SHORT PRESS (CONN/DISC)\r\n");
+  
         queueElement.event = APP_MQTT_CON_TOGGLE;
     }
     if (events & BUTTON_IF_EV_LONG_CLICKED)
     {
-        //UART_PRINT("APP_BTN_HANDLER LONG PRESS (DEINIT)\r\n");
         queueElement.event = APP_MQTT_DEINIT;
     }
 
     ret = osi_MsgQWrite(&appQueue,&queueElement, OSI_WAIT_FOREVER,OSI_FLAG_NOT_FROM_INTR);
     if(ret < 0){
-        //UART_PRINT("msg queue send error %d\r\n", ret);
+        UART_PRINT("msg queue send error %d\r\n", ret); //print in case of fail to write to message queue
     }
 }
 
@@ -219,12 +218,10 @@ void ButtonSw1EventHandler(BUTTON_IF_events_bm events)
 
     if (events & BUTTON_IF_EV_CLICKED)
     {
-        //UART_PRINT("APP_BTN_HANDLER SHORT PRESS (PUBLISH)\r\n");
         queueElement.event = APP_MQTT_PUBLISH;
     }
     else if (events & BUTTON_IF_EV_LONG_CLICKED)
     {
-        //UART_PRINT("APP_BTN_HANDLER LONG PRESS (OTA)\r\n");
         queueElement.event = APP_OTA_TRIGGER;
     }
     ret = osi_MsgQWrite(&appQueue, &queueElement, OSI_WAIT_FOREVER,OSI_FLAG_NOT_FROM_INTR);
@@ -377,11 +374,6 @@ void OnMqttEvent(MQTTClient_Handle hMqttConn, int32_t event, void *args){
     UART_PRINT("MQTT EVENT: %s (%p)\r\n", pStr, hMqttConn);
 }
 
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
 void *mainThread(void *args)
 {
     int32_t RetVal = -1;
@@ -402,10 +394,6 @@ void *mainThread(void *args)
     uint8_t accXYZ;
     uint8_t netIdx;
     WlanNetworkEntry_t   netEntry;
-
-    /* init drivers and services */
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
 
     Board_init();
     InitTerm();
@@ -531,13 +519,19 @@ void *mainThread(void *args)
 
     rc = WIFI_IF_start(OnWifiEvent, WIFI_SERVICE_LVL_IP, 10000, &hWifiConn);
 
+    osi_Sleep(1);
+    
     /* if predefined AP credentials fail, open interactive mode */
     if (rc != OSI_OK)
     {
+        UART_PRINT(   "\nFailed to connect to predefined AP, starting interactive mode...\n\r");
         while (1)
         {
             WIFI_IF_scan(WLAN_ROLE_STA);
             osi_Sleep(2);
+            
+            UART_PRINT(   "\nIMPORTANT REMINDER: Please set the credentials of the designated AP in the wifi_settings.h file to skip interactive mode.\n\r");
+
             RetVal = GetCmd((char *)accStr, 100, "please choose a network index to connect to or any other key to rescan: ");
             netIdx = atoi(accStr);
             if ((netIdx >= 1) && (netIdx <= WIFI_IF_getNetEntrySize()))

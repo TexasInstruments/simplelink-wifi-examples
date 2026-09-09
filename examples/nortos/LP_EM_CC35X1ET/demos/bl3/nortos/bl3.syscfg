@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2020-2025, Texas Instruments Incorporated
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * *  Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * *  Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * *  Neither the name of Texas Instruments Incorporated nor the names of
+ *    its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+// @cliArgs --board /ti/boards/LP_EM_CC35X1ET --rtos nortos
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO    = scripting.addModule("/ti/drivers/GPIO");
+const GPIO1   = GPIO.addInstance();
+const GPIO2   = GPIO.addInstance();
+const UART2   = scripting.addModule("/ti/drivers/UART2");
+const UART21  = UART2.addInstance();
+const Mem_cfg = scripting.addModule("/ti/memoryconfig/MemoryConfigurator/Mem_cfg");
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+GPIO1.$name           = "CONFIG_GPIO_READ";
+GPIO1.gpioPin.$assign = "boosterpack.6";
+scripting.suppress("Connected to hardware,@@@.+?@@@ is connected to LaunchPad I2C bus on the CC35X1 LaunchPad\\. Consider selecting it in \'use hardware\' above\\. @@@.+?@@@", GPIO1, "gpioPin");
+
+GPIO2.$name           = "CONFIG_GPIO_WRITE";
+GPIO2.mode            = "Output";
+GPIO2.gpioPin.$assign = "boosterpack.5";
+scripting.suppress("Connected to hardware,@@@.+?@@@ is connected to LaunchPad I2C bus on the CC35X1 LaunchPad\\. Consider selecting it in \'use hardware\' above\\. @@@.+?@@@", GPIO2, "gpioPin");
+
+Mem_cfg.vendor_bl3_slot1_size_kb     = 105;
+
+UART21.$name     = "CONFIG_UART2_0";
+UART21.$hardware = system.deviceData.board.components.XDS110UART;
+
+const ActionReq              = scripting.addModule("/ti/vendorutils/Action/ActionReq", {}, false);
+ActionReq.ota                = true;
+ActionReq.bl3_enable         = true;
+ActionReq.primary_vendor_bl3 = true;
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+UART21.uart.$suggestSolution              = "UART1";
+UART21.uart.dmaTxChannel.$suggestSolution = "DMA_CH1";
+UART21.uart.dmaRxChannel.$suggestSolution = "DMA_CH0";
+UART21.uart.txPin.$suggestSolution        = "GPIO5";
+UART21.uart.rxPin.$suggestSolution        = "GPIO6";

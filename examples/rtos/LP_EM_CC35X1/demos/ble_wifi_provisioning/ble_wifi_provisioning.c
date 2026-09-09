@@ -56,9 +56,6 @@
 //LWIP
 #include "network_lwip.h"
 
-//SOCKET
-#include "socket_examples.h"
-
 //ERRORS
 #include "errors.h"
 
@@ -176,7 +173,6 @@ void WlanStackEventHandler(WlanEvent_t *pWlanEvent)
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_IP_ACQUIRED);
         CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_IPV6_ACQUIRED);
 
-        killAllProcess();
         staif = network_get_sta_if();
 
         network_set_down(staif);
@@ -665,12 +661,6 @@ void advEnable(void)
 }
 
 
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
-
 void *ble_wifi_provisioning_entry(void *args)
 {
 #ifdef CC33XX
@@ -692,9 +682,6 @@ void *ble_wifi_provisioning_entry(void *args)
     wlan_TurnOffWlan();
 #elif defined(CC35XX)
     int32_t             RetVal = -1;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
-    //HWREG(ICACHE_BASE + 0x4) |= 0x80000000  ;//OSPREY_MX-38, this is for 64M cache, instead CRAM
 
     Board_init();
 

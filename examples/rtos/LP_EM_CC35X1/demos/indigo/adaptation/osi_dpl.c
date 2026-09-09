@@ -30,6 +30,8 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
 #include <stdlib.h>
 #include <osi_kernel.h>
 #include "ti/drivers/dpl/SemaphoreP.h"
@@ -257,8 +259,18 @@ OsiReturnVal_e osi_SyncObjSignal(OsiSyncObj_t* pSyncObj)
 */
 OsiReturnVal_e osi_SyncObjSignalFromISR(OsiSyncObj_t* pSyncObj)
 {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-   return osi_SyncObjSignal(pSyncObj);
+    if(NULL == pSyncObj)
+    {
+        return OSI_INVALID_PARAMS;
+    }
+
+    SemaphoreP_Handle *pl_SyncObj = (SemaphoreP_Handle *)pSyncObj;
+    xSemaphoreGiveFromISR((SemaphoreHandle_t)(*pl_SyncObj), &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+
+    return OSI_OK;
 }
 
 /*!
@@ -1439,6 +1451,15 @@ OsiThread_t osi_GetCurrentThread()
 size_t osi_GetFreeHeapSize()
 {
     return (size_t)xPortGetFreeHeapSize();
+}
+
+uint32_t osi_GetStackHighWaterMark(void)
+{
+#if INCLUDE_uxTaskGetStackHighWaterMark
+    return (uint32_t)uxTaskGetStackHighWaterMark(NULL);
+#else
+    return 0;
+#endif
 }
 
 /*******************************************************************************

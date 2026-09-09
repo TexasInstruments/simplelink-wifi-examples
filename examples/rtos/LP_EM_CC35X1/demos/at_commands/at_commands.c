@@ -51,12 +51,6 @@
 #include "osi_kernel.h"
 #include "lwip/netif.h"
 
-
-//OSPREY_MX-38
-#define HWREG(x)                                                              \
-        (*((volatile unsigned long *)(x))) //TODO temporary need to be removed
-#define ICACHE_BASE 0x41902000  //TODO temporary need to be removed, only for M3, M$ has different address
-
 //*****************************************************************************
 // defines
 //*****************************************************************************
@@ -495,10 +489,13 @@ void *ATCommands_eventTask(void *pvParameters)
 //! \return None
 //!
 //*****************************************************************************
-void ATCommands_NetworkStatusCallback(WlanRole_e roleId, uint32_t ipAddress)
+void ATCommands_NetworkStatusCallback(WlanRole_e roleId, uint32_t ipAddress, uint32_t local_ipv6[4], uint32_t global_ipv6[4])
 {
     struct netif *stateNetif = NULL;
     const ip4_addr_t *temp;
+
+    (void)local_ipv6;  /* suppress unused-parameter warning */
+    (void)global_ipv6; /* suppress unused-parameter warning */
 
     if (roleId == WLAN_ROLE_STA)
     {
@@ -764,9 +761,6 @@ void *mainThread(void *pvParameters)
     struct sched_param priParam;
 
     //uint32_t ticksToSleep;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001  ;//OSPREY_MX-38
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000  ;//OSPREY_MX-38
-    //HWREG(ICACHE_BASE + 0x4) |= 0x80000000  ;//OSPREY_MX-38, this is for 64M cache, instead CRAM
 
 #ifdef AT_COMMANDS_TERMINAL_TAB_COMPLETION
     initCompletions();

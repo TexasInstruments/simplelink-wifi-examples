@@ -30,6 +30,7 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "lwip_iperf_examples.h"
+#include "str.h"
 #include "lwip/opt.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
@@ -42,13 +43,10 @@
 #include "errors.h"
 #include "FreeRTOSConfig.h"
 #include "osi_kernel.h"
-#ifdef CC35XX
 #include "wlan_if.h"
 #include "network_lwip.h"
-#endif // CC35XX
 #include "cmd_parser.h"
 
-#ifdef CC35XX
 
 extern int32_t iperflwip_tcp_server_start(void* args);
 extern int32_t iperflwip_tcp_client_start(void* args);
@@ -57,6 +55,8 @@ extern int32_t iperflwip_udp_client_start(void* args);
 extern void udp_client_stop(session_conn_t* session_con);
 extern int32_t iperflwip_udp_server_start(void* args);
 extern void udp_server_stop(session_conn_t* session_con);
+extern int32_t tls_iperf_client_start(void* args);
+extern int32_t tls_iperf_server_start(void* args);
 
 
 int32_t iperflwip_stop(void* args);
@@ -107,11 +107,10 @@ int32_t cmdTestIperfCallback(void *arg)
          {
              ret = iperflwip_udp_server_start((void *)&IperfCmdParams);
          }
-
      }
      else
      {
-         if(protocol == SOCK_STREAM)//TCP server
+         if(protocol == SOCK_STREAM)//TCP client
          {
              ret = iperflwip_tcp_client_start((void *)&IperfCmdParams);
          }
@@ -144,6 +143,17 @@ int32_t cmdStopTestIperfCallback(void *arg)
 
 }
 
+static const char *proto_name(iperf_proto_t proto)
+{
+    switch (proto)
+    {
+        case IPERF_PROTO_TCP: return "TCP";
+        case IPERF_PROTO_UDP: return "UDP";
+        case IPERF_PROTO_TLS: return "TLS";
+        default:              return "???";
+    }
+}
+
 int32_t iperflwip_stop(void* args)
 {
     int process_num = *((uint32_t *)args);
@@ -151,32 +161,38 @@ int32_t iperflwip_stop(void* args)
 
     if( iperf_session[process_num].is_running )
     {
-        if(!iperf_session[process_num].is_udp)//tcp client or server
+        session_conn_t *session = &iperf_session[process_num];
+
+        switch (session->proto)
         {
-            session_conn_t *client = &iperf_session[process_num];
-            tcpip_callback(iperflwip_tcp_stop_from_cb, (void *)client);
-            os_sleep(0,50);//give time to the iperf_server_init to be trigger
-            Report("\r\niperf tcp process number :%d stopped! ", process_num );
-            return 0;
-        }
-        else
-        {
-            if(iperf_session[process_num].is_server)//udp server
-            {
-                session_conn_t *client = &iperf_session[process_num];
-                udp_server_stop(client);
-                os_sleep(0,50);//give time to the iperf_server_init to be trigger
-                Report("\r\niperf udp server process number :%d stopped! ", process_num );
+            case IPERF_PROTO_TCP:
+                tcpip_callback(iperflwip_tcp_stop_from_cb, (void *)session);
+                os_sleep(0,50);
+                Report("\r\niperf tcp process number :%d stopped! ", process_num);
                 return 0;
-            }
-            else //udp client
-            {
-                session_conn_t *client = &iperf_session[process_num];
-                udp_client_stop(client);
-                os_sleep(0,50);//give time to the iperf_server_init to be trigger
-                Report("\r\niperf udp client process number :%d stopped! ", process_num );
+
+            case IPERF_PROTO_UDP:
+                if (session->is_server)
+                {
+                    udp_server_stop(session);
+                }
+                else
+                {
+                    udp_client_stop(session);
+                }
+                os_sleep(0,50);
+                Report("\r\niperf udp %s process number :%d stopped! ",
+                       session->is_server ? "server" : "client", process_num);
                 return 0;
-            }
+
+            case IPERF_PROTO_TLS:
+                session->is_req_to_abort_test = 1;
+                Report("\r\niperf tls %s process number :%d stop requested",
+                       session->is_server ? "server" : "client", process_num);
+                return 0;
+
+            default:
+                return -1;
         }
     }
     else
@@ -190,10 +206,12 @@ int32_t iperflwip_stop(void* args)
         {
             if(iperf_session[i].is_running)
             {
-                Report("\r\n process num : %d is_server:%d is_udp:%d",
+                Report("\r\n process num : %d is_server:%d proto:%s port:%u  (stop: iperf_stop -n %d)",
                         i,
                         iperf_session[i].is_server,
-                        iperf_session[i].is_udp) ;
+                        proto_name(iperf_session[i].proto),
+                        (unsigned)iperf_session[i].lwipConfig.destOrLocalPortNumber,
+                        i);
             }
         }
         return -1;
@@ -229,6 +247,7 @@ int32_t printTestIperfUsage(void *arg)
     Report(recvTestIperf_b_optionDetailsStr);
     Report(recvTestIperf_B_optionDetailsStr);
     Report(recvTestIperf_l_optionDetailsStr);
+    Report(recvTestIperf_6_optionDetailsStr);
     Report(lineBreak);
     return (0);
 }
@@ -247,6 +266,51 @@ int32_t printStopTestIperfUsage(void *arg)
     Report(recvStopTestIperf_n_optionDetailsStr);
     Report(lineBreak);
     return (0);
+}
+
+
+int32_t printTestTlsIperfUsage(void *arg)
+{
+    Report(lineBreak);
+    Report(usageStr);
+    Report(TestTlsIperf);
+    Report(recvTestTlsIperfUsage2Str);
+    Report(descriptionStr);
+    Report(recvTestTlsIperfDetailsStr);
+
+    Report(recvTestTlsIperf_s_optionDetailsStr);
+    Report(recvTestTlsIperf_c_optionDetailsStr);
+    Report(recvTestTlsIperf_p_optionDetailsStr);
+    Report(recvTestTlsIperf_t_optionDetailsStr);
+    Report(recvTestTlsIperf_i_optionDetailsStr);
+    Report(recvTestTlsIperf_l_optionDetailsStr);
+    Report(recvTestIperf_6_optionDetailsStr);
+    Report(lineBreak);
+    return (0);
+}
+
+
+int32_t cmdTestTlsIperfCallback(void *arg)
+{
+    RecvCmd_t params;
+    int32_t   ret;
+
+    memset(&params, 0, sizeof(RecvCmd_t));
+    ret = ParseTlsIperfCmd(arg, &params);
+
+    if (ret < 0)
+    {
+        return -1;
+    }
+
+    if (params.server)
+    {
+        return tls_iperf_server_start(&params);
+    }
+    else
+    {
+        return tls_iperf_client_start(&params);
+    }
 }
 
 
@@ -283,15 +347,8 @@ void iperflwip_tcp_stop(void *arg, uint8_t isError)
     {
         return;
     }
-    if (session_con->os_timer != 0) {
 
-        struct itimerspec       its = {0};
-        //stop the timer
-        timer_settime(session_con->os_timer, 0, &its, NULL);
-        timer_delete(session_con->os_timer);
-        session_con->os_timer = 0;
-    }
-
+    /* TI: Request abort - report task will see this and exit */
     session_con->is_req_to_abort_test = 1;
     session_con->is_stop_due_traffic_error = isError;
     tcpip_callback(session_con->iperf_reportFunc,session_con);
@@ -299,35 +356,33 @@ void iperflwip_tcp_stop(void *arg, uint8_t isError)
 
 void iperflwip_tcp_close(void *arg)
 {
-    
+
     session_conn_t *session_con = arg;
     uint8_t is_running = session_con->is_running;
     uint8_t isError = session_con->is_stop_due_traffic_error;
 
     session_con->is_running = false;
 
-    if (session_con->os_timer != 0) {
-
-        struct itimerspec       its = {0};
-        //stop the timer
-        timer_settime(session_con->os_timer, 0, &its, NULL);
-        timer_delete(session_con->os_timer);
-        session_con->os_timer = 0;
+    if (session_con->report_task_handle != NULL)
+    {
+        xTimerStop(session_con->report_task_handle, 0);
+        xTimerDelete(session_con->report_task_handle, 0);
+        session_con->report_task_handle = NULL;
     }
 
 
     if ((!session_con->lwipConfig.server) && session_con->conn_pcb_tcp != NULL) {
-        if(is_running)
+        if(is_running && !isError)
         {
+            /* Normal close: un-register callbacks and abort.
+             * When isError=1 the tcp_err callback already fired, meaning lwIP
+             * has freed the PCB - do NOT call any tcp_* functions on it. */
             tcp_arg(session_con->conn_pcb_tcp, NULL);
             tcp_sent(session_con->conn_pcb_tcp, NULL);
             tcp_poll(session_con->conn_pcb_tcp, NULL, 0U);
             tcp_err(session_con->conn_pcb_tcp, NULL);
             tcp_recv(session_con->conn_pcb_tcp, NULL);
-            if(!isError)
-            {
-                tcp_abort(session_con->conn_pcb_tcp);
-            }
+            tcp_abort(session_con->conn_pcb_tcp);
         }
         session_con->conn_pcb_tcp = NULL;
     }
@@ -376,7 +431,7 @@ int8_t is_ip_addr_in_net_list(const ip_addr_t *addr)
 
     while (netif)
     {
-        if (ip4_addr_cmp(&(netif->ip_addr), addr))
+        if (ip4_addr_cmp(&(netif->ip_addr.u_addr.ip4), &(addr->u_addr.ip4)))
         {
             return 0;
         }
@@ -386,5 +441,30 @@ int8_t is_ip_addr_in_net_list(const ip_addr_t *addr)
     return -1;
 }
 
+void format_bps(double bps, char *output, size_t size)
+{
+    const char *units[] = {"bps", "Kbps", "Mbps", "Gbps", "Tbps"};
+    int unit_index = 0;
 
-#endif
+    while (bps >= 1000 && unit_index < 4)
+    {
+        bps /= 1000;
+        unit_index++;
+    }
+
+    uint32_t integer_part = (uint32_t)bps;
+    uint32_t decimal_part = (uint32_t)((bps - integer_part) * 100 + 0.5);
+
+    if (decimal_part >= 100)
+    {
+        integer_part++;
+        decimal_part = 0;
+    }
+
+    snprintf(output, size, "%lu.%02lu %s",
+             (unsigned long)integer_part,
+             (unsigned long)decimal_part,
+             units[unit_index]);
+}
+
+

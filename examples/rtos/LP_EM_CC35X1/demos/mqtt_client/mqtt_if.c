@@ -62,7 +62,6 @@ typedef struct mqttIfClient
 static struct
 {
     mqttIfClient_t *pClientFirst;
-    /*** TODO - Add mutex for thread safe operation ***/
 } m_ctx;
 
 static void LwipCB_mqttPubAck(void *arg, err_t result)        //added
@@ -312,9 +311,6 @@ int MQTT_IF_clientConnect(MQTTClient_Handle hClient, MQTTClient_ConnParams *pCon
     ip_addr_t mqttIp = {0};
     mqttIfClient_t *pClient = (mqttIfClient_t*)hClient;
     MQTTClient_ConnParams connParams = {0};
-#if MQTT_SECURE_CLIENT
-    char *pSecureFiles[1];
-#endif
 
     if(pConnParams == NULL)
     {
@@ -323,9 +319,6 @@ int MQTT_IF_clientConnect(MQTTClient_Handle hClient, MQTTClient_ConnParams *pCon
         connParams.serverAddr = MQTT_CONNECTION_ADDRESS;
         connParams.port = MQTT_CONNECTION_PORT_NUMBER;
         connParams.netconnFlags = MQTT_CONNECTION_FLAGS;
-
-#ifdef MQTT_SECURE_CLIENT
-#endif
     }
     if(pClient && pClient->hLWIPClient)
     {

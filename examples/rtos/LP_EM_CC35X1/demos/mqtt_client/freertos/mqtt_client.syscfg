@@ -18,13 +18,17 @@ const LED1      = LED.addInstance();
 const LED2      = LED.addInstance();
 const LED3      = LED.addInstance();
 const Settings  = scripting.addModule("/ti/posix/freertos/Settings");
+const sps       = scripting.addModule("/ti/common/sps");
 // @cliArgs --board /ti/boards/LP_EM_CC35X1 --rtos freertos
 
+
+sps.enableSPS = true;
 /**
  * Write custom configuration values to the imported modules.
  */
 FreeRTOS.useTimeSlicing = true;
-FreeRTOS.heapSize = 0x00057000;
+FreeRTOS.timerTaskPriority = 9;
+FreeRTOS.heapSize = 0x0004FBF0;
 
 I2C1.$name              = "CONFIG_I2C_0";
 I2C1.i2c.$assign        = "I2C1";

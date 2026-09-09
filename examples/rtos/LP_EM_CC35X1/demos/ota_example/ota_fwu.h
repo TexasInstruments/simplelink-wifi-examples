@@ -124,4 +124,32 @@ void OTA_FWU_rejectAndCleanAll(void);
 */
 void OTA_FWU_cancelAndCleanCandidates(void);
 
+/*!
+    \brief  Returns 1 if Vendor BL3 is installed (primary in either slot), 0 otherwise.
+*/
+int OTA_FWU_isBL3Installed(void);
+
+/*!
+    \brief  Check download ordering before starting a component download.
+
+    When BL3 is the selected component, vendor image must already be CANDIDATE.
+
+    \param[in] slot1Id  First slot ID of the component to be downloaded
+    \param[in] slot2Id  Second slot ID of the component to be downloaded
+
+    \return 0 if download may proceed, -1 if ordering requirement is not met.
+*/
+int OTA_FWU_checkDownloadOrder(int slot1Id, int slot2Id);
+
+/*!
+    \brief  Validate bundle requirements before calling psa_fwu_install().
+
+    When BL3 is present, Vendor Image and BL3 must be updated together.
+    Checks that if a Vendor Image candidate exists, the paired BL3 slot
+    is also a candidate.
+
+    \return 0 if install may proceed, -1 if requirements are not met.
+*/
+int OTA_FWU_checkBundleForInstall(void);
+
 #endif /* OTA_FWU_H */

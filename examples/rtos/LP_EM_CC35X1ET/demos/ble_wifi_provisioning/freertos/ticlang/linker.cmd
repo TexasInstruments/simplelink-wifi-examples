@@ -47,13 +47,11 @@ MEMORY
     //INT_VEC                 (RWX)  : origin = 0x00000000,          length = 0x000002FF                      //0x00000000-0x000002FF  0x300kbyte
     TCM_CRAM_NON_SECURE     (RWX)  : origin = 0x00000000,          length = 0x00007FFF                      //0x00000000-0x000007FF  32kbyte
     //TCM_CRAM_SECURE         (RWX)  : origin = 0x04000000,          length = 0x03FFFFFF                      //0x04000000-0x07FFFFFF
-    CRAM_NON_SECURE         (RWX)  : origin = 0x08000000,          length = 0x0000FFFF                      //0x08000000-0x0800FFFF  64Kbyte
-    //CRAM_SECURE             (RWX)  : origin = 0x0C000000,          length = 0x03FFFFFF                      //0x0C000000-0x0FFFFFFF
     TCM_DRAM_NON_SECURE     (RW)   : origin = 0x20000000,          length = ((build_linker_toolbox_PSRAM_SIZE == 0) * 0x10000 + 0xFFFF)  //0x20000000-0x2000FFFF  64Kbyte for PSRAM / //0x20000000-0x2001FFFF  128Kbyte for NO-PSRAM 
     //TCM_DRAM_SECURE         (RW)   : origin = 0x24000000,          length = 0x03FFFFFF                      //0x24000000-0x27FFFFFF
     CONNECTIVITY_SHARED_MEM (RW)   : origin = 0x28000000,          length = 0x000000FF                      //0x28030000 - 0x280000FF
-    BOOT_REPORT_SHARED_MEM  (RW)   : origin = 0x28000100,          length = 0x00000CAF                      //0x28000100-0x28000DAF 
-    DRAM_NON_SECURE         (RW)   : origin = 0x28000DB0,          length = 0x0007F24F                      //0x28000DB0-0x2807FFFF 
+    BOOT_REPORT_SHARED_MEM  (RW)   : origin = 0x28000100,          length = 0x00000CAF                      //0x28000100-0x28000DAF
+    DRAM_NON_SECURE         (RW)   : origin = 0x28000DB0,          length = 0x0007F24F                      //0x28000DB0-0x2807FFFF
     //DRAM_SECURE             (RW)   : origin = 0x2C000000,          length = 0x03FFFFFF                      //0x2C000000-0x2FFFFFFF
     PS_RAM                  (RW)   : origin = 0x60000000,          length = build_linker_toolbox_PSRAM_SIZE + (build_linker_toolbox_PSRAM_SIZE == 0)  //0x60000000-0x60800000 //0x60000000-0x60200000 Configure by sysconfig
 
@@ -72,11 +70,10 @@ SECTIONS
         .resetVecs:   {} palign(4)   /* This is where code resides */
     } > FLASH_INT_VEC
 
-    /* This is rest of code */
     GROUP {
         .cram:   {} palign(4)
-        .text:   {} palign(4)   /* This is where code resides */
-        .rodata: {} palign(4)   /* This is where const's go */
+        .text:   {} palign(4)
+        .rodata: {} palign(4)
     } > FLASH_NON_SECURE
 
     GROUP {
@@ -84,39 +81,68 @@ SECTIONS
         .cinit:  {} palign(4)
     } > FLASH_NON_SECURE
 
-    /* Code RAM */
+    /* .TI.ramfunc is in TCM_CRAM. */
     .TI.ramfunc     : {} load=FLASH_NON_SECURE, run=TCM_CRAM_NON_SECURE, table(BINIT)
 
-    /* Data section - moved to DRAM to save TCM space */
+    /* Exception handlers must be in TCM_CRAM — not accessible in Flash when OTFDE is disabled */
+    .text.Exception_handlerSpin : {} load=FLASH_NON_SECURE, run=TCM_CRAM_NON_SECURE, table(BINIT)
+
+    /* .internalRAM is in TCM_DRAM.
+     * DMA engine cannot reach Flash or PS_RAM on CC35xx. */
     GROUP {
-        .data:   {} palign(4)   /* This is where initialized globals and static go */
+        .internalRAM:      {} palign(4)
+    } > TCM_DRAM_NON_SECURE
+
+    /* .internalRAM.bss is in TCM_DRAM for fast DMA access. */
+    GROUP {
+        .internalRAM.bss:  {} palign(4)
+    } > TCM_DRAM_NON_SECURE
+
+    /* .internalRAM.data is in TCM_DRAM. Required for Flash operations. */
+    GROUP {
+        .internalRAM.data: {} palign(4)
+    } load=FLASH_NON_SECURE, run=TCM_DRAM_NON_SECURE, table(BINIT)
+
+    /* .data is in PS_RAM on CC35xxET (stacked RAM). */
+    GROUP {
+        .data:   {} palign(4)
+    } load=FLASH_NON_SECURE, run=PS_RAM, table(BINIT)
+
+    /* .sysmem (malloc heap) is in DRAM. */
+    GROUP {
+        .sysmem: {} palign(4)
     } > DRAM_NON_SECURE
 
-    /* System memory in DRAM */
+    /* BLE/WiFi pool BSS subsections are in DRAM — accessed from interrupt context. */
     GROUP {
-        .sysmem: {} palign(4)   /* This is where the malloc heap goes */
-    } > DRAM_NON_SECURE
-
-    /* Specific BSS subsections in DRAM */
-    GROUP {
-        .bss.ucHeap:    {} palign(4)   /* FreeRTOS heap */
-        .bss.pool_acl_buf:    {} palign(4)
+        .bss.pool_acl_buf:       {} palign(4)
         .bss.ble_l2cap_chan_mem: {} palign(4)
-        .bss.os_msys_1_data: {} palign(4)
+        .bss.os_msys_1_data:     {} palign(4)
     } > DRAM_NON_SECURE
 
-    /* Move entire BSS section (including COMMON symbols) to DRAM to save TCM space */
-    /* TI Clang linker merges COMMON symbols into .bss, so we must move all of .bss */
+    /* .bss and .bss.ucHeap are in PS_RAM on CC35xxET.
+     * FreeRTOS task stacks reside in the heap, freeing DRAM for latency-critical data. */
     GROUP {
-        .bss:    {} palign(4)   /* All uninitialized globals including COMMON symbols */
+        .bss.ucHeap: {} palign(4)
+        .bss:        {} palign(4)
         RUN_START(__BSS_START)
         RUN_END(__BSS_END)
-    } > DRAM_NON_SECURE
+    } > PS_RAM
 
-    /* Only stack in TCM_DRAM for fast access */
+    /* .externalRAM sections are in PS_RAM on CC35xxET. */
     GROUP {
-        .stack:  {} palign(4)   /* This is where the main() stack goes - 12KB (0x2FF0) */
-    } > TCM_DRAM_NON_SECURE
+        .externalRAM:      {} palign(4)
+        .externalRAM.bss:  {} palign(4)
+        .externalRAM.data: {} palign(4)
+    } > PS_RAM
+
+    /* .stack is in PS_RAM on CC35xxET.
+     * NOTE: code executing during the OSPI-inaccessible window (OTFDE disabled)
+     * must not use this stack — the naked trampolines in FlashWFF3.c switch to
+     * flashTempStackBuf (TCM_DRAM) for the duration. */
+    GROUP {
+        .stack:  {} palign(4)
+    } > PS_RAM
 
     GROUP {
         .ramVecs: {} palign(512) (NOLOAD)

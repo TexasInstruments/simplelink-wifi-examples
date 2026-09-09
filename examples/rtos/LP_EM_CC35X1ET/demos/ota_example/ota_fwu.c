@@ -32,7 +32,7 @@
 
 /*!
     \file   ota_fwu.c
-    \brief  PSA FWU slot management — query, prepare, and display component
+    \brief  PSA FWU slot management - query, prepare, and display component
             status for the OTA example.
 
     This module wraps the PSA Firmware Update API to provide helpers for
@@ -55,7 +55,9 @@ static const char *gComponentName[MAX_COMPONENT_ID] = {
     "Wireless_FW_Slot_1",
     "Wireless_FW_Slot_2",
     "Vendor_Image_Slot_1",
-    "Vendor_Image_Slot_2"
+    "Vendor_Image_Slot_2",
+    "Vendor_BL3_Slot_1",
+    "Vendor_BL3_Slot_2"
 };
 
 static const char *gComponentState[] = {
@@ -160,7 +162,7 @@ int OTA_FWU_prepareSlot(psa_fwu_component_t componentId)
             UART_PRINT("[OTA] psa_fwu_clean failed: %d\n\r", ret);
             return -1;
         }
-        UART_PRINT("[OTA] Done — component is now READY\n\r");
+        UART_PRINT("[OTA] Done - component is now READY\n\r");
     }
     else if (compInfo.state == PSA_FWU_WRITING ||
              compInfo.state == PSA_FWU_CANDIDATE)
@@ -179,7 +181,7 @@ int OTA_FWU_prepareSlot(psa_fwu_component_t componentId)
             UART_PRINT("[OTA] psa_fwu_clean failed: %d\n\r", ret);
             return -1;
         }
-        UART_PRINT("[OTA] Done — component is now READY\n\r");
+        UART_PRINT("[OTA] Done - component is now READY\n\r");
     }
     else if (compInfo.state == PSA_FWU_STAGED ||
              compInfo.state == PSA_FWU_TRIAL)
@@ -198,7 +200,7 @@ int OTA_FWU_prepareSlot(psa_fwu_component_t componentId)
             UART_PRINT("[OTA] psa_fwu_clean failed: %d\n\r", ret);
             return -1;
         }
-        UART_PRINT("[OTA] Done — component is now READY\n\r");
+        UART_PRINT("[OTA] Done - component is now READY\n\r");
     }
     else if (compInfo.state == PSA_FWU_REJECTED)
     {
@@ -211,7 +213,7 @@ int OTA_FWU_prepareSlot(psa_fwu_component_t componentId)
             UART_PRINT("[OTA] psa_fwu_clean failed: %d\n\r", ret);
             return -1;
         }
-        UART_PRINT("[OTA] Done — component is now READY\n\r");
+        UART_PRINT("[OTA] Done - component is now READY\n\r");
     }
     else
     {
@@ -332,6 +334,77 @@ void OTA_FWU_rejectAndCleanAll(void)
             }
         }
     }
+}
+
+int OTA_FWU_checkDownloadOrder(int slot1Id, int slot2Id)
+{
+    psa_fwu_component_info_t info;
+
+    if (slot1Id != Vendor_BL3_Slot_1 && slot2Id != Vendor_BL3_Slot_2)
+    {
+        return 0;
+    }
+
+    if (psa_fwu_query(Vendor_Image_Slot_1, &info) == PSA_SUCCESS &&
+        info.state == PSA_FWU_CANDIDATE)
+    {
+        return 0;
+    }
+    if (psa_fwu_query(Vendor_Image_Slot_2, &info) == PSA_SUCCESS &&
+        info.state == PSA_FWU_CANDIDATE)
+    {
+        return 0;
+    }
+
+    UART_PRINT("[OTA] Vendor Image must be downloaded before BL3\n\r");
+    return -1;
+}
+
+int OTA_FWU_isBL3Installed(void)
+{
+    psa_fwu_component_info_t info;
+
+    if (psa_fwu_query(Vendor_BL3_Slot_1, &info) == PSA_SUCCESS && info.impl.Primary)
+    {
+        return 1;
+    }
+    if (psa_fwu_query(Vendor_BL3_Slot_2, &info) == PSA_SUCCESS && info.impl.Primary)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+int OTA_FWU_checkBundleForInstall(void)
+{
+    psa_fwu_component_info_t info;
+    psa_fwu_component_t imgId;
+    psa_fwu_component_t bl3Id;
+
+    if (!OTA_FWU_isBL3Installed())
+    {
+        return 0;
+    }
+
+    /* When BL3 is present, vendor image and BL3 must be updated together */
+    for (imgId = Vendor_Image_Slot_1; imgId <= Vendor_Image_Slot_2; imgId++)
+    {
+        if (psa_fwu_query(imgId, &info) != PSA_SUCCESS ||
+            info.state != PSA_FWU_CANDIDATE)
+        {
+            continue;
+        }
+
+        bl3Id = (psa_fwu_component_t)(imgId + (Vendor_BL3_Slot_1 - Vendor_Image_Slot_1));
+        if (psa_fwu_query(bl3Id, &info) != PSA_SUCCESS ||
+            info.state != PSA_FWU_CANDIDATE)
+        {
+            UART_PRINT("[OTA] Vendor Image and BL3 must be updated together\n\r");
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 void OTA_FWU_cancelAndCleanCandidates(void)

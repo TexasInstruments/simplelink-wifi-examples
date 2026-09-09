@@ -49,9 +49,9 @@
                       Defines
 ******************************************************************************/
 #ifdef CC33XX
-#define NIMBLE_THRD_PRIORITY       (3)
+#define NIMBLE_THREAD_PRIORITY       (2)
 #else
-#define NIMBLE_THRD_PRIORITY       (8)
+#define NIMBLE_THREAD_PRIORITY       (8)
 #endif
 
 #define NIMBLE_THRD_DEFAULT_STACK  NULL
@@ -65,6 +65,7 @@
 #define BLE_STORE_CONFIG_PERSIST   MYNEWT_VAL(BLE_STORE_CONFIG_PERSIST)
 
 #define BLE_DEFAULT_PASSKEY        123456
+#define BLE_ADDR_TYPE_UNKNOWN      (0xFF)
 
 /*******************************************************************************
                       Macros
@@ -135,7 +136,7 @@ static void ble_example_init()
     extScanCB.extScanResultsCount = 0;
     extScanCB.extScanResultsTotal = 0;
 
-    // Reset scan results table data
+    // Reset connection data
     os_memset(extConnCB.connHandles, BLE_HS_CONN_HANDLE_NONE, sizeof(extConnCB.connHandles));
     extConnCB.connCount = 0;
 
@@ -191,12 +192,31 @@ static void print_scan_results()
             console_printf("| ");
             print_addr(extScanCB.extScanResults[i].addr.val);
             console_printf(" | %-6s", (extScanCB.extScanResults[i].addr.type & 1) ? "RANDOM" : "PUBLIC");
-            console_printf(" | %04d |", extScanCB.extScanResults[i].rssi);
+            console_printf(" | %4d |", extScanCB.extScanResults[i].rssi);
             UART_PRINT(lineBreak);
         }
         printBorder('-', 65);
         UART_PRINT(lineBreak);
     }
+}
+
+static int find_addr_type_in_scan_results(uint8_t *bd_addr, uint8_t *addr_type_out)
+{
+    int i;
+    uint8_t peer_addr[BLE_DEV_ADDR_LEN];
+
+    // user input bd_addr is MSB-first while Nimble is LSB-first
+    BLE_COPY_BD_ADDRESS(peer_addr, bd_addr);
+
+    for (i = 0; i < extScanCB.extScanResultsCount; i++)
+    {
+        if (os_memcmp(extScanCB.extScanResults[i].addr.val, peer_addr, BLE_DEV_ADDR_LEN) == 0)
+        {
+            *addr_type_out = extScanCB.extScanResults[i].addr.type;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 static void add_to_connected_peers(uint16 conn_handle)
@@ -229,7 +249,14 @@ static void remove_from_connected_peers(uint16 conn_handle)
             if (extConnCB.connHandles[i] == conn_handle)
             {
                 extConnCB.connHandles[i] = BLE_HS_CONN_HANDLE_NONE;
-                extConnCB.connCount--;
+                if (extConnCB.connCount > 0)
+                {
+                    extConnCB.connCount--;
+                }
+                else
+                {
+                    console_printf("\n\rERROR: remove_from_connected_peers: connCount already 0\n\r");
+                }
                 break;
             }
         }
@@ -265,8 +292,8 @@ static void print_connected_peers()
                 }
                 console_printf("| %d      ", connDesc.conn_handle);
                 console_printf("| ");
-                print_addr(connDesc.peer_ota_addr.val);
-                console_printf(" | %-6s", (connDesc.peer_ota_addr.type & 1) ? "RANDOM" : "PUBLIC");
+                print_addr(connDesc.peer_id_addr.val);
+                console_printf(" | %-6s", (connDesc.peer_id_addr.type & 1) ? "RANDOM" : "PUBLIC");
                 console_printf(" | %-10s", connDesc.role == 0 ? "CENTRAL" : "PERIPHERAL");
                 console_printf(" | %-4s    |", connDesc.sec_state.bonded == 0 ? "NO" : "YES");
                 UART_PRINT(lineBreak);
@@ -277,7 +304,7 @@ static void print_connected_peers()
     }
 }
 
-static void adv_enable(void)
+static void adv_restart(void)
 {
     ExtAdvEnable_t extAdvEnable;
 
@@ -286,7 +313,11 @@ static void adv_enable(void)
     extAdvEnable.duration = 0;
     extAdvEnable.max_events = 0;
 
-    nimble_host_ext_adv_enable(&extAdvEnable);
+    if ((extConnCB.connCount < BLE_MAX_SUPPORTED_CONNS) &&
+        (!ble_gap_ext_adv_active(0)))
+    {
+        nimble_host_ext_adv_enable(&extAdvEnable);
+    }
 }
 
 static int is_peer_bonded(uint16 conn_handle)
@@ -423,10 +454,6 @@ gatt_svr_ti_peripheral_chr_notify(uint16_t conn_handle, uint8_t value)
     }
 
     rc = ble_gatts_notify_custom(conn_handle, ti_peripheral_handle, om);
-    if (rc != 0)
-    {
-        os_mbuf_free_chain(om);
-    }
 
     return rc;
 }
@@ -577,7 +604,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
 
     switch (event->type) {
         case BLE_GAP_EVENT_CONNECT:
-            console_printf("\n\rConnection %s with status=%d",
+            console_printf("\n\rConnection %s with status %d",
                         event->connect.status == 0 ? "established successfully" : "failed",
                         event->connect.status);
 
@@ -586,7 +613,11 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                 rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
                 ASSERT_GENERAL(rc == 0);
                 console_printf("\n\rConnected to ");
-                print_addr(desc.peer_ota_addr.val);
+                print_addr(desc.peer_id_addr.val);
+                console_printf("\n\rConnection parameters: interval (ms): %d.%02d, latency: %d, timeout (ms): %d",
+                           (desc.conn_itvl*5)/4, (desc.conn_itvl%4)*25,
+                           desc.conn_latency,
+                           desc.supervision_timeout*10);
 
                 add_to_connected_peers(event->connect.conn_handle);
                 if (is_peer_bonded(event->connect.conn_handle))
@@ -603,19 +634,30 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                    return 0;
                 }
             }
+            else
+            {
+                adv_restart();
+            }
             break;
 
         case BLE_GAP_EVENT_DISCONNECT:
             console_printf("\n\rDisconnected from ");
-            print_addr(event->disconnect.conn.peer_ota_addr.val);
+            print_addr(event->disconnect.conn.peer_id_addr.val);
             console_printf(" with reason 0x%x\n\r",event->disconnect.reason);
             remove_from_connected_peers(event->disconnect.conn.conn_handle);
+            adv_restart();
             break;
 
         case BLE_GAP_EVENT_CONN_UPDATE:
-            console_printf("\n\rConnection parameters update %s with status=%d",
+            console_printf("\n\rConnection parameters update %s with status %d",
                            event->conn_update.status == 0 ? "completed successfully" : "failed",
                            event->conn_update.status);
+            rc = ble_gap_conn_find(event->conn_update.conn_handle, &desc);
+            ASSERT_GENERAL(rc == 0);
+            console_printf("\n\rConnection parameters: interval (ms): %d.%02d, latency: %d, timeout (ms): %d",
+                           (desc.conn_itvl*5)/4, (desc.conn_itvl%4)*25,
+                           desc.conn_latency,
+                           desc.supervision_timeout*10);
             break;
 
         case BLE_GAP_EVENT_DISC_COMPLETE:
@@ -623,17 +665,14 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             break;
 
         case BLE_GAP_EVENT_ADV_COMPLETE:
-            console_printf("\n\rAdvertising instance %u completed with termination code: 0x%x",
+            console_printf("\n\rAdvertising instance %u completed with termination code: %d",
                            event->adv_complete.instance,
                            event->adv_complete.reason);
-            if (extConnCB.connCount < BLE_MAX_SUPPORTED_CONNS)
-            {
-                adv_enable();
-            }
+            adv_restart();
             break;
 
         case BLE_GAP_EVENT_ENC_CHANGE:
-            console_printf("\n\rEncryption change event with status=0x%x",
+            console_printf("\n\rEncryption change event with status %d",
                         event->enc_change.status);
             break;
 
@@ -642,7 +681,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             break;
 
         case BLE_GAP_EVENT_SUBSCRIBE:
-            console_printf("\n\rSubscribe event attr_handle=%d\n",
+            console_printf("\n\rSubscribe event attr_handle %d\n",
                         event->subscribe.attr_handle);
             break;
 
@@ -928,7 +967,6 @@ int nimble_host_ext_adv_cfg(ExtAdvCfg_t *pAdvCfg)
     if ( rc != 0 )
     {
         console_printf("\n\rERROR: failed to configure the data to include in advertisements packets, with error code: %d\n\r", rc);
-        os_mbuf_free_chain(adv_data);
         return (rc);
     }
 
@@ -1079,6 +1117,15 @@ int nimble_host_ext_connect(uint8_t* bd_addr, uint8_t addr_type)
     int rc = 0;
     ble_addr_t peer_addr;
 
+    if (addr_type == BLE_ADDR_TYPE_UNKNOWN)
+    {
+        if (find_addr_type_in_scan_results(bd_addr, &addr_type) != 0)
+        {
+            console_printf("\n\rERROR: Address not in scan results. Run scan first or specify address type PUBLIC/RANDOM\n\r");
+            return -1;
+        }
+    }
+
     //Set the address to connect to
     peer_addr.type = addr_type;
     BLE_COPY_BD_ADDRESS(peer_addr.val, bd_addr);
@@ -1115,6 +1162,15 @@ int nimble_host_ext_connect_params(uint8_t* bd_addr, uint8_t addr_type, uint8 ph
     int rc = 0;
     ble_addr_t peer_addr;
 
+    if (addr_type == BLE_ADDR_TYPE_UNKNOWN)
+    {
+        if (find_addr_type_in_scan_results(bd_addr, &addr_type) != 0)
+        {
+            console_printf("\n\rERROR: Address not in scan results. Run scan first or specify address type PUBLIC/RANDOM\n\r");
+            return -1;
+        }
+    }
+
     //Set the address to connect to
     peer_addr.type = addr_type;
     BLE_COPY_BD_ADDRESS(peer_addr.val, bd_addr);
@@ -1149,7 +1205,7 @@ int nimble_host_gap_update_params(uint16 connHandle, uint32 interval_min_us, uin
     return ble_gap_update_params(connHandle, &upd_params);
 }
 
-int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type)
+int nimble_host_ext_disconnect(uint8_t* bd_addr)
 {
     int rc = 0;
     uint8 i = 0;
@@ -1157,9 +1213,12 @@ int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type)
     ble_addr_t peer_addr;
     struct ble_gap_conn_desc disc_desc;
 
-    //Set the address to disconnect from
-    peer_addr.type = addr_type;
-    BLE_COPY_BD_ADDRESS(peer_addr.val, bd_addr);
+    //Check if there are any active connections
+    if (extConnCB.connCount == 0)
+    {
+        console_printf("\n\rNo active connections");
+        return 0;
+    }
 
     //Disconnect all connections
     if (os_memcmp(bd_addr,empty_addr,BLE_DEV_ADDR_LEN) == 0)
@@ -1182,24 +1241,32 @@ int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type)
     }
     else //Disconnect from requested connection
     {
-        //Find the connection handle of this address
-        rc = ble_gap_conn_find_by_addr(&peer_addr, &disc_desc);
-        if (rc != 0)
-        {
-            console_printf("\n\rERROR: No connection exists with address: ");
-            print_addr(peer_addr.val);
-            return rc;
-        }
+        //User input bd_addr is MSB-first while Nimble is LSB-first
+        BLE_COPY_BD_ADDRESS(peer_addr.val, bd_addr);
 
-        rc = ble_gap_terminate(disc_desc.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-        if (rc != 0)
+        for (i = 0; i < BLE_MAX_SUPPORTED_CONNS; i++)
         {
-            console_printf("\n\rERROR: Connection not exists with address ");
-            print_addr(peer_addr.val);
-            return rc;
+            connHandle = extConnCB.connHandles[i];
+            if (connHandle == BLE_HS_CONN_HANDLE_NONE)
+            {
+                continue;
+            }
+            if (ble_gap_conn_find(connHandle, &disc_desc) != 0)
+            {
+                continue;
+            }
+            if (os_memcmp(disc_desc.peer_id_addr.val, peer_addr.val, BLE_DEV_ADDR_LEN) == 0)
+            {
+                ble_gap_terminate(connHandle, BLE_ERR_REM_USER_CONN_TERM);
+                remove_from_connected_peers(connHandle);
+                console_printf("\n\rDisconnected from peer ");
+                print_addr(disc_desc.peer_id_addr.val);
+                return 0;
+            }
         }
-        console_printf("\n\rDisconnected from peer ");
+        console_printf("\n\rERROR: No connection exists with address: ");
         print_addr(peer_addr.val);
+        return -1;
     }
 
     return rc;
@@ -1221,8 +1288,11 @@ int nimble_host_delete_all_bond_info(void)
         return 0;
     }
 
-    //Disconnect all links
-    nimble_host_ext_disconnect(empty_addr,0);
+    //Disconnect all links if exists
+    if (extConnCB.connCount > 0)
+    {
+        nimble_host_ext_disconnect(empty_addr);
+    }
 
     //Clear all bond information
     rc = ble_store_clear();
@@ -1401,7 +1471,7 @@ int nimble_host_start(void)
 
     /* Create task which handles default event queue for host stack. */
     rc = ble_npl_task_init(&s_task_host, "nimble_host", nimble_host_task,
-                      NULL, NIMBLE_THRD_PRIORITY, BLE_NPL_TIME_FOREVER,
+                      NULL, NIMBLE_THREAD_PRIORITY, BLE_NPL_TIME_FOREVER,
                       NIMBLE_THRD_DEFAULT_STACK, NIMBLE_THRD_STACK_SIZE);
     if(OSI_OK != rc)
     {

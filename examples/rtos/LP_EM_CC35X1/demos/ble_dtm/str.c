@@ -52,7 +52,7 @@ const char *clearDetailsStr           = "To clear the terminal screen.\n\r";
 const char wlanRoleUpApStr[]          = "wlan_ap_role_up";
 const char wlan_role_up_ap_UsageStr_first[]   =  " [-help] [-s <\"ssid name\">] "
                                         "[-t <security type>] [-p <\"password\">]"
-                                        "[-h <hidden AP>]\n\r\t[-txp <Tx power for 2.4GHz channels only [0-15]>]";
+                                        "[-h <hidden AP>]\n\r\t[-txp <Tx power in dBm [-10 to +21, use 21 for max]>]";
 const char wlan_role_up_ap_UsageStr_second[]  =  "[-c <Wlan channel>]"
                                         "[-l <STA connection limit [1-4]>]"
                                         "[-r <AP Regulatory Domain [\"US\" \"JP\" \"00\"]>]\n\r";
@@ -68,6 +68,7 @@ const char *wlan_role_up_ap_a_optionDetailsStr    = "\n\r\t-a\tSAE anti clogging
                                                     "\t\t(anti clogging threshold = [DEFAULT, ALWAYS, LOW])\n\r";
 const char *wlan_role_up_ap_b_optionDetailsStr    = "\n\r\t-b\tTransition disable \n\r"
                                                     "\t\t(Transition disable = 0 - Default, 1 - Enabled)\n\r";
+const char *wlan_role_up_ap_i_optionDetailsStr    = "\n\r\t-i\tAP station max inactivity timeout (sec) \n\r";
 
 #endif // CC35XX	
 const char *wlan_role_up_ap_DetailsStr    = "Role up device as AP.\n\r\t"
@@ -107,8 +108,7 @@ const char *wlanSetEarlyTerm_e_optionDetailsStr  = "\n\r\t-e\tEarly termination 
 const char wlanConnectStr[]             = "wlan_connect";
 const char wlanConnectUsageStr[]        = " [-help] [-s <\"ssid name\">] "
                                     "[-t <security type>]"
-                                  " [-p <\"password\">]\n\r\t[-ip <static ip>]"
-                                  " [-gw <static gw>] [-dns <static dns>][-e <enterprise>]"
+                                  " [-p <\"password\">][-e <enterprise>]"
                                   "[-i <enterprise identity>]\n\r ";
 
 const char *wlanConnectDetailsStr       = "Connect .\n\r";
@@ -172,9 +172,9 @@ const char *ap_stop_DetailsStr    = "Set device in Station mode.\n\r";
 const char *ap_start_h_optionDetailsStr       = "\n\r\t-h\tStart the AP in hidden"
                                           " mode (hidden mode = "
                                           "[YES, NO])\n\r";
-const char *ap_start_txp_optionDetailsStr     = "\n\r\t-txp\tSet Wlan "
-                                          "Tx power for 2.4GHz channels only"
-                                          " (0 = Max Power)\n\r";
+const char *ap_start_txp_optionDetailsStr     = "\n\r\t-txp\tSet AP TX power in dBm.\n\r"
+                                          "\t\tRange: -10 to +21 dBm.\n\r"
+                                          "\t\t21 = use regulatory maximum (default).\n\r";
 const char *ap_start_channel_optionDetailsStr = "\n\r\t-c\tSet channel "
                                           "for the AP\n\r";
 const char *ap_start_l_optionDetailsStr       = "\n\r\t-l\tLimit the number of"
@@ -217,6 +217,9 @@ const char SetPsModeStr[]                        = "wlan_set_ps";
 const char setPsModeUsageStr[]                   = " [-help] [-m <PowerSaveMode>]\n\r";
 const char *wlanSetPsModeDetailsStr              = "Set power save mode. 0 - Auto PS , 1 - Active mode, 2 - power save mode \n\r";
 const char *wlanSetPsMode_m_optionDetailsStr     = "\n\r\t-m\tMode, if device not started error is return\n\r";
+const char *wlanSetPsModeWarningStr              = "WARNING: Mode 2 (Forced PS) is for debug use only.\n\r"
+                                                   "\t         Only valid with Legacy PSPOLL power scheme.\n\r"
+                                                   "\t         With the default NOPSPOLL scheme, data reception will stop.\n\r";
 
 /* Set Power management  mode     */
 const char SetPmModeStr[]                        = "wlan_set_pm";
@@ -225,6 +228,19 @@ const char *wlanSetPmModeDetailsStrAlwaysActive  = "Set power management mode:\n
 const char *wlanSetPmModeDetailsStrPowerDown     = "\t1 - Power down mode (light / fast sleep)\n\r\t";
 const char *wlanSetPmModeDetailsStrELP           = "\t2 - ELP mode (Deep / Max sleep)\n\r";
 const char *wlanSetPmMode_m_optionDetailsStr     = "\n\r\t-m\tMode, if device not started error is return\n\r";
+
+/* Set TX Power */
+const char SetTxPowerStr[]                       = "wlan_set_tx_power";
+const char setTxPowerUsageStr[]                  = " [-help] [-i <role ID>] [-txp <power in dBm>]\n\r";
+const char *wlanSetTxPowerDetailsStr             = "Set TX power for STA or AP role.\n\r";
+const char *wlanSetTxPower_i_optionDetailsStr    = "\n\r\t-i\tRole ID: 0 = STA, 2 = AP\n\r";
+const char *wlanSetTxPower_txp_optionDetailsStr  = "\n\r\t-txp\tTX power in dBm (range: -10 to +21).\n\r\t\tAutomatically capped to regulatory maximum.\n\r\t\tUse 21 to request maximum power.\n\r";
+
+/* Get TX Power */
+const char GetTxPowerStr[]                       = "wlan_get_tx_power";
+const char getTxPowerUsageStr[]                  = " [-help] [-i <role ID>]\n\r";
+const char *wlanGetTxPowerDetailsStr             = "Get current TX power for STA or AP role.\n\r";
+const char *wlanGetTxPower_i_optionDetailsStr    = "\n\r\t-i\tRole ID: 0 = STA, 2 = AP\n\r";
 
 #ifdef CC33XX
 /* Set Channel List */
@@ -236,7 +252,8 @@ const char *wlanSetChListStr                     = "Set Channel list to be used 
 /* Set Interface Ip mode     */
 const char SetInterfaceIpStr[]                   ="wlan_set_if_ip";
 const char SetInterfaceIpUsageStr[]              = " [-help],[-i <RoleType>],[-ip <IP Mode>],[-c <ip address>],[-v <Netmask>],[-gw <gw>]>\n\r\t";
-const char SetInterfaceIpDetailsStr[]            = "role type: 0 - STA , 2 - AP.  IP Mode: 0 - DHCP , 1 - STATIC\n\r\t";
+const char SetInterfaceIpDetailsStr[]            = "role type: 0 - STA , 2 - AP.  IP Mode: 0 - DHCP , 1 - STATIC.  IPv4 addresses only.\n\r\t";
+const char SetInterfaceIpExamplesStr[]           = "Example DHCP: wlan_set_if_ip -i 0 -ip 0\n\r\tExample STATIC: wlan_set_if_ip -i 0 -ip 1 -c 192.168.1.100 -v 255.255.255.0 -gw 192.168.1.1\n\r\tExample set address to 0 (same as DHCP): wlan_set_if_ip -i 0 -ip 1 -c 0.0.0.0 -v 0.0.0.0 -gw 0.0.0.0\n\r\t";
 
 /* Get Interface Ip mode     */
 const char GetInterfaceIpStr[]                  = "wlan_get_if_ip";
@@ -246,12 +263,21 @@ const char GetInterfaceIpDetailsStr[]           = "role type 0 - STA , 2 - AP \n
 /* Set DHCP server parameters     */
 const char SetDhcpServerStr[]                   = "wlan_set_dhcp" ;
 const char SetDhcpServerUsageStr[]              = "[-help],[ -t <Lease Time>],[-s <IP Start Address>],[-e <IP End Address>]\n\r\t";
-const char SetDhcpServerDetailsStr[]            = "\n\r\tSet current DHCP server details:\n\r\tLease Time must be greater then 0.\n\r\tThe range must not include the AP's IP address.\n\r\tThe range must be in the same subnet as the AP.\n\r ";
+const char SetDhcpServerDetailsStr[]            = "\n\r\tSet current DHCP server details:\n\r\tLease Time must be greater then 0.\n\r\tThe range must not include the AP's IP address.\n\r\tThe range must be in the same subnet as the AP.\n\r "
+"(IPv4 only currently; IPv6 auto-configuration supported)\n\r "
+;
 
 /* Get DHCP server parameters     */
 const char GetDhcpServerStr[]                   = "wlan_get_dhcp" ;
 const char GetDhcpServerUsageStr[]              = "[-help]\n\r\t";
-const char GetDhcpServerDetailsStr[]            = "Get current DHCP server details: Lease Time, IP Start Address, IP End Address \n\r\t";
+const char GetDhcpServerDetailsStr[]            = "Get current DHCP server details: Lease Time, IP Start Address, IP End Address \n\r\t"
+"(IPv4 only; IPv6 auto-configuration handled separately)\n\r\t"
+;
+
+/* Network Interface Configuration */
+const char IfconfigStr[]                        = "ifconfig";
+const char IfconfigUsageStr[]                   = "[-help]\n\r\t";
+const char IfconfigDetailsStr[]                 = "Display network interface configuration (IPv4 and IPv6 addresses)\n\r\t";
 
 /* Get FW version */
 const char GetFwVerStr[]                          = "wlan_get_fw_ver";
@@ -304,23 +330,23 @@ const char *bleScanEnableDetailsStr            = "Ble Scan enable/disable. Defau
 
 /* ble Connect */
 const char bleConnectStr[]                     = "ble_connect";
-const char bleConnectUsageStr[]                = " [-help] [-b <bd address>] [-t <address type [PUBLIC/RANDOM]>]";
-const char bleConnectDetailsStr[]               = "Ble Connect.\n\r";
+const char bleConnectUsageStr[]                = " [-help] [-b <bd address>] [-t <address type [PUBLIC/RANDOM]>]\n\r";
+const char bleConnectDetailsStr[]              = "Ble Connect. Address type is optional if peer was found in scan results\n\r";
 
 /* ble Disconnect */
 const char bleDisconnectStr[]                  = "ble_disconnect";
-const char bleDisconnectUsageStr[]             = " [-help] [-a <address>] [-t <address type [PUBLIC/RANDOM]>]";
-const char bleDisconnectDetailsStr[]            = "Ble Disconnect. Default action when no parameters is to disconnect all peers\n\r";
+const char bleDisconnectUsageStr[]             = " [-help] [-b <bd address>]";
+const char bleDisconnectDetailsStr[]           = "Ble Disconnect. Default action when no parameters is to disconnect all peers\n\r";
 
 /* ble Connected Peers */
 const char blePeersStr[]                       = "ble_peers";
 const char blePeersUsageStr[]                  = " [-help] ";
-const char blePeersDetailsStr[]                 = "Ble Peers.\n\r";
+const char blePeersDetailsStr[]                = "Ble Peers.\n\r";
 
 /* ble Delete Bonds */
 const char bleDeleteBondsStr[]                 = "ble_delete_bonds";
 const char bleDeleteBondsUsageStr[]            = " [-help] ";
-const char bleDeleteBondsDetailsStr[]           = "Ble delete all bonds.\n\r";
+const char bleDeleteBondsDetailsStr[]          = "Ble delete all bonds.\n\r";
 
 /* ble Get BD address */
 const char bleGetBdAddrStr[]                   = "ble_get_bd_addr";
@@ -335,12 +361,12 @@ const char bleSetBdAddrDetailsStr[]            = "Ble set BD address.\n\r";
 /* ble start */
 const char bleStartStr[]                       = "ble_start";
 const char bleStartUsageStr[]                  = " [-help] \n\r";
-const char bleStartDetailsStr[]                 = "Ble start. \n\r";
+const char bleStartDetailsStr[]                = "Ble start. \n\r";
 
 /* ble stop */
 const char bleStopStr[]                        = "ble_stop";
 const char bleStopUsageStr[]                   = " [-help] \n\r";
-const char bleStopDetailsStr[]                  = "Ble stop. \n\r";
+const char bleStopDetailsStr[]                 = "Ble stop. \n\r";
 
 /* ble set tx power */
 const char bleSetTxPwrStr[]                    = "ble_set_tx_pwr";
@@ -420,7 +446,7 @@ const char iperf_t_optionDetailsStr[]   = "\n\r\t-t\t time in second to run, def
 
 const char TestIperf[]           = "iperf";
 const char recvTestIperfDetailsStr[]    = "To receive/send iperf packets over network.\n\r";
-const char recvTestIperfUsage2Str[]     = " [-help] [-s] [-c <server ip address>] [-p <port number>] [-i <number>] [-t <time in sec> >99999 endless>][-B <server ip>] [-l <packet length>] \n\r";
+const char recvTestIperfUsage2Str[]     = " [-help] [-s] [-c <server ip address>] [-p <port number>] [-i <number>] [-t <time in sec> >99999 endless>][-B <server ip>] [-l <packet length>] [-V] \n\r";
 const char *recvTestIperf_s_optionDetailsStr   = send_s_optionDetailsStr;
 const char *recvTestIperf_c_optionDetailsStr   = send_c_optionDetailsStr;
 const char *recvTestIperf_p_optionDetailsStr   = send_p_optionDetailsStr;
@@ -429,13 +455,24 @@ const char recvTestIperf_i_optionDetailsStr[]   = "\n\r\t-i\t set the interval i
 const char *recvTestIperf_t_optionDetailsStr   = iperf_t_optionDetailsStr;
 const char *recvTestIperf_b_optionDetailsStr   = "\n\r\t-b\t set the max udp client bandwidth in Mbps , 0 means no limit\n\r";
 const char *recvTestIperf_B_optionDetailsStr   = "\n\r\t-B\t binds the server to a specific local IP\n\r";
-const char *recvTestIperf_l_optionDetailsStr   = "\n\r\t-l\t length in bytes of packet to send";
+const char *recvTestIperf_l_optionDetailsStr   = "\n\r\t-l\t length in bytes of packet to send\n\r";
+const char *recvTestIperf_6_optionDetailsStr   = "\n\r\t-V\t use IPv6 address (default: IPv4)\n\r";
 
 
 const char StopTestIperf[]           = "iperf_stop";
 const char *recvStopTestIperfDetailsStr    = "stop iperf process.\n\r";
 const char *recvStopTestIperfUsage2Str     = " [-help] [-n <process number>\n\r";
 const char *recvStopTestIperf_n_optionDetailsStr   = "\n\r\t-n\t id of the iperf process, set to 0 in order to view available process \n\r";
+
+const char TestTlsIperf[]                  = "tls_iperf";
+const char *recvTestTlsIperfDetailsStr     = "TLS iperf client (-c) or server (-s). Client sends data to a TLS server and reports throughput. Server receives incoming TLS connections and reports throughput.\n\r";
+const char *recvTestTlsIperfUsage2Str      = " [-help] (-s | -c <server ip>) [-p <port>] [-t <sec>] [-i <interval sec>] [-l <bytes>] [-V]\n\r";
+const char *recvTestTlsIperf_s_optionDetailsStr = "\n\r\t-s\t run as TLS server (listen for incoming connections)\n\r";
+const char *recvTestTlsIperf_c_optionDetailsStr = "\n\r\t-c\t run as TLS client, connect to <server ip>\n\r";
+const char *recvTestTlsIperf_p_optionDetailsStr = "\n\r\t-p\t port number (default 5555)\n\r";
+const char *recvTestTlsIperf_t_optionDetailsStr = "\n\r\t-t\t time in seconds to run (0 or >=99999 = endless, default is endless)\n\r";
+const char *recvTestTlsIperf_i_optionDetailsStr = "\n\r\t-i\t throughput report interval in seconds (0 = final report only)\n\r";
+const char *recvTestTlsIperf_l_optionDetailsStr = "\n\r\t-l\t client: send chunk size in bytes (default 1460, max 1460)\n\r";
 
 
 
@@ -465,14 +502,14 @@ const char *killDetailsStr                = "kill available running process by i
 
 const char SntpConfigNTPServers[]             = "sntp_config_servers";
 const char SntpConfigNTPServersUsageStr[]     = "[-help] [-s <server ip>] \n\r";
-const char SntpConfigNTPServers_s_optionDetailsStr[] = "\n\r\t-s\t server ip, can define up to 3 servers ";
-const char SntpConfigNTPServers_s_optionDetailsStrExpand[] = "\n\r\t-s\t for example: sntp_config_servers  -s 10.167.188.21 -s 219.239.35.0";
+const char SntpConfigNTPServers_s_optionDetailsStr[] = "\n\r\t-s\t server ip (IPv4 or IPv6), can define up to 3 servers ";
+const char SntpConfigNTPServers_s_optionDetailsStrExpand[] = "\n\r\t-s\t for example: sntp_config_servers  -s 10.167.188.21 -s 2001:4860:4860::8888";
 const char SntpUpdateDateTime[]               = "sntp_update";
 const char SntpUpdateTimeUsageStr[]              = "[-help] \n\r";
 
 const char SetDateTime[]                      = "set_date_time";
 const char SetDateTimeUsageStr[]              = "[-help] [-t <yyyy-mm-ddThh:mm:ss>] \n\r";
-const char SetDateTime_t_optionDetailsStr[]    = "\n\r\t-t\t set current date and time ";
+const char SetDateTime_t_optionDetailsStr[]    = "\n\r\t-t\t Set current date and time in UTC format\n\r\t\t Format: yyyy-mm-ddThh:mm:ss\n\r\t\t Example: set_date_time -t 2026-06-01T00:00:00\n\r";
 const char GetDateTime[]                      = "get_date_time";
 const char GetDateTimeUsageStr[]              = "[-help] \n\r";
 const char GetDateTime_t_optionDetailsStr[]    = "\n\r\t-t\t Get current date and time ";
@@ -514,37 +551,29 @@ const char wlanRoleDownP2PStr[]             = "p2p_role_down";
 const char *wlan_role_down_p2p_DetailsStr   = "P2P Role Down.\n\r";
 
 const char wlanP2PFindStr[]             = "p2p_find";
-const char printWlanP2PFindUsageStr[]   = "";
 
 
-const char wlanP2PConnectStr[]          = "p2p_connect";//<peer_mac> <wps_method> <pin code>
-
+const char wlanP2PConnectStr[]          =  "p2p_connect";//<peer_mac> <wps_method> <pin code>
 const char wlanP2PStopFindStr[]         =  "p2p_stop_find";
-
 const char wlanP2PGrpRemoveStr[]        =  "p2p_group_remove";
-
 const char wlanP2PSetchannelStr[]       =  "p2p_set_channel";//<oper channel> <oper reg> <listen channel> <listen reg> <go intent>\n"
-
 const char wlanP2PGetchannelStr[]       =  "p2p_get_channel";
-
-const char wlanP2PListenStr[]       =  "p2p_listen";
-
-const char wlanP2PCancelStr[]       =  "p2p_cancel";
+const char wlanP2PListenStr[]           =  "p2p_listen";
+const char wlanP2PCancelStr[]           =  "p2p_cancel";
 
 
-const char *wlan_p2p_connect_DetailsStr    = "P2P connect .\n\r";
+const char *wlan_p2p_connect_DetailsStr        = "P2P connect .\n\r";
 const char wlan_p2p_connect_UsageStr_first[]   =   " [-help]\n\r";
 const char wlan_p2p_connect_UsageStr_second[]  =   "[-m <peer_macAdress>] "
-                                             "[-w <wps_method [0/1/2]>] "
-                                             "[-p \"<pin_code>]\" -t [timeout in seconds]\n\r";
+                                                   "[-w <wps_method [0/1/2]>] "
+                                                   "[-p \"<pin_code>]\" -t [timeout in seconds]\n\r";
 const char wlan_p2p_connect_w_optionDetailsStr[] = "\n\r\t-w\t WPS Method : 0=PBC 1=PIN DISPLAY 2= PIN keypad \n\r";
 const char wlan_p2p_connect_p_optionDetailsStr[] = "\n\r\t-p\t PIN : 8 digit \n\r";
-const char wlan_p2p_connect_t_optionDetailsStr[] = "\n\r\t-t\t timeout in seconds \n\r";   
+const char wlan_p2p_connect_t_optionDetailsStr[] = "\n\r\t-t\t timeout in seconds \n\r";
 
-const char *wlan_p2p_find_stop_DetailsStr =   "P2P stop find .\n\r";
+const char *wlan_p2p_find_stop_DetailsStr        =  "P2P stop find .\n\r";
 
-
-const char *wlan_p2p_group_remove_DetailsStr =   "P2P remove group .\n\r";
+const char *wlan_p2p_group_remove_DetailsStr     =  "P2P remove group .\n\r";
 
 const char  wlan_role_up_group_remove_UsageStr_third[]  =   "[-c <oper channel>]"
                                                 "[-o <oper reg class>]"
@@ -555,7 +584,13 @@ const char  wlan_role_up_group_remove_UsageStr_third[]  =   "[-c <oper channel>]
 const char *wlan_role_up_p2pSetChannel_DetailsStr    = "P2P Set channel .\n\r";
 const char *wlan_role_up_p2pGetChannel_DetailsStr    = "P2P Get channel .\n\r";
 const char *wlan_role_up_p2pListen_DetailsStr        = "P2P listen .\n\r";
-const char *wlan_role_up_p2pCancel_DetailsStr    = "P2P cancel .\n\r";
+const char *wlan_role_up_p2pCancel_DetailsStr        = "P2P cancel .\n\r";
+
+const char wlanP2PGrpAddStr[]                     =  "p2p_group_add";
+const char *wlan_p2p_group_add_DetailsStr         =  "P2P autonomous GO - start P2P group immediately.\n\r";
+const char wlan_p2p_group_add_UsageStr[]          =  "[-c <channel> [-s <ssid postfix>]] \n\r";
+const char *wlan_p2p_group_add_c_optionDetailsStr = "\n\r\t-c\t 802.11 channel number (default 1)\n\r";
+const char *wlan_p2p_group_add_s_optionDetailsStr = "\n\r\t-s\t SSID postfix appended to DIRECT-XX (max 23 chars) [ Optional] \n\r";
 
 
 
@@ -576,29 +611,6 @@ const char setWpsApPin_p_optionDetailsStr[]      = "\n\r\t-p\t8-digit PIN code \
 const char SetWsocPrimaryStr[]        = "set_wsoc_primary";
 const char SetWsocPrimaryUsageStr[]   = " [-help] [-i <SlotNumber>] \n\r";
 const char *SetWsocPrimaryDetailsStr  = "Set Wsoc Primary. 1 - Slot1(Default) , 2 - Slot2 \n\r";
-
-
-const char pingStartStr[]                 = "ping";
-const char pingStartUsageStr[]            = " [-help] [-c <count>] [-i <interval>] [-s <data_size>] [-I <source_address>]\n\r";
-const char pingStartDetailsStr[]          = "Start a ping session. Target IP must be the first argument.\n\r\tIn order to stop run \"ping stop\" command with the same ping session id.\n\r";
-const char pingStart_c_optionDetailsStr[] = "\n\r\t-c\tStop after sending count ECHO_REQUEST packets.\n\r\t  \t"
-                                            "The default is to send 10 ECHO_REQUEST packets.\n\r\t  \t"
-                                            "Use 0 for infinite count.\n\r";
-const char pingStart_i_optionDetailsStr[] = "\n\r\t-i\tWait interval seconds between sending each packet.\n\r\t  \t"
-                                            "The default is to wait for one second between each packet.\n\r\t  \t"
-                                            "Range 100 - 120,000 ms.\n\r";
-const char pingStart_s_optionDetailsStr[] = "\n\r\t-s\tSpecifies the number of data bytes to be sent.\n\r\t  \t"
-                                            "The default is 56, which translates into 64 ICMP data bytes\n\r\t  \t"
-                                            "when combined with the 8 bytes of ICMP header data.\n\r\t  \t"
-                                            "Max is 1452 bytes.\n\r";
-const char pingStart_I_optionDetailsStr[] = "\n\r\t-I\tSet source address to specified interface address.\n\r\t  \t"
-                                            "Argument must be in numeric IP address format.\n\r";
-
-
-const char pingStopStr[]                 = "ping_stop";
-const char pingStopUsageStr[]            = " [-help] [-i <session_id>]\n\r";
-const char pingStopDetailsStr[]          = "Stop a ping session.\n\r\tRun this command in order to stop a specific ping session\n\r\t";
-const char pingStop_i_optionDetailsStr[] = "\n\r\t-i\tSession ID to stop. 0 to print all active sessions\n\r";
 
 
 const char wlanSetRegDomEntryStr[]       = "set_cstm_reg_domain";
@@ -626,6 +638,33 @@ const char wlanGetRegDomEntry_i_optionDetailsStr[] = "\n\r\t-i\tRule index to re
 
 #endif
 
+
+const char pingStartStr[]                 = "ping";
+const char pingStartUsageStr[]            = " <target_address> [-help] [-c <count>] [-i <interval>] [-s <data_size>] [-I <source_address>]"
+" [-6]"
+"\n\r";
+const char pingStartDetailsStr[]          = "Start a ping session. Target IP must be the first argument.\n\r\tIn order to stop run \"ping stop\" command with the same ping session id.\n\r";
+const char pingStart_c_optionDetailsStr[] = "\n\r\t-c\tStop after sending count ECHO_REQUEST packets.\n\r\t  \t"
+                                            "The default is to send 10 ECHO_REQUEST packets.\n\r\t  \t"
+                                            "Use 0 for infinite count.\n\r";
+const char pingStart_i_optionDetailsStr[] = "\n\r\t-i\tWait interval seconds between sending each packet.\n\r\t  \t"
+                                            "The default is to wait for one second between each packet.\n\r\t  \t"
+                                            "Range 100 - 120,000 ms.\n\r";
+const char pingStart_s_optionDetailsStr[] = "\n\r\t-s\tSpecifies the number of data bytes to be sent.\n\r\t  \t"
+                                            "The default is 56, which translates into 64 ICMP data bytes\n\r\t  \t"
+                                            "when combined with the 8 bytes of ICMP header data.\n\r\t  \t"
+                                            "Max is 1452 bytes.\n\r";
+const char pingStart_I_optionDetailsStr[] = "\n\r\t-I\tSet source address to specified interface address.\n\r\t  \t"
+                                            "Argument must be in numeric IP address format.\n\r";
+const char pingStart_6_optionDetailsStr[] = "\n\r\t-6\tUse IPv6. When specified, interprets target and source addresses as IPv6.\n\r";
+
+
+const char pingStopStr[]                 = "ping_stop";
+const char pingStopUsageStr[]            = " [-help] [-i <session_id>]\n\r";
+const char pingStopDetailsStr[]          = "Stop a ping session.\n\r\tRun this command in order to stop a specific ping session\n\r\t";
+const char pingStop_i_optionDetailsStr[] = "\n\r\t-i\tSession ID to stop. 0 to print all active sessions\n\r";
+
+#ifdef CC35XX
 /* Connection Policy Set */
 const char wlanSetConnPolicyStr[]         = "wlan_set_con_policy";
 const char wlanSetConnPolicyUsageStr[]    = " [-help] [-a <Auto connect>] "
@@ -650,7 +689,8 @@ const char *wlanAddProfileDetailsStr      = "Add Profile.\n\r";
 const char *wlanAddProfile_s_optionDetailsStr  = "\n\r\t-s\tSSID\n\r";
 const char *wlanAddProfile_t_optionDetailsStr  = "\n\r\t-t\tType of security "
                                                  "(security type = "
-                                                 "[OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3])\n\r";
+                                                 "[OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPA2/WPA3, "
+                                                 "WPA2/FT, WPA2_PLUS/FT, WPA3/FT, WPA2/WPA3/FT])\n\r";
 const char *wlanAddProfile_p_optionDetailsStr  = "\n\r\t-p\tPassword in ascii characters\n\r";                                                
 const char *wlanAddProfile_pr_optionDetailsStr = "\n\r\t-pr \t 0 - 15 priority\n\r";
 const char *wlanAddProfile_h_optionDetailsStr  = "\n\r\t-h\tScan SSID: Hidden - 1, Wildcard - 0\n\r";
@@ -681,6 +721,7 @@ const char wlanProfileConnectUsageStr[]   = " [-help] [-i <ProfileIndex>]\n\r";
 const char *wlanProfileConnectDetailsStr  = "Wlan Profile Connect.\n\r";
 const char *wlanProfileConnect_i_optionDetailsStr = "\n\r\t-i \tProfile index\n\r";
 
+#endif //CC35XX
 /* ------  */
 const char emptyDeviceStr[]          = "";
 
@@ -751,6 +792,10 @@ const  char WPAWPA2_str[]            = "WPA/WPA2";
 const  char WPA2_PLUS_str[]          = "WPA2_PLUS";
 const  char WPA3_str[]               = "WPA3";
 const  char WPA2WPA3_str[]           = "WPA2/WPA3";
+const  char WPA2FT_str[]             = "WPA2/FT";
+const  char WPA2_PLUS_FT_str[]       = "WPA2_PLUS/FT";
+const  char WPA3FT_str[]             = "WPA3/FT";
+const  char WPA2WPA3FT_str[]         = "WPA2/WPA3/FT";
 const  char DISABLE_str[]            = "Disable";
 const  char CAPABLE_str[]            = "Capable";
 const  char REQUIRED_str[]           = "Required";

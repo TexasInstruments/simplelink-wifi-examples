@@ -9,13 +9,17 @@ const Power                 = scripting.addModule("/ti/drivers/Power");
 const UART2                 = scripting.addModule("/ti/drivers/UART2");
 const UART21                = UART2.addInstance();
 const Settings              = scripting.addModule("/ti/posix/freertos/Settings");
+const sps                   = scripting.addModule("/ti/common/sps");
 // @cliArgs --board /ti/boards/LP_EM_CC35X1ET --rtos freertos
 
+
+sps.enableSPS = true;
 /**
  * Write custom configuration values to the imported modules.
  */
 FreeRTOS.useTimeSlicing = true;
-FreeRTOS.heapSize = 0x00057000;
+FreeRTOS.timerTaskPriority = 9;
+FreeRTOS.heapSize = 0x0004FBF0;
 
 GPIO1.$hardware = system.deviceData.board.components.LED_RED;
 GPIO1.$name     = "CONFIG_GPIO_LED_0";

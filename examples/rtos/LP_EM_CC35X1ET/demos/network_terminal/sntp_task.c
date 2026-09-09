@@ -74,6 +74,7 @@
  struct sockaddr_in;
 #ifdef LWIP_IPV6
  struct sockaddr_in6;
+#include "lwip/ip6_addr.h"
 #endif
 
 #define SNTP_MSGQ_MAX_NUM_MSGS 5
@@ -110,7 +111,7 @@
 /* Size of KOD error codes */
 #define SNTP_KOD_ERROR_CODE_SIZE 4
 
-#define SNTP_THRD_PRIORITY (11)
+#define SNTP_THREAD_PRIORITY (11)
 
 #define SNTP_LOCAL_PORT (5008)
 
@@ -274,7 +275,7 @@ static void changeServer(uint8_t family)
         }
 #ifdef LWIP_IPV6
         else if (family == AF_INET6) {
-            g_sntpCurrSrvBytePos += sizeof(struct sockaddr);
+            g_sntpCurrSrvBytePos += sizeof(struct sockaddr_in6);
         }
 #endif
     }
@@ -335,13 +336,17 @@ static int32_t sntpConnSetup(struct netconn **con, struct sockaddr *cs, uint32_t
 
     /* If socket already exists close it */
     if ( *con != NULL) {
-        netconn_delete(pCon);
+        netconn_delete(*con);
         *con = NULL;
     }
 
     /* Create a UDP socket to communicate with NTP server */
-    // Create new UDP netconn
-    pCon = netconn_new(NETCONN_UDP);
+#if LWIP_IPV6
+    enum netconn_type conn_type = (cs->sa_family == AF_INET6) ? NETCONN_UDP_IPV6 : NETCONN_UDP;
+#else
+    enum netconn_type conn_type = NETCONN_UDP;
+#endif
+    pCon = netconn_new(conn_type);
     if (pCon == NULL) {
         SNTP_PRINT_REPORT_ERROR("\n\r ERROR ! sntpConnSetup:failed to allocate  connection handle");
         *con = NULL;
@@ -352,19 +357,49 @@ static int32_t sntpConnSetup(struct netconn **con, struct sockaddr *cs, uint32_t
      *  Connect our UDP socket. We only want to recv replies from the NTP
      *  server on this socket:
      */
-    netconn_bind(pCon, IP_ADDR_ANY, 0/*SNTP_LOCAL_PORT*/);//lwip will choose the local port
+#if LWIP_IPV6
+    if (cs->sa_family == AF_INET6) {
+        ip_addr_t bind_any;
+        memset(&bind_any, 0, sizeof(bind_any));
+        bind_any.type = IPADDR_TYPE_V6;
+        netconn_bind(pCon, &bind_any, 0);
+    } else
+#endif
+    {
+        netconn_bind(pCon, IP_ADDR_ANY, 0);
+    }
 
     /*though there is no UDP connect, this is a way to make lwip
      * to filter the recv frames according addr+port */
 
+    memset(&remote_ip, 0, sizeof(remote_ip));
     if(cs->sa_family == AF_INET){
-        os_memcpy(&remote_ip, &((struct sockaddr_in *)cs)->sin_addr, sizeof(struct ip4_addr));
+        remote_ip.u_addr.ip4.addr = ((struct sockaddr_in *)cs)->sin_addr.s_addr;
+        /* type field stays IPADDR_TYPE_V4 (= 0) from memset */
         remote_port = ((struct sockaddr_in *)cs)->sin_port;
     }
 #if LWIP_IPV6
     else{
-        os_memcpy(remote_ip.u_addr.ip6, ((struct sockaddr_in6 *)cs)->sin6_addr, sizeof(struct ip6_addr));
-        remote_port = ((struct sockaddr_in6 *)cs)->sin_port;
+        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)cs;
+        os_memcpy(&remote_ip.u_addr.ip6, &sa6->sin6_addr, sizeof(struct ip6_addr));
+        remote_ip.type = IPADDR_TYPE_V6;
+        remote_port = sa6->sin6_port;
+        if (ip6_addr_islinklocal(&remote_ip.u_addr.ip6)) {
+            struct netif *zone_netif = NULL;
+            if (sa6->sin6_scope_id != 0) {
+                struct netif *n;
+                for (n = netif_list; n != NULL; n = n->next) {
+                    if ((u32_t)(n->num + 1) == sa6->sin6_scope_id) {
+                        zone_netif = n;
+                        break;
+                    }
+                }
+            }
+            if (zone_netif == NULL) {
+                zone_netif = (struct netif *)network_get_sta_if();
+            }
+            ip6_addr_assign_zone(&remote_ip.u_addr.ip6, IP6_UNICAST, zone_netif);
+        }
     }
 #endif
     status = netconn_connect(pCon, &remote_ip, remote_port);
@@ -452,7 +487,7 @@ int32_t sntpTask_start(uint32_t (*get)(void), void (*set)(uint32_t newtime),
                             "sntp",
                             ((stacksize == 0) ? SNTP_TASK_STACKSIZE : stacksize),
                             NULL,
-                            SNTP_THRD_PRIORITY,
+                            SNTP_THREAD_PRIORITY,
                             &g_sntpSyncHandle);
     if (rc != TRUE ) {
         SNTP_PRINT_REPORT_ERROR("\n\rsntpTask_start: Failed to create sntpTask_syncTime_task Task");

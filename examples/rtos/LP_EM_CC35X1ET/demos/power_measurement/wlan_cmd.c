@@ -68,6 +68,7 @@
 #ifdef ENT_EXAMPLE
 
 #define FOrCE_CA_CRT_VERIFY
+//note!
 //to create binary certificate from .pem, perform :
 //xxd -i ca.pem > ca_certificate.h
 //xxd -i wifiuser.pem > client_certificate.h
@@ -99,7 +100,7 @@ void releaseLoadedCertificate(certificate_load_type_t type);
 #define WLAN_WPS_TOUT               (121000)
 #define WLAN_ENT_TOUT               (25000)
 #define MAX_SCAN_TRAILS             (10)
-#define P2P_CONNECT_PRIORITY        (SPAWN_TASK_PRIORITY - 1)
+#define P2P_CONNECT_THREAD_PRIORITY        (SPAWN_THREAD_PRIORITY - 1)
 #define P2P_STACK_SIZE              (2048)
 #define P2P_REMOTE_DEVICE           ("StartScan")
 #define P2P_DEVICE_TYPE             ("1-0050F204-1")
@@ -129,21 +130,17 @@ typedef enum
     P2P_DEVICE_SCAN,
 }scan_t;
 /******************************************************************************
-                  Security Type Macros
+                  Security Type Macros — defined in wlan_if.h
 ******************************************************************************/
-//----------------------------------------------------------------
-// Don't change these values, they are related to values in rsn.h
-#define SECURITY_TYPE_BITMAP_OPEN            (0)
-#define SECURITY_TYPE_BITMAP_WPA             (1 << 1)
-#define SECURITY_TYPE_BITMAP_WPA2            (1 << 2)
-#define SECURITY_TYPE_BITMAP_WPA3            (1 << 3)
-#define SECURITY_TYPE_BITMAP_PMF_CAPABLE     (1 << 4)
-#define SECURITY_TYPE_BITMAP_PMF_REQUIRED    (1 << 5)
-//--------------------------
-// Defines for the security type and PMF
-#define SECURITY_TYPE_MASK                   (SECURITY_TYPE_BITMAP_OPEN  | SECURITY_TYPE_BITMAP_WPA | SECURITY_TYPE_BITMAP_WPA2 | SECURITY_TYPE_BITMAP_WPA3)
-#define SECURITY_PMF_CAPABILITIES_MASK       (SECURITY_TYPE_BITMAP_PMF_CAPABLE | SECURITY_TYPE_BITMAP_PMF_REQUIRED)
-//----------------------------------------------------------------
+// Use WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_* from wlan_if.h
+#define SECURITY_TYPE_BITMAP_OPEN            WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_OPEN
+#define SECURITY_TYPE_BITMAP_WPA             WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_WPA
+#define SECURITY_TYPE_BITMAP_WPA2            WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_WPA2
+#define SECURITY_TYPE_BITMAP_WPA3            WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_WPA3
+#define SECURITY_TYPE_BITMAP_PMF_CAPABLE     WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_PMF_CAPABLE
+#define SECURITY_TYPE_BITMAP_PMF_REQUIRED    WLAN_SCAN_RESULT_SECURITY_TYPE_BITMAP_PMF_REQUIRED
+#define SECURITY_TYPE_MASK                   WLAN_SCAN_RESULT_SECURITY_TYPE_MASK
+#define SECURITY_PMF_CAPABILITIES_MASK       WLAN_SCAN_RESULT_SECURITY_PMF_CAPABILITIES_MASK
 
 
 /******************************************************************************
@@ -188,6 +185,12 @@ int set_vendor_ie(WlanRole_e role);
 
 int32_t ParseSetpeerAgingTimeout(void *arg, uint32_t* timeOut);
 
+static volatile int csi_keep_reading = 0;
+static volatile int csi_thread_exit = 0;
+static OsiSyncObj_t csi_thread_sync = NULL;
+static OsiSyncObj_t csi_thread_exit_sync = NULL;
+static OsiThread_t csi_thread = NULL;
+
 #endif
 /******************************************************************************
                       GLOBAL VARIABLES
@@ -204,11 +207,6 @@ uint32_t ActiveNetIfBitMap = 0x00;
 
 
 
-static volatile int csi_keep_reading = 0;
-static volatile int csi_thread_exit = 0;
-static OsiSyncObj_t csi_thread_sync = NULL;
-static OsiSyncObj_t csi_thread_exit_sync = NULL;
-static OsiThread_t csi_thread = NULL;
 
 #ifdef CC35XX
     //prepare configuration for WPS connection
@@ -251,6 +249,7 @@ int32_t isNetIFActive(void)
     \sa             ParseCmd
 
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdWlanRoleUpApCallback(void *arg)
 {
 
@@ -324,6 +323,22 @@ int32_t cmdWlanRoleUpApCallback(void *arg)
         return -1;
     }
 
+    {
+        WlanMacAddress_t macAddressParams;
+        memset(&macAddressParams, 0, sizeof(WlanMacAddress_t));
+        macAddressParams.roleType = WLAN_ROLE_AP;
+        if (Wlan_Get(WLAN_GET_MACADDRESS, (void *)&macAddressParams) == 0)
+        {
+            Report("\n\rAP MAC Address: %02x:%02x:%02x:%02x:%02x:%02x\n\r",
+                   macAddressParams.pMacAddress[0],
+                   macAddressParams.pMacAddress[1],
+                   macAddressParams.pMacAddress[2],
+                   macAddressParams.pMacAddress[3],
+                   macAddressParams.pMacAddress[4],
+                   macAddressParams.pMacAddress[5]);
+        }
+    }
+
     apif = network_get_ap_if();
     if(apif != NULL)
     {
@@ -340,6 +355,7 @@ int32_t cmdWlanRoleUpApCallback(void *arg)
     return ret;
 
 }
+#endif
 
 /*!
     \brief          Prints Wlan AP role up command help menu.
@@ -350,6 +366,7 @@ int32_t cmdWlanRoleUpApCallback(void *arg)
 
     \sa             cmdWlanRoleUpCallback
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t printWlanRoleUpApUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -364,11 +381,13 @@ int32_t printWlanRoleUpApUsage(void *arg)
     UART_PRINT(wlan_role_up_ap_w_optionDetailsStr);
     UART_PRINT(wlan_role_up_ap_a_optionDetailsStr);
     UART_PRINT(wlan_role_up_ap_b_optionDetailsStr);
+    UART_PRINT(wlan_role_up_ap_i_optionDetailsStr);
 #endif
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif
 
 #ifdef CC35XX
 int32_t printCreateVendoIEListUsage(void *arg)
@@ -423,6 +442,7 @@ int32_t printConfiPeerAgingUsage(void *arg)
 }
 
 
+#ifndef TI_STA_ONLY_BUILD
 int32_t printWlanRoleUpP2PUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -559,7 +579,7 @@ int32_t printWlanP2PCancelUsage(void *arg)
 }
 
 #endif
-
+#endif
 /*!
     \brief          Wlan role down AP callback.
 
@@ -571,6 +591,7 @@ int32_t printWlanP2PCancelUsage(void *arg)
     \sa             ParseCmd
 
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdWlanRoleDownApCallback(void *arg)
 {
     int32_t           ret = 0;
@@ -598,6 +619,7 @@ int32_t cmdWlanRoleDownApCallback(void *arg)
     app_CB.Role = WLAN_ROLE_RESERVED;
     return ret;
 }
+#endif
 
 /*!
     \brief          Prints Wlan role dwon command help menu.
@@ -608,6 +630,7 @@ int32_t cmdWlanRoleDownApCallback(void *arg)
 
     \sa             cmdWlanRoleDownCallback
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t printWlanRoleDownApUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -620,8 +643,9 @@ int32_t printWlanRoleDownApUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
-
 #endif
+
+
 
 /*!
     \brief          Wlan role up STA callback.
@@ -669,14 +693,13 @@ int32_t cmdWlanRoleUpStaCallback(void *arg)
 
     CLR_STATUS_BIT(app_CB.Status, STATUS_BIT_STA_CONNECTION);
 
-    // configuration required for wps */
 #ifdef CC35XX
 
     //Set 2.4G and 5G for MX
     uint8_t sta_wifi_band =  (uint8_t)BAND_SEL_BOTH;
     Wlan_Set(WLAN_SET_STA_WIFI_BAND, &sta_wifi_band);
 
-
+    // Configuration required for wps
     RoleUpStaParams.wpsDisabled = FALSE; /* WPS is enabled by default */
     RoleUpStaParams.wpsParams.deviceName = (char *) g_modelName;
     RoleUpStaParams.wpsParams.configMethods = (char *) g_wpsConfigMethods;
@@ -693,7 +716,6 @@ int32_t cmdWlanRoleUpStaCallback(void *arg)
     RoleUpStaParams.wpsParams.uuid[2],RoleUpStaParams.wpsParams.uuid[3],
     RoleUpStaParams.wpsParams.uuid[12],RoleUpStaParams.wpsParams.uuid[13],
     RoleUpStaParams.wpsParams.uuid[14],RoleUpStaParams.wpsParams.uuid[15]);
-
 
 #endif // CC35XX
 
@@ -849,6 +871,7 @@ int32_t printWlanRoleDownStaUsage(void *arg)
 
     \sa             cmdWlanStartApCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 int32_t printWlanStartApUsage(void *arg)
 {
     UART_PRINT(lineBreak);
@@ -868,6 +891,7 @@ int32_t printWlanStartApUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif
 
 /*!
     \brief          WLAN connect callback.
@@ -970,11 +994,11 @@ int32_t cmdWlanConnectCallback(void *arg)
     }
 #endif
 
-   if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_IS_UP))
-   {
-       UART_PRINT("\n\rDevice is stopped, run wlan_start.\n\r");
-       return (-1);
-   }
+    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_IS_UP))
+    {
+        UART_PRINT("\n\rDevice is stopped, run wlan_start.\n\r");
+        return (-1);
+    }
 
    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
    {
@@ -982,7 +1006,10 @@ int32_t cmdWlanConnectCallback(void *arg)
        return (-1);
    }
 
-   Report("\r\n wlan_connect, ssid:%s secType:%d key:%s", ConnectParams.ssid,ConnectParams.secParams.Type,ConnectParams.secParams.Key);
+   Report("\r\n wlan_connect, ssid:%s secType:%d key:%s",
+          ConnectParams.ssid ? (char *)ConnectParams.ssid : "(none)",
+          ConnectParams.secParams.Type,
+          ConnectParams.secParams.Key ? (char *)ConnectParams.secParams.Key : "(none)");
 
    osi_SyncObjClear(&(app_CB.CON_CB.connectEventSyncObj));
 
@@ -1226,6 +1253,145 @@ int32_t printWlanDisconnectUsage(void *arg)
     UART_PRINT(wlanDisconnectUsageStr);
     UART_PRINT(descriptionStr);
     UART_PRINT(wlanDisconnectDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+/*!
+    \brief         Sets TX power for STA or AP role.
+
+    \param          arg        Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would return -1.
+
+    \sa             ParseSetTxPowerCmd
+*/
+int32_t cmdWlanSetTxPowerCallback(void *arg)
+{
+    int32_t ret = 0;
+    WlanTxPowerSet_t txPowerParams;
+
+    /* Parse the command */
+    memset(&txPowerParams, 0x0, sizeof(txPowerParams));
+    ret = ParseSetTxPowerCmd(arg, &txPowerParams);
+
+    if(ret < 0)
+    {
+        printWlanSetTxPowerUsage(arg);
+        return -1;
+    }
+
+    /* Check if device is started */
+    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_IS_UP))
+    {
+        UART_PRINT("\n\rDevice is stopped, run wlan_start.\n\r");
+        return -1;
+    }
+
+    /* Call Wlan_Set to set TX power */
+    ret = Wlan_Set(WLAN_SET_TX_POWER, &txPowerParams);
+
+    if (ret < 0)
+    {
+        UART_PRINT("\n\rFailed to set TX power.\n\r");
+        return -1;
+    }
+
+    UART_PRINT("\n\rTX power set successfully.\n\r");
+    return 0;
+}
+
+/*!
+    \brief          Prints wlan_set_tx_power command help menu.
+
+    \param          arg       Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdWlanSetTxPowerCallback
+*/
+int32_t printWlanSetTxPowerUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(SetTxPowerStr);
+    UART_PRINT(setTxPowerUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(wlanSetTxPowerDetailsStr);
+    UART_PRINT(wlanSetTxPower_i_optionDetailsStr);
+    UART_PRINT(wlanSetTxPower_txp_optionDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+    return(0);
+}
+
+/*!
+    \brief         Gets TX power for STA or AP role.
+
+    \param          arg        Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would return -1.
+
+    \sa             ParseGetTxPowerCmd
+*/
+int32_t cmdWlanGetTxPowerCallback(void *arg)
+{
+    int32_t ret = 0;
+    WlanTxPowerGet_t txPowerParams;
+
+    /* Parse the command */
+    memset(&txPowerParams, 0x0, sizeof(txPowerParams));
+    ret = ParseGetTxPowerCmd(arg, &txPowerParams);
+
+    if(ret < 0)
+    {
+        printWlanGetTxPowerUsage(arg);
+        return -1;
+    }
+
+    /* Check if device is started */
+    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_IS_UP))
+    {
+        UART_PRINT("\n\rDevice is stopped, run wlan_start.\n\r");
+        return -1;
+    }
+
+    /* Call Wlan_Get to get TX power */
+    ret = Wlan_Get(WLAN_GET_TX_POWER, &txPowerParams);
+
+    if (ret < 0)
+    {
+        UART_PRINT("\n\rFailed to get TX power.\n\r");
+        return -1;
+    }
+
+    UART_PRINT("\n\rCurrent TX power for role %d: %d dBm\n\r",
+               txPowerParams.role,
+               txPowerParams.tx_power_dbm);
+    return 0;
+}
+
+/*!
+    \brief          Prints wlan_get_tx_power command help menu.
+
+    \param          arg       Points to command line buffer.
+
+    \return         Upon successful completion, the function shall return 0.
+
+    \sa             cmdWlanGetTxPowerCallback
+*/
+int32_t printWlanGetTxPowerUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(GetTxPowerStr);
+    UART_PRINT(getTxPowerUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(wlanGetTxPowerDetailsStr);
+    UART_PRINT(wlanGetTxPower_i_optionDetailsStr);
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
     return(0);
@@ -1767,7 +1933,12 @@ int32_t cmdScan(void *arg, scan_t scanType)
     int32_t ret = 0;
     /* Call the command parser */
     memset(&ScanParams, 0x0, sizeof(ScanParams));
+
+#ifdef CC35XX
     ScanParams.numOfentries = MAX_SSID_ENTRIES;
+#else
+    ScanParams.numOfentries = DEFAULT_MAX_SSID_ENTRIES;
+#endif 
 
 #ifdef CC35XX
     if(scanType == P2P_DEVICE_SCAN)
@@ -1784,10 +1955,12 @@ int32_t cmdScan(void *arg, scan_t scanType)
             printScanUsage(NULL);
         }
 #ifdef CC35XX
+#ifndef TI_STA_ONLY_BUILD
         else
         {
             printWlanP2PFindUsage(NULL);
         }
+#endif
 #endif
         return(-1);
     }
@@ -1816,8 +1989,8 @@ int32_t cmdScan(void *arg, scan_t scanType)
     Report("\r\n scan num of entries:%d role:%d band:%d",ScanParams.numOfentries, role, scanCommo.Band);
     ScanParams.index = 0;
     ret = Wlan_Scan(role,
-            &scanCommo,
-            ScanParams.numOfentries);
+                    &scanCommo,
+                    ScanParams.numOfentries);
 #elif defined(CC33XX)
         /* Get scan results from NWP -
     results would be placed inside the provided buffer */
@@ -1863,7 +2036,7 @@ int32_t cmdScanCallback(void *arg)
     /* Check if role id valid */
     if(!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
     {
-        Report("\n\r not role id STA \n\r");
+        Report("\n\rSTA role isn't up. Call wlan_sta_role_up first.\n\r");
         return -1;
     }
     return cmdScan(arg, STA_SCAN);
@@ -1914,7 +2087,7 @@ int32_t printGetMacAddressUsage(void *arg)
 int32_t cmdGetMacAddressCallback(void *arg)
 {
     WlanMacAddress_t macAddressParams;
-    int16_t    ret = 0;
+    int32_t    ret = 0;
     memset(&macAddressParams, 0, sizeof(WlanMacAddress_t));
 
     /* Call the command parser */
@@ -2010,7 +2183,7 @@ int32_t printSetMacAddressUsage(void *arg)
 int32_t cmdSetMacAddressCallback(void *arg)
 {
     WlanMacAddress_t macAddressParams;
-    int16_t    ret = 0;
+    int32_t    ret = 0;
     memset(&macAddressParams, 0, sizeof(WlanMacAddress_t));
     /* Call the command parser */
     uint32_t tmpRoleId;
@@ -2121,6 +2294,7 @@ int32_t cmdSetInterfaceIpCallback(void *arg)
         {
             if (params.setDhcpServerAddress)
             {
+                network_stack_set_dhcp_server_if_ap(0);
                 network_stack_set_static_ip_if_ap(htonl(params.ipAddress),
                                               htonl(params.netmask),
                                               htonl(params.gateway));
@@ -2140,6 +2314,7 @@ int32_t printSetInterfaceIpUsage(void *arg)
     UART_PRINT(SetInterfaceIpStr);
     UART_PRINT(SetInterfaceIpUsageStr);
     UART_PRINT(SetInterfaceIpDetailsStr);
+    UART_PRINT(SetInterfaceIpExamplesStr);
     UART_PRINT(descriptionStr);
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
@@ -2267,6 +2442,7 @@ int32_t printGetInterfaceIpUsage(void *arg)
     \return         Upon successful completion, the function shall return 0.
                     In case of failure, this function would return an error;
 */
+#ifndef TI_STA_ONLY_BUILD
 
 int32_t cmdSetDhcpServerCallback(void *arg)
 {
@@ -2314,8 +2490,8 @@ int32_t cmdSetDhcpServerCallback(void *arg)
     }
 
     lease.enable = TRUE;
-    lease.start_ip.addr = htonl(startIp);
-    lease.end_ip.addr = htonl(endIp);
+    ip4_addr_set_u32(&lease.start_ip.u_addr.ip4, htonl(startIp));
+    ip4_addr_set_u32(&lease.end_ip.u_addr.ip4, htonl(endIp));
     ret = wifi_softap_set_dhcps_lease(&lease);
     if (ret == TRUE) // Address config succeeded - now set lease time
     {
@@ -2341,6 +2517,7 @@ int32_t cmdSetDhcpServerCallback(void *arg)
     }
     return ret;
 }
+#endif
 
 /*!
     \brief          Netcfg get DHCP callback.
@@ -2353,6 +2530,7 @@ int32_t cmdSetDhcpServerCallback(void *arg)
                     In case of failure, this function would return an error;
 
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdGetDhcpServerCallback(void *arg)
 {
     int32_t ret = 0;
@@ -2377,8 +2555,8 @@ int32_t cmdGetDhcpServerCallback(void *arg)
         return -1;
     }
     params->leaseTime = wifi_softap_get_dhcps_lease_time();
-    params->startAddress =  htonl(lease.start_ip.addr);
-    params->endAddress =  htonl(lease.end_ip.addr);
+    params->startAddress =  htonl(ip4_addr_get_u32(&lease.start_ip.u_addr.ip4));
+    params->endAddress =  htonl(ip4_addr_get_u32(&lease.end_ip.u_addr.ip4));
     Report("\n\n\rDHCP Parameters: \n\rLease Time: %d\n\r" ,params->leaseTime);
     Report("Start Address: ");
     PrintIPAddress(FALSE, &params->startAddress);
@@ -2386,6 +2564,7 @@ int32_t cmdGetDhcpServerCallback(void *arg)
     PrintIPAddress(FALSE,&params->endAddress);
     return(0);
 }
+#endif
 
 /*!
     \brief          Prints Set DHCP Server command help menu.
@@ -2396,6 +2575,7 @@ int32_t cmdGetDhcpServerCallback(void *arg)
 
     \sa             cmdGetPsModeCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 
 int32_t printSetDhcpServerUsage(void *arg)
 {
@@ -2410,6 +2590,7 @@ int32_t printSetDhcpServerUsage(void *arg)
     return(0);
 
 }
+#endif
 
 /*!
     \brief          Prints Get DHCP Server command help menu.
@@ -2420,6 +2601,7 @@ int32_t printSetDhcpServerUsage(void *arg)
 
     \sa             cmdGetPsModeCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 
 int32_t printGetDhcpServerUsage(void *arg)
 {
@@ -2434,6 +2616,7 @@ int32_t printGetDhcpServerUsage(void *arg)
     return(0);
 
 }
+#endif
 
 /*!
     \brief          Prints Get Power save mode command help menu.
@@ -2470,7 +2653,7 @@ int32_t printGetPsModeUsage(void *arg)
 
 int32_t cmdGetPsModeCallback(void *arg)
 {
-    int16_t         ret = 0;
+    int32_t         ret = 0;
     WlanPowerSave_e currentPsMode;
 
     ret = Wlan_Get(WLAN_GET_POWER_SAVE,(void *)&currentPsMode);
@@ -2501,6 +2684,10 @@ int32_t cmdGetPsModeCallback(void *arg)
 
         }
         Report("\n\r[PS MODE] current PS mode is %s", psMode);
+        if(currentPsMode == WLAN_STATION_POWER_SAVE_MODE)
+        {
+            Report("\n\rWARNING: Forced PS (-m 2) is debug-only and breaks data reception with the default NOPSPOLL scheme. Run 'wlan_set_ps -help' for details.\n\r");
+        }
     }
 
     return (ret);
@@ -2527,6 +2714,7 @@ int32_t printSetPsModeUsage(void *arg)
     UART_PRINT(wlanSetPsModeDetailsStr);
     UART_PRINT(wlanSetPsMode_m_optionDetailsStr);
     UART_PRINT(help_optaionDetails);
+    UART_PRINT(wlanSetPsModeWarningStr);
     UART_PRINT(lineBreak);
     return(0);
 }
@@ -2696,7 +2884,7 @@ int32_t ParseSetPsModeCmd(void *arg, WlanPowerSave_e *mode)
 
 int32_t cmdSetPsModeCallback(void *arg)
 {
-    int16_t         ret = 0;
+    int32_t         ret = 0;
     WlanPowerSave_e PsMode;
 
     ret = ParseSetPsModeCmd(arg, &PsMode);
@@ -2704,6 +2892,12 @@ int32_t cmdSetPsModeCallback(void *arg)
     if(ret < 0)
     {
         return ret;
+    }
+
+    if (!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
+    {
+        Report("\n\r[PS MODE] Failed: STA role not active.\n\r");
+        return -1;
     }
 
     ret = Wlan_Set(WLAN_SET_POWER_SAVE, (void *)&PsMode);
@@ -2715,6 +2909,10 @@ int32_t cmdSetPsModeCallback(void *arg)
     else
     {
         Report("\n\r[PS MODE] Successfully set PS mode %d\n\r", PsMode);
+        if(PsMode == WLAN_STATION_POWER_SAVE_MODE)
+        {
+            Report("WARNING: Forced PS (-m 2) is debug-only and breaks data reception with the default NOPSPOLL scheme. Run 'wlan_set_ps -help' for details.\n\r");
+        }
     }
 
     return (ret);
@@ -2811,7 +3009,7 @@ int32_t ParseSetPmModeCmd(void *arg, WlanPowerManagement_e *mode)
 
 int32_t cmdSetPmModeCallback(void *arg)
 {
-    int16_t               ret = 0;
+    int32_t               ret = 0;
     WlanPowerManagement_e PmMode;
 
     ret = ParseSetPmModeCmd(arg, &PmMode);
@@ -3022,7 +3220,7 @@ int32_t ParseSetSelectedChannelsCmd(void *arg, WlanSelectedChannelsArray_t *sele
 
 int32_t cmdSetSelectedScanChannelsCallback(void *arg)
 {
-    int16_t         ret = 0;
+    int32_t         ret = 0;
 
     WlanSelectedChannelsArray_t selectedChannels = 
     {
@@ -3057,7 +3255,7 @@ int32_t cmdSetSelectedScanChannelsCallback(void *arg)
 #ifdef CC35XX
 int32_t cmdSetWsocPrimaryCallback(void *arg)
 {
-    int16_t         ret = 0;
+    int32_t         ret = 0;
     WlanConnectivityFWSlot_t   WsocSlot;
 
     ret = ParseSetWsocPrimaryCmd(arg, &WsocSlot);
@@ -3163,7 +3361,7 @@ int32_t ParseSetLsiCmd(void *arg, WlanLongSleepInterval *LsiParams)
 
 int32_t cmdSetLsiCallback(void *arg)
 {
-    int16_t               ret = 0;
+    int32_t               ret = 0;
     WlanLongSleepInterval LsiParams;
     ret = ParseSetLsiCmd(arg, &LsiParams);
 
@@ -3224,7 +3422,7 @@ int32_t printGetFwVerUsage(void *arg)
 
 int32_t cmdGetFwVerCallback(void *arg)
 {
-    int16_t         ret = 0;
+    int32_t         ret = 0;
     WlanFWVersions_t wlanVer = {0};
 #ifdef CC35XX
     WlanSPVersions_t spVer = {0};
@@ -3359,16 +3557,11 @@ int32_t cmdWlanStartCallback(void *arg)
 
 #endif
 #endif 
-#ifdef CC35XX
-    //Enable ELP in FW
-    if (ret == OSI_OK)
-    {
-        uint32_t powerManagement = (uint32_t)POWER_MANAGEMENT_ELP_MODE;
-        Wlan_Set(WLAN_SET_POWER_MANAGEMENT, &powerManagement);
-    }
-#endif
+
     if (0 == ret)
     {
+        CLEAR_BIT_IN_BITMAP(ActiveNetIfBitMap, NET_IF_STA_BIT);
+        CLEAR_BIT_IN_BITMAP(ActiveNetIfBitMap, NET_IF_AP_BIT);
         SET_BIT_IN_BITMAP(ActiveNetIfBitMap, NET_IF_IS_UP);
         Report("\n\rWlan start success!\n\r");
         {
@@ -3434,13 +3627,6 @@ int32_t cmdWlanStopCallback(void *arg)
     int32_t ret = 0;
     StopCmd_t       StopParams;
 
-    /*
-    if (DEVICE_OFF == wlan_GetStateWlan())
-    //if (DEVICE_OFF == GetState_WL())	
-    {
-        Report("\n\rWlan already stopped !!!\n\r");
-        return -1;
-    }*/
     /* Call the command parser */
     memset(&StopParams, 0x0, sizeof(StopParams));
     ret = ParseStopCmd(arg , &StopParams);
@@ -3467,13 +3653,25 @@ int32_t cmdWlanStopCallback(void *arg)
         os_sleep(1, 0);
     }
 
+    #ifndef TI_STA_ONLY_BUILD
     if(IS_BIT_SET(ActiveNetIfBitMap, NET_IF_AP_BIT))
     {
         Report("\n\rcmdWlanRoleDownApCallback, role id 2 \n\r");
         cmdWlanRoleDownApCallback(" ");
         os_sleep(1, 0);
     }
+    #endif
 
+#ifdef CC35XX
+#ifndef TI_STA_ONLY_BUILD
+    if(IS_BIT_SET(ActiveNetIfBitMap, NET_IF_DEVICE_BIT))
+    {
+        Report("\n\r cmdWlanRoleDownP2PCallback, role id 3 \n\r");
+        cmdWlanRoleDownP2PCallback(" ");
+        os_sleep(1, 0);
+    }
+#endif
+#endif 
     ret = Wlan_Stop(StopParams.isRecovery);
     if (0 == ret)
     {
@@ -3496,7 +3694,6 @@ int32_t cmdWlanStopCallback(void *arg)
     \sa
  */
 
-//TODO add cmdSendEtherCallback to the  menu
 int32_t cmdSendEtherCallback(WlanRole_e role, uint8_t *inbuf, uint32_t inbuf_len,uint32_t flags)
 {
 
@@ -3511,7 +3708,7 @@ int32_t cmdSendEtherCallback(WlanRole_e role, uint8_t *inbuf, uint32_t inbuf_len
 
     if(!IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
     {
-        Report("\n\r not role id STA \n\r");
+        Report("\n\rSTA role isn't up. Call wlan_sta_role_up first.\n\r");
         return -1;
     }
 
@@ -3529,29 +3726,6 @@ int32_t cmdSendEtherCallback(WlanRole_e role, uint8_t *inbuf, uint32_t inbuf_len
 
     return ret;
 }
-
-int32_t cmdtestCallback(void *arg)
-{
-
-#if 0 //TODO to remove
-    uint32_t ip = 0xf00000a;
-    Report("test \n\r");
-    extern void socket_connect(uint32_t ip);
-    cmdWlanRoleUpStaCallback(" ");
-    {
-        osi_Sleep(1);
-    }
-    cmdWlanConnectCallback(" -s \"Elad_SSID\" -t OPEN");
-    while(isIp == 0)
-    {
-        osi_uSleep(500 * 1000); //500 mili
-    }
-    socket_connect(ip);
-#endif
-    return 0;
-
-}
-
 
 int32_t printtestStopUsage(void *arg)
 {
@@ -3651,6 +3825,7 @@ void printFrameSubTyps(void)
     return;
 }
 
+#ifdef CC35XX
 /////************ csi *************////
 int32_t printCsiEnableUsage(void *arg)
 {
@@ -3741,8 +3916,28 @@ int32_t printCsiGetResultsUsage(void *arg)
 
     \return         NA
 
+    \example      Example for CSI DATA structure 
+    
+    uint8_t ImOut0 ;
+    uint8_t ReOut0 ;
+    uint8_t ImOut1 ;
+    uint8_t ReOut1 ;
+    for (int i = 0; i < CSI_MAX_DATA_LENGTH-1; i++) {
+        ImOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 0) & 0xFF;
+        ReOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 8) & 0xFF;
+        ImOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 16) & 0xFF;
+        ReOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 24) & 0xFF;
+        Report("%d,%d,%d,%d,", ImOut0, ReOut0, ImOut1, ReOut1);
+        }
+
+    ImOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 0) & 0xFF;
+    ReOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 8) & 0xFF;
+    Report("%d,%d", ImOut0, ReOut0);
+    Report("]\"\n");    
+      
     \sa
  */
+
 /**
  * @brief CSI data receive callback
  * Prints CSI data in CSV format, header printed once.
@@ -3779,26 +3974,6 @@ static void csi_rx_cb(WlanGetCSIData_t *pCsiData)
     
     // increment counter
     s_count++;
-
-/* Example for CSI DATA structure */
-    /*
-    uint8_t ImOut0 ;
-    uint8_t ReOut0 ;
-    uint8_t ImOut1 ;
-    uint8_t ReOut1 ;
-    for (int i = 0; i < CSI_MAX_DATA_LENGTH-1; i++) {
-        ImOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 0) & 0xFF;
-        ReOut0 = (uint8_t)(pCsiData->csiDataBuf[i] >> 8) & 0xFF;
-        ImOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 16) & 0xFF;
-        ReOut1 = (uint8_t)(pCsiData->csiDataBuf[i] >> 24) & 0xFF;
-        Report("%d,%d,%d,%d,", ImOut0, ReOut0, ImOut1, ReOut1);
-        }
-
-    ImOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 0) & 0xFF;
-    ReOut0 = (uint8_t)(pCsiData->csiDataBuf[CSI_MAX_DATA_LENGTH-1] >> 8) & 0xFF;
-    Report("%d,%d", ImOut0, ReOut0);
-    Report("]\"\n");    
-    */
 }
 
 /*!
@@ -3896,7 +4071,7 @@ int32_t csiInitCallback(void *arg)
         retVal = osi_ThreadCreate(&csi_thread,              // Thread control block
                                   "csi_thread",             // Thread name
                                   CSI_THR_STACK_SIZE,       // STACK size
-                                  CSI_THRD_PRIORITY,        // Priority
+                                  CSI_THREAD_PRIORITY,        // Priority
                                   (void*) csi_thread_entry, // Execute function
                                   NULL);                    // params
         if(retVal != OSI_OK)
@@ -4107,6 +4282,9 @@ int32_t csiGetresultsStart(void *arg)
     return 0;
 }
 /////************ end of csi *************////
+
+#endif//CC35XX
+
 /*!
     \brief          Print scan AP security results.
     This function prints the security type and PMF capability of the scanned AP.
@@ -4160,6 +4338,7 @@ void PrintScanApSecurityResults(uint32_t apSecurity)
 
 
 #ifdef CC35XX
+#ifndef TI_STA_ONLY_BUILD
 /*!
     \brief          Prints start AP WPS command help menu.
 
@@ -4183,6 +4362,7 @@ int32_t printStartApWpsUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif
 
 /*!
     \brief          Start AP WPS.
@@ -4193,6 +4373,7 @@ int32_t printStartApWpsUsage(void *arg)
     \sa             ParseCmd
 
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdStartApWpsCallback(void *arg)
 {
     int32_t ret = 0;
@@ -4211,7 +4392,9 @@ int32_t cmdStartApWpsCallback(void *arg)
     return ret;
 }
 #endif
+#endif
 #ifdef CC35XX_INDIGO_APP
+#ifndef TI_STA_ONLY_BUILD
 /*!
     \brief          Prints  WPS AP Pin Set command help menu.
 
@@ -4235,6 +4418,7 @@ int32_t printSetWpsApPinUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif
 
 /*!
     \brief          Set WPS AP Pin
@@ -4245,6 +4429,7 @@ int32_t printSetWpsApPinUsage(void *arg)
     \sa             ParseCmd
 
 */
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdSetWpsApPinCallback(void *arg)
 {
     int32_t ret = 0;
@@ -4262,6 +4447,7 @@ int32_t cmdSetWpsApPinCallback(void *arg)
 
     return ret;
 }
+#endif
 #endif
 
 
@@ -4291,11 +4477,11 @@ void printScanResults(uint32_t res_num)
 
     /* Print table column headers */
     UART_PRINT(lineBreak);
-    printBorder('-', 106);
+    printBorder('-', 151);
     UART_PRINT(lineBreak);
     UART_PRINT(
-        "    |               SSID               |       BSSID       | RSSI  | Ch  | Hidden | Security  | PMF      |\n\r");
-    printBorder('-', 106);
+        "    |               SSID               |       BSSID       | RSSI  | Ch  | Hidden | Security  | PMF      | Group Cipher | Unicast Cipher | Key Mgmt   |\n\r");
+    printBorder('-', 151);
     UART_PRINT(lineBreak);
 
     /* Print the table */
@@ -4348,19 +4534,150 @@ void printScanResults(uint32_t res_num)
         sub_index = app_CB.gDataBuffer.netEntries[index].SecurityInfo;
 
         sec_type = WLAN_SCAN_RESULT_SEC_TYPE_BITMAP(sub_index);
-
         PrintScanApSecurityResults(sec_type);
+
+        /* Group cipher (4 bits, position 0) */
+        {
+            uint32_t groupCipher = WLAN_SCAN_RESULT_GROUP_CIPHER(sub_index);
+            if      (groupCipher == WLAN_CIPHER_BITMAP_NONE)   UART_PRINT(" %-12s |", "NONE");
+            else if (groupCipher == WLAN_CIPHER_BITMAP_WEP40)  UART_PRINT(" %-12s |", "WEP40");
+            else if (groupCipher == WLAN_CIPHER_BITMAP_WEP104) UART_PRINT(" %-12s |", "WEP104");
+            else if (groupCipher == WLAN_CIPHER_BITMAP_TKIP)   UART_PRINT(" %-12s |", "TKIP");
+            else if (groupCipher == WLAN_CIPHER_BITMAP_CCMP)   UART_PRINT(" %-12s |", "CCMP");
+            else                                               UART_PRINT(" 0x%-10x |", groupCipher);
+        }
+
+        /* Unicast cipher bitmap (4 bits, position 4) — can be multiple */
+        {
+            uint32_t unicastCipher = WLAN_SCAN_RESULT_UNICAST_CIPHER_BITMAP(sub_index);
+            if      (unicastCipher == WLAN_CIPHER_BITMAP_NONE)               UART_PRINT(" %-14s |", "NONE");
+            else if (unicastCipher == WLAN_CIPHER_BITMAP_TKIP)               UART_PRINT(" %-14s |", "TKIP");
+            else if (unicastCipher == WLAN_CIPHER_BITMAP_CCMP)               UART_PRINT(" %-14s |", "CCMP");
+            else if (unicastCipher == WLAN_CIPHER_BITMAP_MIX_TKIP_CCMP)     UART_PRINT(" %-14s |", "TKIP+CCMP");
+            else                                                              UART_PRINT(" 0x%-12x |", unicastCipher);
+        }
+
+        /* Key management bitmap (3 bits, position 14) — can be multiple */
+        {
+            uint32_t keyMgmt = WLAN_SCAN_RESULT_KEY_MGMT_SUITES_BITMAP(sub_index);
+            if      (keyMgmt == WLAN_KEY_MGMT_SUITE_NONE)             UART_PRINT(" %-10s |", "NONE");
+            else if (keyMgmt == WLAN_KEY_MGMT_SUITE_PSK)              UART_PRINT(" %-10s |", "PSK");
+            else if (keyMgmt == WLAN_KEY_MGMT_SUITE_802_1_X)          UART_PRINT(" %-10s |", "802.1X");
+            else if (keyMgmt == WLAN_KEY_MGMT_SUITE_SAE)              UART_PRINT(" %-10s |", "SAE");
+            else if (keyMgmt == WLAN_KEY_MGMT_SUITE_MIX_PSK_802_1_X) UART_PRINT(" %-10s |", "PSK+802.1X");
+            else if (keyMgmt == WLAN_KEY_MGMT_SUITE_MIX_SAE_PSK)     UART_PRINT(" %-10s |", "SAE+PSK");
+            else                                                       UART_PRINT(" 0x%-8x |", keyMgmt);
+        }
 
         UART_PRINT("\n\r");
     }
 
-    printBorder('-', 106);
+    printBorder('-', 151);
     UART_PRINT(lineBreak);
 
     return;
 }
 
 #ifdef CC35XX
+
+int32_t cmdIfconfigCallback(void *arg)
+{
+    struct netif *sta_if = network_get_sta_if();
+    struct netif *ap_if = network_get_ap_if();
+
+    Report("\n\r========== Network Interface Configuration ==========\n\r");
+
+    if (sta_if != NULL)
+    {
+        Report("\nSTA Interface:\n\r");
+        if (sta_if->flags & NETIF_FLAG_UP)
+        {
+            char ipv4_str[16];
+            inet_ntop(AF_INET, &sta_if->ip_addr.u_addr.ip4, ipv4_str, sizeof(ipv4_str));
+            Report("  Status: UP\n\r");
+            Report("  IPv4 Address: %s\n\r", ipv4_str);
+
+            {
+                int idx;
+                int printed = 0;
+                char ipv6_str[INET6_ADDRSTRLEN];
+                for (idx = 0; idx < LWIP_IPV6_NUM_ADDRESSES; idx++) {
+                    if (sta_if->ip6_addr_state[idx] & IP6_ADDR_VALID) {
+                        inet_ntop(AF_INET6, (struct in6_addr*)&sta_if->ip6_addr[idx], ipv6_str, INET6_ADDRSTRLEN);
+                        if (ip6_addr_islinklocal(netif_ip6_addr(sta_if, idx))) {
+                            Report("  IPv6 Link-local: %s\n\r", ipv6_str);
+                        } else {
+                            Report("  IPv6 Global:     %s\n\r", ipv6_str);
+                        }
+                        printed = 1;
+                    }
+                }
+                if (!printed) {
+                    Report("  IPv6: Not configured\n\r");
+                }
+            }
+        }
+        else
+        {
+            Report("  Status: DOWN\n\r");
+        }
+    }
+    else
+    {
+        Report("\nSTA Interface: Not available\n\r");
+    }
+
+    if (ap_if != NULL)
+    {
+        Report("\nAP Interface:\n\r");
+        if (ap_if->flags & NETIF_FLAG_UP)
+        {
+            char ipv4_str[16];
+            inet_ntop(AF_INET, &ap_if->ip_addr.u_addr.ip4, ipv4_str, sizeof(ipv4_str));
+            Report("  Status: UP\n\r");
+            Report("  IPv4 Address: %s\n\r", ipv4_str);
+
+            {
+                int idx;
+                int printed = 0;
+                char ipv6_str[INET6_ADDRSTRLEN];
+                for (idx = 0; idx < LWIP_IPV6_NUM_ADDRESSES; idx++) {
+                    if (ap_if->ip6_addr_state[idx] & IP6_ADDR_VALID) {
+                        inet_ntop(AF_INET6, (struct in6_addr*)&ap_if->ip6_addr[idx], ipv6_str, INET6_ADDRSTRLEN);
+                        if (ip6_addr_islinklocal(netif_ip6_addr(ap_if, idx))) {
+                            Report("  IPv6 Link-local: %s\n\r", ipv6_str);
+                        } else {
+                            Report("  IPv6 Global:     %s\n\r", ipv6_str);
+                        }
+                        printed = 1;
+                    }
+                }
+                if (!printed) {
+                    Report("  IPv6: Not configured\n\r");
+                }
+            }
+        }
+        else
+        {
+            Report("  Status: DOWN\n\r");
+        }
+    }
+    else
+    {
+        Report("\nAP Interface: Not available\n\r");
+    }
+
+    Report("\n\r======================================================\n\r");
+    return 0;
+}
+
+int32_t printIfconfigUsage(void *arg)
+{
+    UART_PRINT("\n\rifconfig [-help]\n\r\t");
+    UART_PRINT("Display network interface configuration (IPv4 and IPv6 addresses)\n\r");
+    return 0;
+}
+
 const char g_p2p_cmd_modelName[32+1] = "TI_CC351XX";
 char g_p2p_cmd_wpsConfigMethods[] = "push_button physical_display";
 const char g_p2p_cmd_manufacturer[64+1] = "TI";
@@ -4401,11 +4718,6 @@ int32_t cmdWlanRoleUpP2PCallback(void *arg)
         return -1;
     }
 
-    if (IS_BIT_SET(ActiveNetIfBitMap, NET_IF_STA_BIT))
-    {
-        Report("\n\rSTA role need to be down.\n\r");
-        return -1;
-    }
     if (IS_BIT_SET(ActiveNetIfBitMap, NET_IF_AP_BIT))
     {
         Report("\n\rAP role need to be down.\n\r");
@@ -4428,23 +4740,23 @@ int32_t cmdWlanRoleUpP2PCallback(void *arg)
     RoleUpP2PParams.countryDomain[2] = '\0';
 
     RoleUpP2PParams.wpsDisabled = FALSE; /* WPS is enabled by default */
-    RoleUpP2PParams.wpsParams.deviceName = (char *) g_p2p_cmd_modelName;
+    RoleUpP2PParams.wpsParams.deviceName    = (char *) g_p2p_cmd_modelName;
     RoleUpP2PParams.wpsParams.configMethods = (char *) g_p2p_cmd_wpsConfigMethods;
-    RoleUpP2PParams.wpsParams.manufacturer = (char *) g_p2p_cmd_manufacturer;
-    RoleUpP2PParams.wpsParams.modelName = (char *) g_p2p_cmd_modelName;
-    RoleUpP2PParams.wpsParams.modelNumber = (char *) g_p2p_cmd_modelNumber;
-    RoleUpP2PParams.wpsParams.serialNumber = (char *) g_p2p_cmd_serialNumber;
-    RoleUpP2PParams.wpsParams.uuid = (uint8_t *) g_p2p_cmd_uuid_string;
-    RoleUpP2PParams.wpsParams.deviceType = (uint8_t *) g_p2p_cmd_primaryDeviceType;
+    RoleUpP2PParams.wpsParams.manufacturer  = (char *) g_p2p_cmd_manufacturer;
+    RoleUpP2PParams.wpsParams.modelName     = (char *) g_p2p_cmd_modelName;
+    RoleUpP2PParams.wpsParams.modelNumber   = (char *) g_p2p_cmd_modelNumber;
+    RoleUpP2PParams.wpsParams.serialNumber  = (char *) g_p2p_cmd_serialNumber;
+    RoleUpP2PParams.wpsParams.uuid          = (uint8_t *) g_p2p_cmd_uuid_string;
+    RoleUpP2PParams.wpsParams.deviceType    = (uint8_t *) g_p2p_cmd_primaryDeviceType;
 
-    RoleUpP2PParams.p2pDeviceEnabled = TRUE;
+    RoleUpP2PParams.p2pDeviceEnabled        = TRUE;
 
     /* Set default parameters */
-    RoleUpP2PParams.P2pParams.operChannel = 0;
-    RoleUpP2PParams.P2pParams.operReg = 81;
-    RoleUpP2PParams.P2pParams.listenChannel = 0;
-    RoleUpP2PParams.P2pParams.listenReg = 81;
-    RoleUpP2PParams.P2pParams.goIntent = 0;//can be 0-15
+    RoleUpP2PParams.P2pParams.operChannel   = 1;
+    RoleUpP2PParams.P2pParams.operReg       = 81; /* 2.4GHz BW20 reg class where p2p supported*/
+    RoleUpP2PParams.P2pParams.listenChannel = 1;
+    RoleUpP2PParams.P2pParams.listenReg     = 81;
+    RoleUpP2PParams.P2pParams.goIntent      = 0;  /* 0 - 14 */
 
 
     /* Call the command parser */
@@ -4452,7 +4764,9 @@ int32_t cmdWlanRoleUpP2PCallback(void *arg)
 
     if(ret < 0)
     {
+#ifndef TI_STA_ONLY_BUILD
         printWlanRoleUpP2PUsage(arg);
+#endif
         return -1;
     }
 
@@ -4777,7 +5091,9 @@ int32_t cmdWlanRoleDownP2PCallback(void *arg)
 
     if(ret < 0)
     {
+#ifndef TI_STA_ONLY_BUILD
         printWlanRoleDownP2PUsage(arg);
+#endif
         return -1;
     }
 
@@ -4850,7 +5166,9 @@ int32_t cmdWlanP2PConnectCallback(void *arg)
     ret = ParseP2PConnectCmd(arg, peer_mac, &wps_method, pin, &timeout);
     if(ret < 0)
     {
+#ifndef TI_STA_ONLY_BUILD
         printWlan2PConnectUsage(arg);
+#endif
         return -1;
     }
 
@@ -5022,7 +5340,9 @@ int32_t cmdWlanP2PSetChannelCallback(void *arg)
 
     if(ret < 0)
     {
+#ifndef TI_STA_ONLY_BUILD
         printWlanRoleUpP2PUsage(arg);
+#endif
         return -1;
     }
 
@@ -5082,6 +5402,118 @@ int32_t cmdWlanP2PCancelCallback(void *arg)
 }
 
 
+int32_t printWlanP2PGrpAddUsage(void *arg)
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(wlanP2PGrpAddStr);
+    UART_PRINT(wlan_p2p_group_add_UsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(wlan_p2p_group_add_DetailsStr);
+    UART_PRINT(wlan_p2p_group_add_c_optionDetailsStr);
+    UART_PRINT(wlan_p2p_group_add_s_optionDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+
+    return(0);
+}
+
+ /*!
+      \brief          P2P Group Add callback.
+
+      This callback starts an autonomous P2P Group Owner on a specified channel.
+      The channel number is converted to a frequency in MHz before being passed
+      to the driver.
+
+      \param[in]      arg - Points to command line buffer.
+
+      \return         0 on success, negative error code on failure.
+  */
+int32_t cmdWlanP2PGrpAddCallback(void *arg)
+{
+    WlanP2pCmd_t pParams;
+    char         cmdStr[CMD_BUFFER_LEN + 1];
+    char         *token;
+    int32_t      ret;
+    int32_t      channel = 0;
+
+    pParams.Id                             = P2P_CMD_ID_GROUP_ADD;
+    pParams.Data.groupAddParams.freq       = 0;
+    pParams.Data.groupAddParams.ssidPostfix[0] = '\0';
+
+    strncpy(cmdStr, (char *)arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    while (token)
+    {
+        if (!strcmp(token, help_optionStr))
+        {
+            printWlanP2PGrpAddUsage(arg);
+
+            return(0);
+        }
+        else if (!strcmp(token, c_optionStr))
+        {
+            token = strtok(NULL, space_str);
+
+            if (token)
+            {
+                channel = atoi(token);
+            }
+        }
+        else if (!strcmp(token, s_optionStr))
+        {
+            token = strtok(NULL, space_str);
+
+            if (token)
+            {
+                strncpy(pParams.Data.groupAddParams.ssidPostfix, token,
+                        sizeof(pParams.Data.groupAddParams.ssidPostfix) - 1);
+                pParams.Data.groupAddParams.ssidPostfix[sizeof(pParams.Data.groupAddParams.ssidPostfix) - 1] = '\0';
+            }
+        }
+
+        token = strtok(NULL, space_str);
+    }
+
+    /* Convert channel number to frequency in MHz.
+    * 2.4 GHz: channels 1-13 use base 2407, channel 14 = 2484.
+    * 5 GHz:   channels 36-165 use base 5000.
+    * Channel 0 means auto (no hardcoding). */
+    if ((channel >= 1) && (channel <= 13))
+    {
+        pParams.Data.groupAddParams.freq = (channel * 5) + 2407;
+    }
+    else if (channel == 14)
+    {
+        pParams.Data.groupAddParams.freq = 2484;
+    }
+    else if ((channel >= 36) && (channel <= 165))
+    {
+        pParams.Data.groupAddParams.freq = (channel * 5) + 5000;
+    }
+    else if (channel == 0)
+    {
+        //default channel 1
+        pParams.Data.groupAddParams.freq = 2412;
+    }
+    else
+    {
+        Report("p2p_group_add: invalid channel %d\n\r", channel);
+
+        return(-1);
+    }
+
+     Report("p2p_group_add: channel=%d freq=%d ssidPostfix=\"%s\"\n\r",
+             channel,
+             pParams.Data.groupAddParams.freq,
+             pParams.Data.groupAddParams.ssidPostfix);
+
+    while ((ret = Wlan_Set(WLAN_SET_P2P_CMD, &pParams)) == WLAN_RET_OPER_IN_PROGRESS);
+
+    return ret;
+}
 /////////////// Connection Policy ////////////////
 
 /*!
@@ -5098,9 +5530,10 @@ int32_t cmdWlanP2PCancelCallback(void *arg)
 
     \note
 
-    \sa             
+    \sa
 
  */
+
 
 int32_t cmdWlanSetConnPolicyCallback(void *arg)
 {
@@ -5130,6 +5563,7 @@ int32_t cmdWlanSetConnPolicyCallback(void *arg)
 
     return(0);
 }
+
 
 /*!
     \brief          Prints WLAN Connection Policy Set command help menu.
@@ -5249,13 +5683,11 @@ int32_t cmdWlanAddProfileCallback(void *arg)
        return (-1);
    }
 
-   memset(ProfileParams.mac, 0, WLAN_BSSID_LENGTH);
-   ProfileParams.mac = NULL;
-
    Report("\r\n wlan_add_profile, ssid:%s ssidlen:%d secType:%d hidden:%d priority:%d key:%s", 
                 ProfileParams.ssid, strlen((const char *)(ProfileParams.ssid)),
                 ProfileParams.secParams.Type, *ProfileParams.hidden,
-                *ProfileParams.priority , ProfileParams.secParams.Key);
+                *ProfileParams.priority,
+                ProfileParams.secParams.Key ? (char *)ProfileParams.secParams.Key : "(none)");
     
     ret = Wlan_ProfileAdd((const signed char *)(ProfileParams.ssid),
                           strlen((const char *)(ProfileParams.ssid)),
@@ -5486,7 +5918,7 @@ int32_t printGetProfileUsage(void *arg)
 int32_t cmdWlanSetScanDwellTimeCallback(void *arg)
 {
 
-    int16_t         ret = 0;
+    int32_t         ret = 0;
     WlanScanDwellTime_t scanDwellTimes = 
     {
         .max_dwell_time_passive_msec = DEFAULT_SCAN_MAX_DWELL_TIME_PASSIVE_MSEC,
@@ -5539,6 +5971,7 @@ int32_t printWlanSetScanDwellTimeUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+
 
 
 /*!
@@ -5658,6 +6091,7 @@ int32_t printWlanProfileConnectUsage(void *arg)
     UART_PRINT(lineBreak);
     return(0);
 }
+#endif //CC35XX
 
 /*!
     \brief          Prints start ping command help menu.
@@ -5680,6 +6114,7 @@ int32_t printPingStartUsage(void *arg)
     UART_PRINT(pingStart_i_optionDetailsStr);
     UART_PRINT(pingStart_s_optionDetailsStr);
     UART_PRINT(pingStart_I_optionDetailsStr);
+    UART_PRINT(pingStart_6_optionDetailsStr);
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
     return(0);
@@ -5781,6 +6216,7 @@ int32_t cmdPingStopCallback(void *arg)
     return ret;
 }
 
+#ifdef CC35XX
 
 /*!
     \brief          WLAN Regulatory Domain Entry Set callback.
@@ -5927,6 +6363,7 @@ int32_t printWlanGetRegDomainEntryUsage(void *arg)
     return(0);
 }
 #endif // CC35XX
+#endif // AP_CONFIG
 
 #ifdef SNTP_SUPPORT
 int32_t cmdSntpConfigServers(void *arg)

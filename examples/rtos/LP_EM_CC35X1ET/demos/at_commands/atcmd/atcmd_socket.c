@@ -236,13 +236,12 @@ int32_t ATCmdSock_socketCallback(void *arg)
     int32_t ret = 0;
     ATCmdSock_Socket_t sockParams;
     int32_t sd;
-    sa_family_t familyProtocol = 0;
-    
+
     memset(&sockParams, 0x0, sizeof(ATCmdSock_Socket_t));
 
     /* Call the command parser */
     ret = ATCmdSock_socketParse((char *)arg, &sockParams);
-	
+
 	if (ret < 0)
 	{
         ATCmd_errorResult(ATCmd_errorParseStr, ret);
@@ -250,7 +249,7 @@ int32_t ATCmdSock_socketCallback(void *arg)
     }
 
     /* create socket */
-    sd = lwip_socket(familyProtocol, sockParams.type, 0);
+    sd = lwip_socket(sockParams.domain, sockParams.type, 0);
 
     if (sd < 0)
     {

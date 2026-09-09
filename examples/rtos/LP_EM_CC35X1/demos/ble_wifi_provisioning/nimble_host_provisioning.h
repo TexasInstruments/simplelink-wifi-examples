@@ -95,7 +95,7 @@ int nimble_host_ext_connect_params(uint8_t* bd_addr, uint8_t addr_type, uint8 ph
 
 int nimble_host_gap_update_params(uint16 connHandle, uint32 interval_min_us, uint32 interval_max_us, uint32 supervision_timeout_us, uint32 latency, uint16 min_ce_len, uint16 max_cle_len);
 
-int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type);
+int nimble_host_ext_disconnect(uint8_t* bd_addr);
 
 int nimble_host_connected_peers(void);
 
@@ -105,6 +105,9 @@ int nimble_host_get_bd_address(uint8_t addr_type);
 
 int nimble_host_set_bd_address(uint8_t addr_type);
 
+int nimble_host_set_tx_power(uint8_t tx_power_index);
+
+int nimble_host_set_phy(uint16_t conn_handle, uint8_t tx_phys_mask, uint8_t rx_phys_mask, uint16_t phy_opts);
+
 /* application specific APIs */
 int nimble_host_gatt_svr_chr_notify_wlan_connection(uint8_t status);
-

@@ -196,7 +196,7 @@ int32_t ATCmdEvent_pingStopCallback(void *args, int32_t num, char *buff)
     StrMpl_setStr(ATCmd_eventPingReportStr, &buff, ATCMD_DELIM_EVENT);
 
     /* Target IP */
-    ATCmd_valToIPv4(htonl(results->target_ip.addr), ip);
+    ATCmd_valToIPv4(htonl(results->target_ip.u_addr.ip4.addr), ip);
     StrMpl_setArrayVal(ip, &buff, IPV4_ADDR_LEN,
                        ATCMD_DELIM_ARG, ATCMD_DELIM_INTER,
                        STRMPL_FLAG_PARAM_DEC | STRMPL_FLAG_PARAM_SIZE_8 |
@@ -259,21 +259,21 @@ int32_t ATCmdEvent_networkCallback(void *args, int32_t num, char *buff)
     StrMpl_setStr("ipv4_acquired", &buff, ATCMD_DELIM_ARG);
 
     /* Address */
-    ATCmd_valToIPv4(htonl(pNetIf->ip_addr.addr), ip);
+    ATCmd_valToIPv4(htonl(pNetIf->ip_addr.u_addr.ip4.addr), ip);
     StrMpl_setArrayVal(ip, &buff, IPV4_ADDR_LEN,
                        ATCMD_DELIM_ARG, ATCMD_DELIM_INTER,
                        STRMPL_FLAG_PARAM_DEC | STRMPL_FLAG_PARAM_SIZE_8 | \
                        STRMPL_FLAG_PARAM_UNSIGNED);
 
     /* Netmask */
-    ATCmd_valToIPv4(htonl(pNetIf->netmask.addr), ip);
+    ATCmd_valToIPv4(htonl(pNetIf->netmask.u_addr.ip4.addr), ip);
     StrMpl_setArrayVal(ip, &buff, IPV4_ADDR_LEN,
                        ATCMD_DELIM_ARG, ATCMD_DELIM_INTER,
                        STRMPL_FLAG_PARAM_DEC | STRMPL_FLAG_PARAM_SIZE_8 | \
                        STRMPL_FLAG_PARAM_UNSIGNED);
 
     /* Gateway */
-    ATCmd_valToIPv4(htonl(pNetIf->gw.addr), ip);
+    ATCmd_valToIPv4(htonl(pNetIf->gw.u_addr.ip4.addr), ip);
     StrMpl_setArrayVal(ip, &buff, IPV4_ADDR_LEN, 
                        ATCMD_DELIM_TRM, ATCMD_DELIM_INTER,
                        STRMPL_FLAG_PARAM_DEC | STRMPL_FLAG_PARAM_SIZE_8 | \

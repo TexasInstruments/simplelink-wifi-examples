@@ -105,10 +105,6 @@ cmdAction_t gCmdList[] =
 uint32_t            gMaxCmd = (sizeof(gCmdList)/sizeof(cmdAction_t));
 appControlBlock     app_CB;
 
-//OSPREY_MX-38
-#define HWREG(x)    (*((volatile unsigned long *)(x)))
-#define ICACHE_BASE 0x41902000
-
 /****************************************************************************
                       WLAN EVENT HANDLER
 ****************************************************************************/
@@ -366,8 +362,6 @@ void *ble_dtm_entry(void *args)
     wlan_TurnOffWlan();
 #elif defined(CC35XX)
     int32_t RetVal = -1;
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001;
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000;
 
     Board_init();
 

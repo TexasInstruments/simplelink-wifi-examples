@@ -42,7 +42,7 @@
 #define APPLICATION_NAME        ("MQTT Client")
 #define APPLICATION_VERSION     ("1.0.0.1")
 #define TASK_STACK_SIZE         (2048)
-#define SPAWN_TASK_PRIORITY     (9)
+#define SPAWN_THREAD_PRIORITY     (9)
 #define PASSWD_LEN_MAX          (63)
 #define PASSWD_LEN_MIN          (8)
 #define MAX_FILE_NAME_LEN       (32)

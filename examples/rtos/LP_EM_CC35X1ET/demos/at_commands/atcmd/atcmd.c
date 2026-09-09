@@ -63,10 +63,10 @@
 // defines
 //*****************************************************************************
 #define ATCMD_TASKSTACKSIZE               		(4096)        /* Stack size in bytes */
-#define ATCMD_SPAWN_TASK_PRIORITY         		(9)
+#define ATCMD_SPAWN_THREAD_PRIORITY         		(9)
 #define ATCMD_BLOCKED_CMD_TASK_STACK_SIZE       (2048)
 #define ATCMD_MAX_BLOCKED_TASK                  (5)
-#define ATCMD_BLOCKED_TASK_PRIORITY             (5)
+#define ATCMD_BLOCKED_THREAD_PRIORITY             (5)
 #define ATCMD_BLOCKED_TASK_STATE_FREE           (0)
 #define ATCMD_BLOCKED_TASK_STATE_BUSY           (1)
 #define ATCMD_BLOCKED_TASK_STATE_EXIT           (2)
@@ -308,7 +308,7 @@ int32_t ATCmd_blockedCmd(ATCmd_List_t *list, char *buff)
     uint8_t i;
 
     pthread_attr_init(&pAttrs);
-    priParam.sched_priority = ATCMD_BLOCKED_TASK_PRIORITY;
+    priParam.sched_priority = ATCMD_BLOCKED_THREAD_PRIORITY;
     pthread_attr_setschedparam(&pAttrs, &priParam);
     pthread_attr_setstacksize(&pAttrs, ATCMD_BLOCKED_CMD_TASK_STACK_SIZE);
     pthread_attr_setdetachstate(&pAttrs, PTHREAD_CREATE_DETACHED);
@@ -503,7 +503,7 @@ int32_t ATCmd_create(void)
     pthread_attr_t      hostAttr;
     /* Start the SimpleLink Host */
     pthread_attr_init(&hostAttr);
-    hostSched.sched_priority = ATCMD_SPAWN_TASK_PRIORITY;
+    hostSched.sched_priority = ATCMD_SPAWN_THREAD_PRIORITY;
     status = pthread_attr_setschedparam(&hostAttr, &hostSched);
     status |= pthread_attr_setstacksize(&hostAttr, ATCMD_TASKSTACKSIZE);
 

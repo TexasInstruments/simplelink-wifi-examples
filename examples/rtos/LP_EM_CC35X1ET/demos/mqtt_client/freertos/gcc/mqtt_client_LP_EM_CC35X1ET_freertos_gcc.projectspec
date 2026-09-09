@@ -27,6 +27,7 @@
             -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\&quot;config-psa-crypto-hsm.h\&quot;
             -O3
             -DCC35XX
+            -DDeviceFamily_CC35XX
             -DNVOCMP_POSIX_MUTEX
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
             -D_REENT_SMALL
@@ -43,6 +44,7 @@
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/wifi_stack/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_common
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt
+            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/tools/TI_Containers
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-stack/src/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/ti_config/lwip-port/osi/include
             -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lwip-contrib
@@ -65,7 +67,6 @@
             -ffunction-sections
             -fdata-sections
             -g
-            -gstrict-dwarf
             -Wall
             -I${CG_TOOL_ROOT}/arm-none-eabi/include/newlib-nano
             -I${CG_TOOL_ROOT}/arm-none-eabi/include
@@ -73,6 +74,8 @@
         linkerBuildOptions="
             -mcpu=cortex-m33
             -L${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
+            -Wl,--wrap=memcpy
+            -Wl,--wrap=memset
             -fno-lto
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/wifi_stack/lib/gcc/wifi_stack.a
             -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/hostap/lib/gcc/hostap.a
@@ -101,8 +104,7 @@
             --compiler gcc
         "
         description="connect to MQTT broker">
-
-    <property name="launch.loadSymbolsOnly" value="true"/>
+        <property name="launch.loadSymbolsOnly" value="true"/>
         <property name="buildProfile" value="release"/>
         <property name="isHybrid" value="true"/>
         <file path="../../button_if.c" openOnCreation="false" excludeFromBuild="false" action="copy">
@@ -165,9 +167,13 @@
         </file>
         <file path="../../freertos/mqtt_client.syscfg" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
-        <file path="../../syscalls_stubs.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        <file path="../../syscall_stubs.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../syscall_stubs_specific.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
         <file path="../../freertos/gcc/linker_GNU.lds" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../../stdlib_override.c" openOnCreation="false" excludeFromBuild="false" action="copy">
         </file>
     </project>
 </projectSpec>

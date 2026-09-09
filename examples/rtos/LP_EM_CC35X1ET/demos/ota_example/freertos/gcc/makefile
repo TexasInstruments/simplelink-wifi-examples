@@ -20,10 +20,12 @@ ifeq ($(VERBOSE), 1)
   V :=
 endif
 
-OBJECTS = ota_example.obj ota_fwu.obj ota_server.obj ota_wifi.obj dns_if.obj led_if.obj tcpip_if.obj network_mbedtls.obj https_client.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscalls_stubs.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
+OBJECTS = ota_example.obj ota_fwu.obj ota_server.obj ota_wifi.obj dns_if.obj led_if.obj tcpip_if.obj network_mbedtls.obj https_client.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscall_stubs.obj syscall_stubs_specific.obj stdlib_override.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
 
 NAME = ota_example
 
+
+DFLAGS += -gstrict-dwarf
 
 CFLAGS += -I../.. \
     -I. \
@@ -37,6 +39,7 @@ CFLAGS += -I../.. \
     -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\"config-psa-crypto-hsm.h\" \
     -O3 \
     -DCC35XX \
+    -DDeviceFamily_CC35XX \
     -DNVOCMP_POSIX_MUTEX \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     -D_REENT_SMALL \
@@ -53,6 +56,7 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt" \
+    "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/tools/TI_Containers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-stack/src/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/ti_config/lwip-port/osi/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-contrib" \
@@ -74,15 +78,22 @@ CFLAGS += -I../.. \
     -ffunction-sections \
     -fdata-sections \
     -g \
-    -gstrict-dwarf \
     -Wall \
     "-I$(GCC_ARMCOMPILER)/arm-none-eabi/include/newlib-nano" \
     "-I$(GCC_ARMCOMPILER)/arm-none-eabi/include"
+
+
+ifneq ($(CONFIG),RELEASE)
+# Add debug flags by default (excluded only when CONFIG=RELEASE)
+CFLAGS += $(DFLAGS)
+endif
 
 LFLAGS += -Wl,-T,../../freertos/gcc/linker_GNU.lds \
     "-Wl,-Map,$(NAME).map" \
     -mcpu=cortex-m33 \
     "-L$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
+    -Wl,--wrap=memcpy \
+    -Wl,--wrap=memset \
     -fno-lto \
     -Wl,--start-group \
     "$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/lib/gcc/wifi_stack.a" \
@@ -201,7 +212,15 @@ freertos_main_freertos.obj: ../../freertos/main_freertos.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
-syscalls_stubs.obj: ../../syscalls_stubs.c $(SYSCFG_H_FILES)
+syscall_stubs.obj: ../../syscall_stubs.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+syscall_stubs_specific.obj: ../../syscall_stubs_specific.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+stdlib_override.obj: ../../stdlib_override.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 

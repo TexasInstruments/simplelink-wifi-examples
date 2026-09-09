@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectSpec>
+    <applicability>
+        <when>
+            <context
+                deviceFamily="ARM"
+                deviceId="Cortex M.CC35X1E"
+            />
+        </when>
+    </applicability>
+
+    <project
+        title="Vendor BL3"
+        name="bl3_LP_EM_CC35X1_nortos_gcc"
+        configurations="Debug"
+        toolChain="GNU"
+        connection="TIXDS110_Connection.xml"
+        device="Cortex M.CC35X1E"
+        ignoreDefaultDeviceSettings="true"
+        ignoreDefaultCCSSettings="false"
+        products="com.ti.SIMPLELINK_WIFI_SDK;com.ti.SIMPLELINK_WIFI_TOOLBOX;sysconfig"
+        compilerBuildOptions="
+            -I${PROJECT_ROOT}
+            -I${PROJECT_ROOT}/${ConfigName}
+            -I${PROJECT_LOC}/mcuboot
+            -I${PROJECT_LOC}/mcuboot/src
+            -I${PROJECT_LOC}/mcuboot/ti/include
+            -I${PROJECT_LOC}/mbedtls/include
+            -DMBEDTLS_CONFIG_FILE=\&quot;mbedtls_config_bl3.h\&quot;
+            -O3
+            -DCC35XX
+            -DDeviceFamily_CC35XX
+            -DNVOCMP_POSIX_MUTEX
+            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
+            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/kernel/nortos
+            -I${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/kernel/nortos/posix
+            -mcpu=cortex-m33
+            -mthumb
+            -std=c99
+            -std=c++11
+            -mfloat-abi=hard
+            -mfpu=fpv5-sp-d16
+            -ffunction-sections
+            -fdata-sections
+            -g
+            -Wall
+            -I${CG_TOOL_ROOT}/arm-none-eabi/include/newlib-nano
+            -I${CG_TOOL_ROOT}/arm-none-eabi/include
+        "
+        linkerBuildOptions="
+            -mcpu=cortex-m33
+            -L${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source
+            -Wl,--wrap=memcpy
+            -Wl,--wrap=memset
+            -fno-lto
+            -eresetISR
+            -L${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/kernel/nortos
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/wifi_stack/lib/gcc/wifi_stack.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/hostap/lib/gcc/hostap.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/lwip/lib/gcc/lwip.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/third_party/nimble/lib/gcc/nimble.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/net/ble_interface/lib/gcc/ble_interface.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_host_driver/lib/gcc/wifi_host_driver.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/drivers/net/wifi/wifi_platform/cc35xx/lib/gcc/wifi_platform_cc35xx.a
+            -Wl,-l${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/source/ti/utils/FWU/lib/gcc/FWU.a
+            -L${PROJECT_BUILD_DIR}/syscfg
+            -lti_utils_build_linker.cmd.genlibs
+            -mthumb
+            -mfloat-abi=hard
+            -mfpu=fpv5-sp-d16
+            -nostartfiles
+            -static
+            -Wl,--gc-sections
+            -lgcc
+            -lc
+            -lm
+            --specs=nano.specs
+            --specs=nosys.specs
+        "
+        enableHexTool="true"
+        hexBuildOptions="-O binary"
+        sysConfigBuildOptions="
+            --product ${COM_TI_SIMPLELINK_WIFI_SDK_INSTALL_DIR}/.metadata/product.json
+            --product ${COM_TI_SIMPLELINK_WIFI_TOOLBOX_INSTALL_DIR}/.metadata/product.json
+            --compiler gcc
+        "
+        description="Boot lodaer for customer use">
+        <property name="launch.loadSymbolsOnly" value="true"/>
+        <property name="buildProfile" value="release"/>
+        <property name="isHybrid" value="true"/>
+        <file path="../main.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../boot_flow.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../boot_flow.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../config.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../hooks.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../hooks.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../image_auth.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../image_auth.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../boot_report.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../boot_report.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../handoff.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../handoff.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../boot_report_types.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../uart.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../uart.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../gpio.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../gpio.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../README.html" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../mbedtls_config_bl3.h" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../mcuboot/bootutil/image.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/fault_injection_hardening.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/bootutil.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/bootutil_log.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/bootutil_macros.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/bootutil_public.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/ignore.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/security_cnt.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/sign_key.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil">
+        </file>
+        <file path="../mcuboot/bootutil/crypto/common.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil/crypto">
+        </file>
+        <file path="../mcuboot/bootutil/crypto/ecdsa.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil/crypto">
+        </file>
+        <file path="../mcuboot/bootutil/crypto/sha.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/bootutil/crypto">
+        </file>
+        <file path="../mcuboot/mcuboot_config/mcuboot_config.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/mcuboot_config">
+        </file>
+        <file path="../mcuboot/mcuboot_config/mcuboot_logging.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/mcuboot_config">
+        </file>
+        <file path="../mcuboot/sysflash/sysflash.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/sysflash">
+        </file>
+        <file path="../mcuboot/src/bootutil_area.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/bootutil_priv.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/bootutil_img_hash.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/bootutil_keys.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/fault_injection_hardening.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/image_validate.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/security_cnt.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/src/tlv.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/src">
+        </file>
+        <file path="../mcuboot/ti/include/flash_map_backend/flash_map_backend.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/ti/include/flash_map_backend">
+        </file>
+        <file path="../mcuboot/ti/src/flash_map_backend.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/ti/src">
+        </file>
+        <file path="../mcuboot/ti/src/bootutil_find_key.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/ti/src">
+        </file>
+        <file path="../mcuboot/ti/src/bootutil_verify_sig.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/ti/src">
+        </file>
+        <file path="../mcuboot/ti/src/bootutil_memequal.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mcuboot/ti/src">
+        </file>
+        <file path="../mbedtls/include/mbedtls/asn1.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/bignum.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/build_info.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/check_config.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_legacy_crypto.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_legacy_from_psa.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_psa_from_legacy.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_psa_superset_legacy.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_ssl.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_adjust_x509.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/config_psa.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/constant_time.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/ecdsa.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/ecp.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/error.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/mbedtls_config.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/md.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/oid.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/pk.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/platform.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/platform_time.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/platform_util.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/private_access.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/sha256.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/sha512.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/asn1write.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/rsa.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/cipher.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/threading.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/include/mbedtls/version.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/include/mbedtls">
+        </file>
+        <file path="../mbedtls/library/asn1parse.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_core.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_mod.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_mod_raw.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/constant_time.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecdsa.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecp.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecp_curves.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecp_curves_new.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/platform.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/platform_util.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/sha256.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/alignment.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_core.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_core_invasive.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_internal.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_mod.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_mod_raw.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bignum_mod_raw_invasive.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/bn_mul.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/common.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/constant_time_impl.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/constant_time_internal.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecp_internal_alt.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/ecp_invasive.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/md_wrap.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/pk_internal.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/pk_wrap.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/rsa_alt_helpers.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../mbedtls/library/rsa_internal.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="mbedtls/library">
+        </file>
+        <file path="../xmem/XMEMWFF3_nortos.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="xmem">
+        </file>
+        <file path="../xmem/XMEMWFF3_nortos.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="xmem">
+        </file>
+        <file path="../xmem/flash/FlashWFF3_nortos.c" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="xmem/flash">
+        </file>
+        <file path="../xmem/flash/FlashWFF3_nortos.h" openOnCreation="false" excludeFromBuild="false" action="copy" targetDirectory="xmem/flash">
+        </file>
+        <file path="../nortos/bl3.syscfg" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../startup_gcc.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../nortos/gcc/linker_bl3_GNU.lds" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../syscall_stubs.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../syscall_stubs_specific.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+        <file path="../stdlib_override.c" openOnCreation="false" excludeFromBuild="false" action="copy">
+        </file>
+    </project>
+</projectSpec>

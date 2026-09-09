@@ -38,7 +38,12 @@
 #include "lwip/ip_addr.h"
 #include "dhcpserver.h"
 
-
+#define ip4_addr_set_u32_safe(dest_ipaddr, src_u32) ((dest_ipaddr)->u_addr.ip4.addr = (src_u32))
+#define ip4_addr_get_u32_safe(src_ipaddr) ((src_ipaddr)->u_addr.ip4.addr)
+#define ip4_addr1_safe(ipaddr) (((const u8_t*)(&(ipaddr)->u_addr.ip4.addr))[0])
+#define ip4_addr2_safe(ipaddr) (((const u8_t*)(&(ipaddr)->u_addr.ip4.addr))[1])
+#define ip4_addr3_safe(ipaddr) (((const u8_t*)(&(ipaddr)->u_addr.ip4.addr))[2])
+#define ip4_addr4_safe(ipaddr) (((const u8_t*)(&(ipaddr)->u_addr.ip4.addr))[3])
 
 #ifdef MEMLEAK_DEBUG
 static const char mem_debug_file[]   = __FILE__;
@@ -67,16 +72,26 @@ uint32_t wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip);
 
 void dhcps_set_ip_info(struct netif *netif)
 {
-    ap_if_ip.netmask.addr = netif->netmask.addr;
-    ap_if_ip.ip.addr      = netif->ip_addr.addr;
-    ap_if_ip.gw.addr      = netif->gw.addr;
+    ip_addr_copy(ap_if_ip.netmask, netif->netmask);
+    ip_addr_copy(ap_if_ip.ip, netif->ip_addr);
+    ip_addr_copy(ap_if_ip.gw, netif->gw);
 }
 
 void dhcps_get_ip_info(struct ip_info *if_ip)
 {
-    if_ip->netmask.addr   = ap_if_ip.netmask.addr;
-    if_ip->ip.addr        = ap_if_ip.ip.addr;
-    if_ip->gw.addr        = ap_if_ip.gw.addr;
+    ip_addr_copy(if_ip->netmask, ap_if_ip.netmask);
+    ip_addr_copy(if_ip->ip, ap_if_ip.ip);
+    ip_addr_copy(if_ip->gw, ap_if_ip.gw);
+    ip_addr_copy(if_ip->ipv6, ap_if_ip.ipv6);
+}
+void dhcps_set_ipv6_info(ip_addr_t ipv6)
+{
+    ip6_addr_set(&ap_if_ip.ipv6.u_addr.ip6, &ipv6.u_addr.ip6);
+}
+
+void dhcps_get_ipv6_info(ip_addr_t *ipv6)
+{
+    ip6_addr_set(&ipv6->u_addr.ip6, &ap_if_ip.ipv6.u_addr.ip6);
 }
 /******************************************************************************
  * FunctionName : node_insert_to_list
@@ -96,13 +111,13 @@ void   node_insert_to_list(list_node **phead, list_node* pinsert)
         pdhcps_node = pinsert->pnode;
         pdhcps_pool = plist->pnode;
 
-        if(pdhcps_node->ip.addr < pdhcps_pool->ip.addr) {
+        if(ip4_addr_get_u32_safe(&pdhcps_node->ip) < ip4_addr_get_u32_safe(&pdhcps_pool->ip)) {
             pinsert->pnext = plist;
             *phead = pinsert;
         } else {
             while (plist->pnext != NULL) {
                 pdhcps_pool = plist->pnext->pnode;
-                if (pdhcps_node->ip.addr < pdhcps_pool->ip.addr) {
+                if (ip4_addr_get_u32_safe(&pdhcps_node->ip) < ip4_addr_get_u32_safe(&pdhcps_pool->ip)) {
                     pinsert->pnext = plist->pnext;
                     plist->pnext = pinsert;
                     break;
@@ -175,9 +190,9 @@ static uint8_t*   add_msg_type(uint8_t *optptr, uint8_t type)
 ///////////////////////////////////////////////////////////////////////////////////
 static uint8_t*   add_offer_options(uint8_t *optptr)
 {
-        struct ip_addr ipadd;
+        ip_addr_t ipadd;
 
-        ipadd.addr = *( (uint32_t *) &server_address);
+        ip4_addr_set_u32_safe(&ipadd, ip4_addr_get_u32_safe(&server_address));
 
 #ifdef USE_CLASS_B_NET
         *optptr++ = DHCP_OPTION_SUBNET_MASK;
@@ -204,10 +219,10 @@ static uint8_t*   add_offer_options(uint8_t *optptr)
 
         *optptr++ = DHCP_OPTION_SERVER_ID;
         *optptr++ = 4;
-        *optptr++ = ip4_addr1( &ipadd);
-        *optptr++ = ip4_addr2( &ipadd);
-        *optptr++ = ip4_addr3( &ipadd);
-        *optptr++ = ip4_addr4( &ipadd);
+        *optptr++ = ip4_addr1_safe(&ipadd);
+        *optptr++ = ip4_addr2_safe(&ipadd);
+        *optptr++ = ip4_addr3_safe(&ipadd);
+        *optptr++ = ip4_addr4_safe(&ipadd);
 
         if (dhcps_router_enabled(offer)){
             struct ip_info if_ip;
@@ -216,34 +231,34 @@ static uint8_t*   add_offer_options(uint8_t *optptr)
 
             *optptr++ = DHCP_OPTION_ROUTER;
             *optptr++ = 4;
-            *optptr++ = ip4_addr1( &if_ip.gw);
-            *optptr++ = ip4_addr2( &if_ip.gw);
-            *optptr++ = ip4_addr3( &if_ip.gw);
-            *optptr++ = ip4_addr4( &if_ip.gw);
+            *optptr++ = ip4_addr1_safe(&if_ip.gw);
+            *optptr++ = ip4_addr2_safe(&if_ip.gw);
+            *optptr++ = ip4_addr3_safe(&if_ip.gw);
+            *optptr++ = ip4_addr4_safe(&if_ip.gw);
         }
 
 #ifdef USE_DNS
         *optptr++ = DHCP_OPTION_DNS_SERVER;
         *optptr++ = 4;
-        *optptr++ = ip4_addr1( &ipadd);
-        *optptr++ = ip4_addr2( &ipadd);
-        *optptr++ = ip4_addr3( &ipadd);
-        *optptr++ = ip4_addr4( &ipadd);
+        *optptr++ = ip4_addr1_safe(&ipadd);
+        *optptr++ = ip4_addr2_safe(&ipadd);
+        *optptr++ = ip4_addr3_safe(&ipadd);
+        *optptr++ = ip4_addr4_safe(&ipadd);
 #endif
 
 #ifdef CLASS_B_NET
         *optptr++ = DHCP_OPTION_BROADCAST_ADDRESS;
         *optptr++ = 4;
-        *optptr++ = ip4_addr1( &ipadd);
+        *optptr++ = ip4_addr1_safe(&ipadd);
         *optptr++ = 255;
         *optptr++ = 255;
         *optptr++ = 255;
 #else
         *optptr++ = DHCP_OPTION_BROADCAST_ADDRESS;
         *optptr++ = 4;
-        *optptr++ = ip4_addr1( &ipadd);
-        *optptr++ = ip4_addr2( &ipadd);
-        *optptr++ = ip4_addr3( &ipadd);
+        *optptr++ = ip4_addr1_safe(&ipadd);
+        *optptr++ = ip4_addr2_safe(&ipadd);
+        *optptr++ = ip4_addr3_safe(&ipadd);
         *optptr++ = 255;
 #endif
 
@@ -292,9 +307,9 @@ static uint8_t*   add_end(uint8_t *optptr)
 ///////////////////////////////////////////////////////////////////////////////////
 static void   create_msg(struct dhcps_msg *m)
 {
-        struct ip_addr client;
+        ip_addr_t client;
 
-        client.addr = client_address.addr;
+        ip4_addr_set_u32_safe(&client, ip4_addr_get_u32_safe(&client_address));
 
         m->op = DHCP_REPLY;
         m->htype = DHCP_HTYPE_ETHERNET;
@@ -304,7 +319,7 @@ static void   create_msg(struct dhcps_msg *m)
         m->secs = 0;
         m->flags = htons(BOOTP_BROADCAST);
 
-        os_memcpy((char *) m->yiaddr, (char *) &client.addr, sizeof(m->yiaddr));
+        os_memcpy((char *) m->yiaddr, (char *) &client.u_addr.ip4, sizeof(m->yiaddr));
 
         os_memset((char *) m->ciaddr, 0, sizeof(m->ciaddr));
         os_memset((char *) m->siaddr, 0, sizeof(m->siaddr));
@@ -383,14 +398,8 @@ static void   send_offer(struct dhcps_msg *m, u16_t len)
             return;
         }
         ip_addr_t send;
-        send.addr = broadcast_dhcps.addr;
-#if DHCPS_DEBUG
-        err_t SendOffer_err_t;
-        SendOffer_err_t = udp_sendto( pcb_dhcps, p, &send, DHCPS_CLIENT_PORT );
-        Report("dhcps: send_offer>>udp_sendto result %x\n\r",SendOffer_err_t);
-#else
+        IP_ADDR4(&send, 255, 255, 255, 255);
         udp_sendto( pcb_dhcps, p, &send, DHCPS_CLIENT_PORT );
-#endif
         if(p->ref != 0){
 #if DHCPS_DEBUG
             Report("udhcp: send_offer>>free pbuf\n\r");
@@ -448,7 +457,7 @@ static void   send_nak(struct dhcps_msg *m, u16_t len)
             return;
         }
         ip_addr_t send;
-        send.addr = broadcast_dhcps.addr;
+        IP_ADDR4(&send, 255, 255, 255, 255);
 #if DHCPS_DEBUG
         err_t SendNak_err_t;
         SendNak_err_t = udp_sendto( pcb_dhcps, p, &send, DHCPS_CLIENT_PORT );
@@ -515,7 +524,7 @@ static void   send_ack(struct dhcps_msg *m, u16_t len)
             return;
         }
         ip_addr_t send;
-        send.addr = broadcast_dhcps.addr;
+        IP_ADDR4(&send, 255, 255, 255, 255);
 #if DHCPS_DEBUG
         err_t SendAck_err_t;
         SendAck_err_t = udp_sendto( pcb_dhcps, p, &send, DHCPS_CLIENT_PORT );
@@ -543,11 +552,11 @@ static void   send_ack(struct dhcps_msg *m, u16_t len)
 ///////////////////////////////////////////////////////////////////////////////////
 static uint8_t   parse_options(uint8_t *optptr, int16_t len)
 {
-        struct ip_addr client;
+        ip_addr_t client;
         BOOLEAN is_dhcp_parse_end = FALSE;
         struct dhcps_state s;
 
-        client.addr = *( (uint32_t *) &client_address);// ??????DHCP??????IP
+        ip4_addr_set_u32_safe(&client, *((uint32_t *) &client_address));// ??????DHCP??????IP
 
         u8_t *end = optptr + len;
         u16_t type = 0;
@@ -566,7 +575,7 @@ static uint8_t   parse_options(uint8_t *optptr, int16_t len)
 
                 case DHCP_OPTION_REQ_IPADDR://50
                         //Report("dhcps:0x%08x,0x%08x\n\r",client.addr,*(uint32_t*)(optptr+2));
-                        if( os_memcmp( (char *) &client.addr, (char *) optptr+2,4)==0 ) {
+                        if( os_memcmp( (char *) &client.u_addr.ip4, (char *) optptr+2,4)==0 ) {
 #if DHCPS_DEBUG
                             Report("dhcps: DHCP_OPTION_REQ_IPADDR = 0 ok\n\r");
 #endif
@@ -640,15 +649,15 @@ static int16_t   parse_msg(struct dhcps_msg *m, u16_t len)
     if(os_memcmp((char *)m->options,
             &magic_cookie,
             sizeof(magic_cookie)) == 0){
-        struct ip_addr ip;
-        os_memcpy(&ip.addr,m->ciaddr,sizeof(ip.addr));
-        client_address.addr = wifi_softap_dhcps_client_update(m->chaddr,&ip);
+        ip_addr_t ip;
+        os_memcpy(&ip.u_addr.ip4,m->ciaddr,sizeof(ip.u_addr.ip4));
+        ip4_addr_set_u32_safe(&client_address, wifi_softap_dhcps_client_update(m->chaddr,&ip));
 
         int16_t ret = parse_options(&m->options[4], len);
 
         if(ret == DHCPS_STATE_RELEASE) {
             wifi_softap_dhcps_client_leave(m->chaddr,&ip,TRUE); // force to delete
-            client_address.addr = ip.addr;
+            ip4_addr_set_u32_safe(&client_address, ip4_addr_get_u32_safe(&ip));
         }
 
         return ret;
@@ -771,8 +780,8 @@ static void   wifi_softap_init_dhcps_lease(uint32_t ip)
 //  if (dhcps_lease_flag) {
     if (dhcps_lease.enable == TRUE) {
         softap_ip = htonl(ip);
-        start_ip = htonl(dhcps_lease.start_ip.addr);
-        end_ip = htonl(dhcps_lease.end_ip.addr);
+        start_ip = htonl(ip4_addr_get_u32_safe(&dhcps_lease.start_ip));
+        end_ip = htonl(ip4_addr_get_u32_safe(&dhcps_lease.end_ip));
         /*config ip information can't contain local ip*/
         if ((start_ip <= softap_ip) && (softap_ip <= end_ip)) {
             dhcps_lease.enable = FALSE;
@@ -796,10 +805,10 @@ static void   wifi_softap_init_dhcps_lease(uint32_t ip)
             local_ip ++;
 
         os_memset(&dhcps_lease, 0,sizeof(dhcps_lease));
-        dhcps_lease.start_ip.addr = softap_ip | local_ip;
-        dhcps_lease.end_ip.addr = softap_ip | (local_ip + DHCPS_MAX_LEASE - 1);
-        dhcps_lease.start_ip.addr = htonl(dhcps_lease.start_ip.addr);
-        dhcps_lease.end_ip.addr= htonl(dhcps_lease.end_ip.addr);
+        ip4_addr_set_u32_safe(&dhcps_lease.start_ip, softap_ip | local_ip);
+        ip4_addr_set_u32_safe(&dhcps_lease.end_ip, softap_ip | (local_ip + DHCPS_MAX_LEASE - 1));
+        ip4_addr_set_u32_safe(&dhcps_lease.start_ip, htonl(ip4_addr_get_u32_safe(&dhcps_lease.start_ip)));
+        ip4_addr_set_u32_safe(&dhcps_lease.end_ip, htonl(ip4_addr_get_u32_safe(&dhcps_lease.end_ip)));
     }
 //  dhcps_lease.start_ip.addr = htonl(dhcps_lease.start_ip.addr);
 //  dhcps_lease.end_ip.addr= htonl(dhcps_lease.end_ip.addr);
@@ -808,13 +817,6 @@ static void   wifi_softap_init_dhcps_lease(uint32_t ip)
 ///////////////////////////////////////////////////////////////////////////////////
 void dhcps_start(uint32_t addr, struct netif * apnetif)
 {
-/*    struct netif * apnetif = (struct netif *)eagle_lwip_getif(0x01);
-
-    if(apnetif->dhcps_pcb != NULL) {
-        udp_remove(apnetif->dhcps_pcb);
-    }
-    */
-
     pcb_dhcps = udp_new();
     if (pcb_dhcps == NULL)
     {
@@ -824,13 +826,19 @@ void dhcps_start(uint32_t addr, struct netif * apnetif)
 
     //apnetif->dhcps_pcb = pcb_dhcps;
 
-    IP4_ADDR(&broadcast_dhcps, 255, 255, 255, 255);
+    ip4_addr_set_u32_safe(&broadcast_dhcps, 0xffffffff);
 
-    server_address.addr = addr;
-    wifi_softap_init_dhcps_lease(server_address.addr);
+    ip4_addr_set_u32_safe(&server_address, addr);
+    wifi_softap_init_dhcps_lease(ip4_addr_get_u32_safe(&server_address));
     dhcps_lease.enable = TRUE;
 
     dhcps_set_ip_info(apnetif);
+
+    if (apnetif->ip6_addr_state[0] & IP6_ADDR_VALID) {
+        ip_addr_t ipv6;
+        memcpy(&ipv6.u_addr.ip6, &apnetif->ip6_addr[0], sizeof(struct ip6_addr));
+        dhcps_set_ipv6_info(ipv6);
+    }
 
     udp_bind_netif(pcb_dhcps, apnetif);
 
@@ -847,17 +855,12 @@ void   dhcps_stop(void)
     //struct netif * apnetif = (struct netif *)eagle_lwip_getif(0x01);
 
     udp_disconnect(pcb_dhcps);
-//  dhcps_lease_flag = TRUE;
+
     if(pcb_dhcps != NULL)
     {
         udp_remove(pcb_dhcps);
         pcb_dhcps = NULL;
     }
-    /*
-    if(apnetif->dhcps_pcb != NULL) {
-        udp_remove(apnetif->dhcps_pcb);
-        apnetif->dhcps_pcb = NULL;
-    }*/
 
     //udp_remove(pcb_dhcps);
     list_node *pnode = NULL;
@@ -912,9 +915,9 @@ BOOLEAN wifi_softap_set_dhcps_lease(struct dhcps_lease *please)
     if(please->enable) {
         os_memset(&info,0 ,sizeof(struct ip_info));
         dhcps_get_ip_info(&info);
-        softap_ip = htonl(info.ip.addr);
-        start_ip = htonl(please->start_ip.addr);
-        end_ip = htonl(please->end_ip.addr);
+        softap_ip = htonl(ip4_addr_get_u32_safe(&info.ip));
+        start_ip = htonl(ip4_addr_get_u32_safe(&please->start_ip));
+        end_ip = htonl(ip4_addr_get_u32_safe(&please->end_ip));
 
         /*config ip information can't contain local ip*/
         if ((start_ip <= softap_ip) && (softap_ip <= end_ip))
@@ -931,10 +934,10 @@ BOOLEAN wifi_softap_set_dhcps_lease(struct dhcps_lease *please)
             return FALSE;
 
         os_memset(&dhcps_lease, 0, sizeof(dhcps_lease));
-//      dhcps_lease.start_ip.addr = start_ip;
-//      dhcps_lease.end_ip.addr = end_ip;
-        dhcps_lease.start_ip.addr = please->start_ip.addr;
-        dhcps_lease.end_ip.addr = please->end_ip.addr;
+        ip4_addr_set_u32_safe(&dhcps_lease.start_ip, start_ip);
+        ip4_addr_set_u32_safe(&dhcps_lease.end_ip, end_ip);
+        ip4_addr_set_u32_safe(&dhcps_lease.start_ip, ip4_addr_get_u32_safe(&please->start_ip));
+        ip4_addr_set_u32_safe(&dhcps_lease.end_ip, ip4_addr_get_u32_safe(&please->end_ip));
     }
     dhcps_lease.enable = please->enable;
 //  dhcps_lease_flag = FALSE;
@@ -950,35 +953,17 @@ BOOLEAN wifi_softap_set_dhcps_lease(struct dhcps_lease *please)
 *******************************************************************************/
 BOOLEAN wifi_softap_get_dhcps_lease(struct dhcps_lease *please)
 {
-    /*
-    uint8_t opmode = wifi_get_opmode();
 
-    if (opmode == STATION_MODE || opmode == NULL_MODE) {
-        return FALSE;
-    }
-*/
     if (NULL == please)
         return FALSE;
 
-//  if (dhcps_lease_flag){
     if (dhcps_lease.enable == FALSE){
         //if (wifi_softap_dhcps_status() == DHCP_STOPPED)
             return FALSE;
-    } else {
-//      os_bzero(please, sizeof(dhcps_lease));
-//      if (wifi_softap_dhcps_status() == DHCP_STOPPED){
-//          please->start_ip.addr = htonl(dhcps_lease.start_ip.addr);
-//          please->end_ip.addr = htonl(dhcps_lease.end_ip.addr);
-//      }
-    }
+    } 
 
-//  if (wifi_softap_dhcps_status() == DHCP_STARTED){
-//      os_bzero(please, sizeof(dhcps_lease));
-//      please->start_ip.addr = dhcps_lease.start_ip.addr;
-//      please->end_ip.addr = dhcps_lease.end_ip.addr;
-//  }
-    please->start_ip.addr = dhcps_lease.start_ip.addr;
-    please->end_ip.addr = dhcps_lease.end_ip.addr;
+    ip4_addr_set_u32_safe(&please->start_ip, ip4_addr_get_u32_safe(&dhcps_lease.start_ip));
+    ip4_addr_set_u32_safe(&please->end_ip, ip4_addr_get_u32_safe(&dhcps_lease.end_ip));
     return TRUE;
 }
 
@@ -1062,18 +1047,7 @@ BOOLEAN   wifi_softap_set_dhcps_offer_option(uint8_t level, void* optarg)
 
 BOOLEAN wifi_softap_set_dhcps_lease_time(uint32_t minute)
 {
-    /*
-    uint8_t opmode = wifi_get_opmode();
 
-    if (opmode == STATION_MODE || opmode == NULL_MODE) {
-        return FALSE;
-    }
-
-    if (wifi_softap_dhcps_status() == DHCP_STARTED) {
-        return FALSE;
-    }
-
-    */
     if(minute == 0) {
         return FALSE;
     }
@@ -1083,17 +1057,6 @@ BOOLEAN wifi_softap_set_dhcps_lease_time(uint32_t minute)
 
 BOOLEAN   wifi_softap_reset_dhcps_lease_time(void)
 {
-    /*
-    uint8_t opmode = wifi_get_opmode();
-
-    if (opmode == STATION_MODE || opmode == NULL_MODE) {
-        return FALSE;
-    }
-
-    if (wifi_softap_dhcps_status() == DHCP_STARTED) {
-        return FALSE;
-    }
-    */
     dhcps_lease_time = DHCPS_LEASE_TIME_DEF;
     return TRUE;
 }
@@ -1115,7 +1078,7 @@ void   wifi_softap_dhcps_client_leave(uint8_t *bssid, struct ip_addr *ip,BOOLEAN
     for (pback_node = plist; pback_node != NULL;pback_node = pback_node->pnext) {
         pdhcps_pool = pback_node->pnode;
         if (os_memcmp(pdhcps_pool->mac, bssid, sizeof(pdhcps_pool->mac)) == 0){
-            if (os_memcmp(&pdhcps_pool->ip.addr, &ip->addr, sizeof(pdhcps_pool->ip.addr)) == 0) {
+            if (os_memcmp(&pdhcps_pool->ip.u_addr.ip4, &ip->u_addr.ip4, sizeof(pdhcps_pool->ip.u_addr.ip4)) == 0) {
                 if ((pdhcps_pool->type == DHCPS_TYPE_STATIC) || (force)) {
                     if(pback_node != NULL) {
                         node_remove_from_list(&plist,pback_node);
@@ -1147,17 +1110,17 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
     list_node *pmac_node = NULL;
     list_node *pip_node = NULL;
     BOOLEAN flag = FALSE;
-    uint32_t start_ip = dhcps_lease.start_ip.addr;
-    uint32_t end_ip = dhcps_lease.end_ip.addr;
+    uint32_t start_ip = ip4_addr_get_u32_safe(&dhcps_lease.start_ip);
+    uint32_t end_ip = ip4_addr_get_u32_safe(&dhcps_lease.end_ip);
     dhcps_type_t type = DHCPS_TYPE_DYNAMIC;
     if (bssid == NULL) {
         return IPADDR_ANY;
     }
 
     if (ip) {
-        if (IPADDR_BROADCAST == ip->addr) {
+        if (IPADDR_BROADCAST == ip4_addr_get_u32_safe(ip)) {
             return IPADDR_ANY;
-        } else if (IPADDR_ANY == ip->addr) {
+        } else if (IPADDR_ANY == ip4_addr_get_u32_safe(ip)) {
             ip = NULL;
         } else {
             type = DHCPS_TYPE_STATIC;
@@ -1176,11 +1139,11 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
             }
         }
         if (ip != NULL) {
-            if (os_memcmp(&pdhcps_pool->ip.addr, &ip->addr, sizeof(pdhcps_pool->ip.addr)) == 0) {
+            if (os_memcmp(&pdhcps_pool->ip.u_addr.ip4, &ip->u_addr.ip4, sizeof(pdhcps_pool->ip.u_addr.ip4)) == 0) {
                 pip_node = pback_node;
             }
         } else if (flag == FALSE){
-            if (os_memcmp(&pdhcps_pool->ip.addr, &start_ip, sizeof(pdhcps_pool->ip.addr)) != 0) {
+            if (os_memcmp(&pdhcps_pool->ip.u_addr.ip4, &start_ip, sizeof(pdhcps_pool->ip.u_addr.ip4)) != 0) {
                 flag = TRUE;
             } else {
                 start_ip = htonl((ntohl(start_ip) + 1));
@@ -1199,7 +1162,6 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
             if (start_ip > end_ip) {
                 return IPADDR_ANY;
             }
-            //start_ip = htonl((ntohl(start_ip) + 1));
             flag = TRUE;
         }
     }
@@ -1232,9 +1194,9 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
         } else {
             pdhcps_pool = pmac_node->pnode;
             if (ip != NULL) {
-                pdhcps_pool->ip.addr = ip->addr;
+                ip4_addr_set_u32_safe(&pdhcps_pool->ip, ip4_addr_get_u32_safe(ip));
             } else if (flag == TRUE) {
-                pdhcps_pool->ip.addr = start_ip;
+                ip4_addr_set_u32_safe(&pdhcps_pool->ip, start_ip);
             } else {    // no ip to distribute
                 return IPADDR_ANY;
             }
@@ -1258,14 +1220,14 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
         } else {
             pdhcps_pool = (struct dhcps_pool *)calloc(1, sizeof(struct dhcps_pool));
             if (ip != NULL) {
-                pdhcps_pool->ip.addr = ip->addr;
+                ip4_addr_set_u32_safe(&pdhcps_pool->ip, ip4_addr_get_u32_safe(ip));
             } else if (flag == TRUE) {
-                pdhcps_pool->ip.addr = start_ip;
+                ip4_addr_set_u32_safe(&pdhcps_pool->ip, start_ip);
             } else {    // no ip to distribute
                 free(pdhcps_pool);
                 return IPADDR_ANY;
             }
-            if (pdhcps_pool->ip.addr > end_ip) {
+            if (ip4_addr_get_u32_safe(&pdhcps_pool->ip) > end_ip) {
                 free(pdhcps_pool);
                 return IPADDR_ANY;
             }
@@ -1280,5 +1242,5 @@ uint32_t   wifi_softap_dhcps_client_update(uint8_t *bssid, struct ip_addr *ip)
         }
     }
 
-    return pdhcps_pool->ip.addr;
+    return ip4_addr_get_u32_safe(&pdhcps_pool->ip);
 }

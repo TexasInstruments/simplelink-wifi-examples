@@ -73,6 +73,7 @@ extern const char *wlan_role_up_ap_t_optionDetailsStr;
 extern const char *wlan_role_up_ap_w_optionDetailsStr;
 extern const char *wlan_role_up_ap_a_optionDetailsStr;
 extern const char *wlan_role_up_ap_b_optionDetailsStr;
+extern const char *wlan_role_up_ap_i_optionDetailsStr;
 #endif
 
 
@@ -151,11 +152,11 @@ extern const char *wlanSetMacAddress_m_optionDetailsStr;
 extern const char GetPsModeStr[];
 extern const char getPsModeUsageStr[];
 extern const char *wlanGetPsModeDetailsStr;
-
 extern const char SetPsModeStr[];
 extern const char setPsModeUsageStr[];
 extern const char *wlanSetPsModeDetailsStr;
 extern const char *wlanSetPsMode_m_optionDetailsStr;
+extern const char *wlanSetPsModeWarningStr;
 
 extern const char SetPmModeStr[];
 extern const char setPmModeUsageStr[];
@@ -163,6 +164,17 @@ extern const char *wlanSetPmModeDetailsStrAlwaysActive;
 extern const char *wlanSetPmModeDetailsStrPowerDown;
 extern const char *wlanSetPmModeDetailsStrELP;
 extern const char *wlanSetPmMode_m_optionDetailsStr;
+
+extern const char SetTxPowerStr[];
+extern const char setTxPowerUsageStr[];
+extern const char *wlanSetTxPowerDetailsStr;
+extern const char *wlanSetTxPower_i_optionDetailsStr;
+extern const char *wlanSetTxPower_txp_optionDetailsStr;
+
+extern const char GetTxPowerStr[];
+extern const char getTxPowerUsageStr[];
+extern const char *wlanGetTxPowerDetailsStr;
+extern const char *wlanGetTxPower_i_optionDetailsStr;
 
 #ifdef CC33XX
 extern const char SetChListStr[];
@@ -174,9 +186,10 @@ extern const char GetFwVerStr[];
 extern const char getFwVerUsageStr[];
 extern const char *wlanGetFwVerDetailsStr;
 
-extern const char SetInterfaceIpStr[]; 
+extern const char SetInterfaceIpStr[];
 extern const char SetInterfaceIpUsageStr[];
 extern const char SetInterfaceIpDetailsStr[];
+extern const char SetInterfaceIpExamplesStr[];
 
 extern const char GetInterfaceIpStr[];
 extern const char GetInterfaceIpUsageStr[];
@@ -189,6 +202,10 @@ extern const char SetDhcpServerDetailsStr[];
 extern const char GetDhcpServerStr[];
 extern const char GetDhcpServerUsageStr[];
 extern const char GetDhcpServerDetailsStr[];
+
+extern const char IfconfigStr[];
+extern const char IfconfigUsageStr[];
+extern const char IfconfigDetailsStr[];
 
 extern const char SetLsiStr[];
 extern const char setLsiUsageStr[];
@@ -217,7 +234,6 @@ extern const char wlanRoleDownP2PStr[];
 extern const char *wlan_role_down_p2p_DetailsStr;
 
 extern const char wlanP2PFindStr[];
-extern const char printWlanP2PFindUsageStr[];
 
 extern const char wlanP2PConnectStr[];
 extern const char wlan_p2p_connect_UsageStr_first[];
@@ -250,6 +266,12 @@ extern const char wlanP2PGetchannelStr[];
 extern const char wlanP2PListenStr[];
 
 extern const char wlanP2PCancelStr[];
+
+extern const char wlanP2PGrpAddStr[];
+extern const char *wlan_p2p_group_add_DetailsStr;
+extern const char wlan_p2p_group_add_UsageStr[];
+extern const char *wlan_p2p_group_add_c_optionDetailsStr;
+extern const char *wlan_p2p_group_add_s_optionDetailsStr;
 
 
 extern const char wlanSetConnPolicyStr[];
@@ -407,12 +429,23 @@ extern const char *recvTestIperf_t_optionDetailsStr;
 extern const char *recvTestIperf_b_optionDetailsStr;
 extern const char *recvTestIperf_B_optionDetailsStr;
 extern const char *recvTestIperf_l_optionDetailsStr;
+extern const char *recvTestIperf_6_optionDetailsStr;
 
 extern const char StopTestIperf[];
 extern const char *recvStopTestIperfUsage2Str;
 extern const char *recvStopTestIperfDetailsStr;
 extern const char *recvStopTestIperf_s_optionDetailsStr;
 extern const char *recvStopTestIperf_n_optionDetailsStr;
+
+extern const char TestTlsIperf[];
+extern const char *recvTestTlsIperfDetailsStr;
+extern const char *recvTestTlsIperfUsage2Str;
+extern const char *recvTestTlsIperf_s_optionDetailsStr;
+extern const char *recvTestTlsIperf_c_optionDetailsStr;
+extern const char *recvTestTlsIperf_p_optionDetailsStr;
+extern const char *recvTestTlsIperf_t_optionDetailsStr;
+extern const char *recvTestTlsIperf_i_optionDetailsStr;
+extern const char *recvTestTlsIperf_l_optionDetailsStr;
 
 extern const char recvStr[];
 extern const char *recvUsage1Str;
@@ -480,19 +513,6 @@ extern const char startApWpsDetailsStr[];
 extern const char startApWps_w_optionDetailsStr[];
 extern const char startApWps_p_optionDetailsStr[];
 
-extern const char pingStartStr[];
-extern const char pingStartUsageStr[];
-extern const char pingStartDetailsStr[];
-extern const char pingStart_h_optionDetailsStr[];
-extern const char pingStart_c_optionDetailsStr[];
-extern const char pingStart_i_optionDetailsStr[];
-extern const char pingStart_s_optionDetailsStr[];
-extern const char pingStart_I_optionDetailsStr[];
-
-extern const char pingStopStr[];
-extern const char pingStopUsageStr[];
-extern const char pingStopDetailsStr[];
-extern const char pingStop_i_optionDetailsStr[];
 
 extern const char wlanSetRegDomEntryStr[];
 extern const char wlanSetRegDomEntryUsageStr[];
@@ -511,6 +531,21 @@ extern const char wlanGetRegDomEntryDetailsStr[];
 extern const char wlanGetRegDomEntry_i_optionDetailsStr[];
 
 #endif // CC35XX
+
+extern const char pingStartStr[];
+extern const char pingStartUsageStr[];
+extern const char pingStartDetailsStr[];
+extern const char pingStart_h_optionDetailsStr[];
+extern const char pingStart_c_optionDetailsStr[];
+extern const char pingStart_i_optionDetailsStr[];
+extern const char pingStart_s_optionDetailsStr[];
+extern const char pingStart_I_optionDetailsStr[];
+extern const char pingStart_6_optionDetailsStr[];
+
+extern const char pingStopStr[];
+extern const char pingStopUsageStr[];
+extern const char pingStopDetailsStr[];
+extern const char pingStop_i_optionDetailsStr[];
 
 extern const char a_optionStr[];
 extern const char b_optionStr[];
@@ -576,6 +611,10 @@ extern const char WPAWPA2_str[];
 extern const char WPA2_PLUS_str[];
 extern const char WPA3_str[];
 extern const char WPA2WPA3_str[];
+extern const char WPA2FT_str[];
+extern const char WPA2_PLUS_FT_str[];
+extern const char WPA3FT_str[];
+extern const char WPA2WPA3FT_str[];
 extern const  char TLS_str[];
 extern const  char TTLS_MSCHAP_str[];
 extern const  char PEAP0_MSCHAP_str[];

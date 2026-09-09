@@ -49,7 +49,7 @@
 
 #define    _CSI_THR_NAME                    "csi_thread"
 #define    CSI_THR_STACK_SIZE              (2048) // TODO consider reducing stack size
-#define    CSI_THRD_PRIORITY               (3)
+#define    CSI_THREAD_PRIORITY               (3)
 
 /******************************************************************************/
 
@@ -58,6 +58,7 @@
 // ****************************************
 void printScanResults(uint32_t res_num);
 
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdWlanRoleUpApCallback(void *arg);
 
 int32_t printWlanRoleUpApUsage(void *arg);
@@ -67,6 +68,7 @@ int32_t printWlanStartApUsage(void *arg);
 int32_t cmdWlanRoleDownApCallback(void *arg);
 
 int32_t printWlanRoleDownApUsage(void *arg);
+#endif
 
 int32_t cmdWlanRoleUpStaCallback(void *arg);
 
@@ -83,6 +85,14 @@ int32_t printWlanConnectUsage(void *arg);
 int32_t cmdWlanDisconnectCallback(void *arg);
 
 int32_t printWlanDisconnectUsage(void *arg);
+
+int32_t cmdWlanSetTxPowerCallback(void *arg);
+
+int32_t printWlanSetTxPowerUsage(void *arg);
+
+int32_t cmdWlanGetTxPowerCallback(void *arg);
+
+int32_t printWlanGetTxPowerUsage(void *arg);
 
 int32_t cmdWlanSetScanEarlyTerminationCallback(void *arg);
 
@@ -151,6 +161,7 @@ int32_t cmdConfigStaAgingEventCallback(void *arg);
 int32_t cmdWlanSetScanDwellTimeCallback(void *arg);
 int32_t printWlanSetScanDwellTimeUsage(void *arg);
 
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdWlanRoleUpP2PCallback(void *arg);
 
 int32_t printWlanRoleUpP2PUsage(void *arg);
@@ -193,7 +204,12 @@ int32_t cmdWlanP2PListenCallback(void *arg);
 
 int32_t cmdWlanP2PCancelCallback(void *arg);
 
+int32_t cmdWlanP2PGrpAddCallback(void *arg);
 
+int32_t printWlanP2PGrpAddUsage(void *arg);
+#endif
+
+#ifndef TI_STA_ONLY_BUILD
 int32_t cmdStartApWpsCallback(void *arg);
 
 int32_t printStartApWpsUsage(void *arg);
@@ -201,6 +217,7 @@ int32_t printStartApWpsUsage(void *arg);
 int32_t printSetWpsApPinUsage(void *arg);
 
 int32_t cmdSetWpsApPinCallback(void *arg);
+#endif
 
 int32_t cmdSetWsocPrimaryCallback(void *arg);
 
@@ -217,12 +234,6 @@ int32_t cmdWlanDeleteProfileCallback(void *arg);
 int32_t cmdWlanGetProfileCallback(void *arg);
 int32_t cmdWlanProfileConnectCallback(void *arg);
 
-int32_t cmdPingStartCallback(void *arg);
-int32_t printPingStartUsage(void *arg);
-
-int32_t cmdPingStopCallback(void *arg);
-int32_t printPingStopUsage(void *arg);
-
 int32_t cmdWlanSetRegDomainEntryCallback(void *arg);
 int32_t printWlanSetRegDomainEntryUsage(void *arg);
 
@@ -230,6 +241,12 @@ int32_t cmdWlanGetRegDomainEntryCallback(void *arg);
 int32_t printWlanGetRegDomainEntryUsage(void *arg);
 
 #endif // CC35XX
+
+int32_t cmdPingStartCallback(void *arg);
+int32_t printPingStartUsage(void *arg);
+
+int32_t cmdPingStopCallback(void *arg);
+int32_t printPingStopUsage(void *arg);
 
 #ifdef SNTP_SUPPORT
 int32_t cmdSntpConfigServers(void *arg);
@@ -264,6 +281,8 @@ int32_t printCsiSolicitationUsage(void *arg);
 
 int32_t printCsiSolicitationSetMacUsage(void *arg);
 
+#ifdef CC35XX
+
 // CSI API
 int32_t csiInitCallback(void *arg);
 
@@ -276,6 +295,7 @@ int32_t csiDeinitCallback(void *arg);
 int32_t csiSolicCallback(void *arg);
 
 int32_t csiSolicSetMacCfg(void *arg);
+#endif//CC35XX
 
 // ****************************************
 
@@ -369,17 +389,25 @@ int32_t cmdSetInterfaceIpCallback(void *arg);
 
 int32_t cmdGetInterfaceIpCallback(void *arg);
 
-int32_t cmdSetDhcpServerCallback(void *arg);
-
-int32_t cmdGetDhcpServerCallback(void *arg);
-
 int32_t printSetInterfaceIpUsage(void *arg);
 
 int32_t printGetInterfaceIpUsage(void *arg);
 
+#ifndef TI_STA_ONLY_BUILD
+int32_t cmdSetDhcpServerCallback(void *arg);
+
+int32_t cmdGetDhcpServerCallback(void *arg);
+
 int32_t printSetDhcpServerUsage(void *arg);
 
 int32_t printGetDhcpServerUsage(void *arg);
+#endif
+
+#ifdef CC35XX
+int32_t cmdIfconfigCallback(void *arg);
+
+int32_t printIfconfigUsage(void *arg);
+#endif
 
 int32_t printAPTransitionEnableUsage(void *arg);
 

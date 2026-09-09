@@ -50,7 +50,7 @@
 #define APPLICATION_NAME        ("BLE DTM")
 #define APPLICATION_VERSION     (version_upper_mac)
 #define TASK_STACK_SIZE         (2048)
-#define SPAWN_TASK_PRIORITY     (9)
+#define SPAWN_THREAD_PRIORITY     (9)
 
 /* BLE DTM Errors */
 #define DTM_OSI_ERROR_BASE                     (-1000L)

@@ -71,12 +71,6 @@
 /* PSA Firmware Update API */
 #include "ti/utils/FWU/psa_fwu.h"
 
-/* Hardware registers for cache configuration */
-#ifndef HWREG
-#define HWREG(x) (*((volatile unsigned long *)(x)))
-#endif
-#define ICACHE_BASE 0x41902000
-
 /* mbedTLS threading and platform */
 #define MBEDTLS_CONFIG_FILE "config-hsm.h"
 #include <mbedtls/platform.h>
@@ -103,10 +97,6 @@ void *mainThread(void *pvParameters)
     char serverUrl[MAX_URL_LEN];
     static OtaUpdateEntry_t entries[OTA_MAX_UPDATES];
     int entryCount = 0;
-
-    /* Enable instruction cache */
-    HWREG(ICACHE_BASE + 0x84) |= 0x00000001;
-    HWREG(ICACHE_BASE + 0x4) |= 0xc0000000;
 
     /* Initialize UART terminal */
     InitTerm();
@@ -139,7 +129,7 @@ void *mainThread(void *pvParameters)
         goto done;
     }
 
-    /* Main application loop — WiFi disconnect returns here */
+    /* Main application loop - WiFi disconnect returns here */
 wifi_disconnected:
 
     /* Startup checks: detect pending OTA states after reboot */
@@ -173,17 +163,17 @@ wifi_disconnected:
                 switch (promptBuf[0])
                 {
                 case '1':
-                    /* Self-test: WiFi connectivity — scan, connect, then decide */
+                    /* Self-test: WiFi connectivity - scan, connect, then decide */
                     UART_PRINT("[OTA] Running self-test (WiFi connectivity)...\n\r");
                     ret = OTA_WIFI_connect();
                     if (ret != 0)
                     {
-                        UART_PRINT("\n\r[OTA] Self-test failed — try again or reject\n\r");
+                        UART_PRINT("\n\r[OTA] Self-test failed - try again or reject\n\r");
                         continue;
                     }
                     UART_PRINT("\n\r[OTA] Self-test passed!\n\r");
 
-                    /* Post-test decision (WiFi stays connected — reboot kills it) */
+                    /* Post-test decision (WiFi stays connected - reboot kills it) */
                     while (1)
                     {
                         UART_PRINT("\n\r[OTA] Self-test successful. Select action:\n\r");
@@ -305,6 +295,10 @@ wifi_disconnected:
                 switch (promptBuf[0])
                 {
                 case '1':
+                    if (OTA_FWU_checkBundleForInstall() != 0)
+                    {
+                        continue;
+                    }
                     UART_PRINT("[OTA] Installing and rebooting...\n\r");
                     ret = psa_fwu_install();
                     if (ret == PSA_SUCCESS_REBOOT)
@@ -410,12 +404,12 @@ wifi_disconnected:
     }
 
     /* Step 2: Set system clock for TLS certificate date validation.
-       The CC35xx has no RTC — without this, all certificates appear
+       The CC35xx has no RTC - without this, all certificates appear
        "not yet valid" because the device thinks it's Jan 1, 1970. */
     osi_SetDateTimeS(OTA_SYSTEM_TIME_EPOCH);
     UART_PRINT("[OTA] System clock set for TLS validation\n\r");
 
-    /* Server connection + OTA menu loop — disconnect returns here */
+    /* Server connection + OTA menu loop - disconnect returns here */
     while (1)
     {
         /* Prompt for server base URL */
@@ -524,6 +518,12 @@ wifi_disconnected:
                                 break;
                             }
 
+                            if (OTA_FWU_checkDownloadOrder(entries[sel].slot1Id,
+                                                              entries[sel].slot2Id) != 0)
+                            {
+                                break;
+                            }
+
                             ret = OTA_SERVER_downloadUpdate(serverUrl, &entries[sel]);
                             if (ret != 0)
                             {
@@ -533,11 +533,15 @@ wifi_disconnected:
                         break;
 
                     case '3':
+                        if (OTA_FWU_checkBundleForInstall() != 0)
+                        {
+                            break;
+                        }
                         UART_PRINT("[OTA] Installing candidates...\n\r");
                         ret = psa_fwu_install();
                         if (ret == PSA_SUCCESS_REBOOT)
                         {
-                            UART_PRINT("[OTA] Install OK — candidates are now STAGED\n\r");
+                            UART_PRINT("[OTA] Install OK - candidates are now STAGED\n\r");
                             installed = 1;
                         }
                         else
@@ -618,12 +622,12 @@ wifi_disconnected:
                             ret = psa_fwu_reject(PSA_ERROR_NOT_PERMITTED);
                             if (ret == PSA_SUCCESS)
                             {
-                                UART_PRINT("[OTA] Reject OK — returning to download menu\n\r");
+                                UART_PRINT("[OTA] Reject OK - returning to download menu\n\r");
                                 rejected = 1;
                             }
                             else if (ret == PSA_SUCCESS_REBOOT)
                             {
-                                UART_PRINT("[OTA] Reject OK — reboot needed for rollback\n\r");
+                                UART_PRINT("[OTA] Reject OK - reboot needed for rollback\n\r");
                                 psa_fwu_request_reboot();
                             }
                             else
@@ -658,7 +662,7 @@ wifi_disconnected:
         }
     } /* end server connection loop */
 
-    /* WiFi was disconnected — go back to Menu 1 */
+    /* WiFi was disconnected - go back to Menu 1 */
     goto wifi_disconnected;
 
 done:

@@ -20,10 +20,12 @@ ifeq ($(VERBOSE), 1)
   V :=
 endif
 
-OBJECTS = ble_cmd.obj ble_dtm_app.obj dtm_cmd.obj calibrator.obj cmd_parser.obj lwip_ping.obj network_lwip.obj network_mbedtls.obj date_time_service.obj socket_examples.obj str.obj wlan_cmd.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
+OBJECTS = ble_cmd.obj ble_dtm_app.obj dtm_cmd.obj calibrator.obj cmd_parser.obj lwip_ping.obj network_lwip.obj network_mbedtls.obj date_time_service.obj str.obj wlan_cmd.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
 
 NAME = ble_dtm
 
+
+DFLAGS += -gdwarf-3
 
 CFLAGS += -I../.. \
     -I. \
@@ -33,6 +35,7 @@ CFLAGS += -I../.. \
     -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\"config-psa-crypto-hsm.h\" \
     -Ofast \
     -DCC35XX \
+    -DDeviceFamily_CC35XX \
     -DNVOCMP_POSIX_MUTEX \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/mbedtls/include" \
@@ -48,6 +51,7 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt" \
+    "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/tools/TI_Containers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-stack/src/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/ti_config/lwip-port/osi/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-contrib" \
@@ -61,13 +65,19 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/nimble/nimble-src/nimble/host/util/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/nimble/nimble-src/nimble/transport/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/nimble/nimble-src/porting/nimble/include" \
-    -gdwarf-3 \
     -mcpu=cortex-m33 \
     -mfloat-abi=hard \
     -mfpu=fpv5-sp-d16 \
     -Wall
 
+
+ifneq ($(CONFIG),RELEASE)
+# Add debug flags by default (excluded only when CONFIG=RELEASE)
+CFLAGS += $(DFLAGS)
+endif
+
 LFLAGS += "-L$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
+    -Wl,--reread_libs \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lib/ticlang/lwip.a" \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/hostap/lib/ticlang/hostap.a" \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/nimble/lib/ticlang/nimble.a" \
@@ -76,7 +86,6 @@ LFLAGS += "-L$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/lib/ticlang/wifi_host_driver.a" \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_platform/cc35xx/lib/ticlang/wifi_platform_cc35xx.a" \
     "-Wl,-l$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/utils/FWU/lib/ticlang/FWU.a" \
-    -Wl,--reread_libs \
     ti_utils_build_linker.cmd.genlibs \
     ../../freertos/ticlang/linker.cmd \
     "-Wl,-m,$(NAME).map" \
@@ -149,10 +158,6 @@ network_mbedtls.obj: ../../network_mbedtls.c $(SYSCFG_H_FILES)
 	$(V) $(CC) $(CFLAGS) -c $< -o $@
 
 date_time_service.obj: ../../date_time_service.c $(SYSCFG_H_FILES)
-	@ echo Building $@
-	$(V) $(CC) $(CFLAGS) -c $< -o $@
-
-socket_examples.obj: ../../socket_examples.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) -c $< -o $@
 

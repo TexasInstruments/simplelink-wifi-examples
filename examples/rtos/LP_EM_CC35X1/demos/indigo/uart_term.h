@@ -54,6 +54,7 @@ void InitTerm(void);
 void DeinitTerm(void);
 
 int Report(const char *pcFormat,...);
+int ReportWithTime(const char *pcFormat,...);
 
 #ifdef CC35XX
 #ifdef COLLECT_HEAP_DEBUG_INFO

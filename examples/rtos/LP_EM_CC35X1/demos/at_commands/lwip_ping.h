@@ -33,8 +33,6 @@
 #ifndef __LWIP_PING_H__
 #define __LWIP_PING_H__
 
-#ifdef CC35XX
-
 #define PING_DEFAULT_DATA_SIZE          (56)
 #define PING_MAX_DATA_SIZE              (1452)
 #define PING_DEFAULT_INTERVAL_TIME_MS   (1000)   // 1 second
@@ -56,6 +54,5 @@ typedef struct {
     uint32_t packets_received;
 } ping_results_report_t;
 
-#endif // CC35XX
 
 #endif /* __LWIP_PING_H__ */

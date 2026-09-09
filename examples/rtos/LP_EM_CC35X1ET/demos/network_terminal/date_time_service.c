@@ -53,7 +53,7 @@ void datetime_SecondsSet(uint32_t newtime)
 void datetime_printCurTime()
 {
 
-    time_t t = time(&t);
+    time_t t = time(NULL);
     struct tm *currentTime = gmtime(&t);
 
     // Format 1: YYYY-MM-DD HH:MM:SS
@@ -76,7 +76,7 @@ uint32_t datetime_to_epoch(uint32_t year, uint32_t month, uint32_t day,
      uint32_t days = (y - 1969) * 365
      + (y - 1969) / 4
      - (y - 1969) / 100
-     + (y - 1600) / 400;
+     + (y - 1970) / 400;
 
      // Days in current year
      days += daysBeforeMonth[month - 1];
@@ -84,7 +84,7 @@ uint32_t datetime_to_epoch(uint32_t year, uint32_t month, uint32_t day,
          days += 1; // Leap day
      }
 
-     days += day - 1; // Days in current month
+     days += day - 1; // Days in current month (daysBeforeMonth is 0-indexed)
 
      return days * 86400UL + hour * 3600UL + minute * 60UL + second;
 }

@@ -51,9 +51,9 @@
                       Defines
 ******************************************************************************/
 #ifdef CC33XX
-#define NIMBLE_THRD_PRIORITY       (3)
+#define NIMBLE_THREAD_PRIORITY       (2)
 #else
-#define NIMBLE_THRD_PRIORITY       (8)
+#define NIMBLE_THREAD_PRIORITY       (8)
 #endif
 
 #define NIMBLE_THRD_DEFAULT_STACK  NULL
@@ -295,10 +295,6 @@ static int gatt_svr_chr_notify(uint16_t conn_handle, uint8_t value)
     }
 
     rc = ble_gatts_notify_custom(conn_handle, ti_peripheral_handle, om);
-    if (rc != 0)
-    {
-        os_mbuf_free_chain(om);
-    }
 
     return rc;
 }
@@ -477,8 +473,8 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                 }
 
                 BLE_COPY_BD_ADDRESS(ble_connect_event->peerAddress,
-                                    conn_desc.peer_ota_addr.val);
-                ble_connect_event->peerAddressType = conn_desc.peer_ota_addr.type;
+                                    conn_desc.peer_id_addr.val);
+                ble_connect_event->peerAddressType = conn_desc.peer_id_addr.type;
                 add_to_connected_peers(event->connect.conn_handle);
             }
 
@@ -503,8 +499,8 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             os_memset(ble_disconnect_event, 0x0, sizeof(ATCmd_BleDisconnectEvent_t));
 
             BLE_COPY_BD_ADDRESS(ble_disconnect_event->peerAddress,
-                                event->disconnect.conn.peer_ota_addr.val);
-            ble_disconnect_event->peerAddressType = event->disconnect.conn.peer_ota_addr.type;
+                                event->disconnect.conn.peer_id_addr.val);
+            ble_disconnect_event->peerAddressType = event->disconnect.conn.peer_id_addr.type;
 
             ble_event.eventId = ATCMD_BLE_EVENT_DISCONNECT;
             ble_event.eventArgs = ble_disconnect_event;
@@ -1190,12 +1186,12 @@ int nimble_host_connected_peers(uint8_t *peerAddress, uint8_t *peerAddressType)
 
     if (peerAddress != NULL)
     {
-        BLE_COPY_BD_ADDRESS(peerAddress, connDesc.peer_ota_addr.val);
+        BLE_COPY_BD_ADDRESS(peerAddress, connDesc.peer_id_addr.val);
     }
 
     if (peerAddressType != NULL)
     {
-        *peerAddressType = connDesc.peer_ota_addr.type;
+        *peerAddressType = connDesc.peer_id_addr.type;
     }
 
     return (1);
@@ -1309,7 +1305,7 @@ int nimble_host_start(void)
 
     /* Create task which handles default event queue for host stack. */
     rc = ble_npl_task_init(&s_task_host, "nimble_host", nimble_host_task,
-                      NULL, NIMBLE_THRD_PRIORITY, BLE_NPL_TIME_FOREVER,
+                      NULL, NIMBLE_THREAD_PRIORITY, BLE_NPL_TIME_FOREVER,
                       NIMBLE_THRD_DEFAULT_STACK, NIMBLE_THRD_STACK_SIZE);
     if(OSI_OK != rc)
     {

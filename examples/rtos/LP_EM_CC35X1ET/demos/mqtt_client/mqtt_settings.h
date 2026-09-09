@@ -42,7 +42,6 @@
 
 #define MQTT_STATIC_CLIENT_SETTINGS              (1)
 #define MQTT_STATIC_CONNECTION_SETTINGS          (1)
-//#define MQTT_SECURE_CLIENT
 
 #if MQTT_STATIC_CLIENT_SETTINGS
 #define MQTT_WILL_TOPIC             "cc32xx_will_topic"
@@ -61,13 +60,10 @@
 
 #if MQTT_STATIC_CONNECTION_SETTINGS
 
-#ifdef MQTT_SECURE_CLIENT
-#else
 #define MQTT_CONNECTION_FLAGS           MQTTCLIENT_NETCONN_URL
 #define MQTT_CONNECTION_ADDRESS         "broker.hivemq.com"
 //#define MQTT_CONNECTION_ADDRESS         "test.mosquitto.org"
 #define MQTT_CONNECTION_PORT_NUMBER     1883
-#endif
 
 /* Define (if needed) the external handle for TI Driver's LED for MQTT status (for default server):
  * off: disconnected, on: connected

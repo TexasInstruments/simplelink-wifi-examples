@@ -62,11 +62,12 @@
  * Define AP_SSID and optionally AP_PASSWORD - to connect to local network
  * Hard-Coded Definition: update AP_SSID and AP_PASSWORD (NULL means OPEN, else is WPA2)
  */
-#warning "Please set the credentials of the designated AP in wifi_settings.h file"
 
-#define AP_SSID 	"ShlomiMobile"       // "network-name"
+/// IMPORTANT: Please set the credentials of the designated AP below:
+
+#define AP_SSID 	"Example_SSID"       // "network-name"
 #define AP_SEC_TYPE	WLAN_SEC_TYPE_WPA_WPA2  // WLAN_SEC_TYPE_OPEN, WLAN_SEC_TYPE_WPA3
-#define AP_PASSWORD     "Lihi1206"	        // "network-password"
+#define AP_PASSWORD     "Example_PASS"	        // "network-password"
 #endif
 
 /*** UI DEFINITIONS */

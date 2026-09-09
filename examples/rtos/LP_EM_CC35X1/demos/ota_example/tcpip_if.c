@@ -442,27 +442,6 @@ int TCPIP_IF_notifyLinkChange(void *hNetIf, TcpipLinkState_e state)
     return OSI_OK;
 }
 
-#ifdef TCPIP_IF_ZERO_COPY
-void *TCPIP_IF_pktAlloc(uint16_t pktSize)
-{
-    return pbuf_alloc(PBUF_LINK, pktSize, PBUF_POOL);
-}
-
-void  TCPIP_IF_pktFree(void *hPkt)
-{
-    pbuf_free(hPkt);
-}
-
-void *TCPIP_IF_pktPayload(void *hPkt)
-{
-    return ((struct pbuf *)hPkt)->payload; 
-}
-
-int   TCPIP_IF_pktLength(void *hPkt)
-{
-    return ((struct pbuf *)hPkt)->len;
-}
-#endif
 
 int   TCPIP_IF_receive(void *hNetif, void *hPkt, uint16_t pktLen)
 {
@@ -471,9 +450,6 @@ int   TCPIP_IF_receive(void *hNetif, void *hPkt, uint16_t pktLen)
     UART_PRINT("RX: pktLen=%d\n\r", pktLen);
 #endif
 
-#ifdef TCPIP_IF_ZERO_COPY
-    struct pbuf *pPkt = (struct pbuf *)hPkt;
-#else
     struct pbuf *pPkt =  pbuf_alloc(PBUF_LINK, pktLen, PBUF_POOL);
 
     if (pPkt == NULL) 
@@ -498,8 +474,6 @@ int   TCPIP_IF_receive(void *hNetif, void *hPkt, uint16_t pktLen)
     {
         memcpy(pPkt->payload, hPkt ,pktLen);
     }
-#endif
-
     return pNetif->input(pPkt, hNetif);
 }
 

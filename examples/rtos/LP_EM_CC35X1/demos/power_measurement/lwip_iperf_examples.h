@@ -8,6 +8,7 @@
 #include "lwip/sockets.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "timers.h"
 #include "uart_term.h"
 #include "errors.h"
 #include "FreeRTOSConfig.h"
@@ -32,7 +33,7 @@
 
 
 
-#ifdef CC35XX
+
 
 struct iperf_udp_hdr {
     s32_t id;       /* sequence number, negative -> FIN */
@@ -40,7 +41,15 @@ struct iperf_udp_hdr {
     u32_t tv_usec;  /* microseconds part of client timestamp */
 };
 
+
 typedef void (*reportFunc_t)(void* arg);
+
+typedef enum
+{
+    IPERF_PROTO_TCP = 0,
+    IPERF_PROTO_UDP,
+    IPERF_PROTO_TLS
+} iperf_proto_t;
 
 // State for a client
 typedef struct
@@ -50,7 +59,7 @@ typedef struct
     uint8_t process_num;
     bool is_running;
     bool is_server;
-    bool is_udp;
+    iperf_proto_t proto;
     bool udp_server_first_packet_recv;
     reportFunc_t iperf_reportFunc;
     bool is_req_to_abort_test;
@@ -61,6 +70,8 @@ typedef struct
     uint64_t number_of_bytes_to_send_on_current_tx;
     timer_t os_timer;
     //TimerHandle_t os_timer;
+    TimerHandle_t report_task_handle; /* FreeRTOS timer handle for periodic reporting */
+    TaskHandle_t tls_task_handle;    /* FreeRTOS task handle for TLS iperf sessions */
     struct tcp_pcb *conn_pcb_tcp;
     struct udp_pcb *conn_pcb_udp;
     struct tcp_pcb *server_pcb;
@@ -73,6 +84,17 @@ typedef struct
     ip_addr_t src_ip;//for server
     uint32_t src_port;//for server
 
+    /* Set by iperflwip_udp_client_tx when nd6/ARP holds the TX pbuf (ref>1),
+     * cleared once the neighbor resolves. */
+    volatile uint8_t neighbor_unresolved;
+
+    /* UDP TX self-re-queuing state (runs entirely in tcpip_thread, no separate task) */
+    uint32_t udp_pkt_len;
+    uint32_t udp_throughput_timer;
+    uint64_t udp_bytes_in_window;
+    uint32_t udp_heap_check_counter;
+    uint8_t  udp_heap_ok;
+
     RecvCmd_t lwipConfig;
 }session_conn_t;
 
@@ -84,6 +106,7 @@ typedef struct
 #endif
 
 #define IPERF_LWIP_MAX_NUM_OF_IPERF_SESSIONS 10
+#define IPERF_THREAD_PRIORITY                  8
 #define LOCAL_UDP_CLIENT_PORT  5006
 
 //FreeRtos provides only pdMS_TO_TICK
@@ -101,6 +124,10 @@ int32_t printTestIperfUsage(void *arg);
 
 int32_t printStopTestIperfUsage(void *arg);
 
+int32_t cmdTestTlsIperfCallback(void *arg);
+
+int32_t printTestTlsIperfUsage(void *arg);
+
 void iperflwip_tcp_close(void *arg);
 
 int8_t is_ip_addr_in_net_list(const ip_addr_t *addr);
@@ -111,6 +138,6 @@ err_t iperflwip_tcp_client_tx(session_conn_t* session_con);
 
 
 
-#endif
+
 
 #endif

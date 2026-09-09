@@ -57,7 +57,11 @@
 
 #define NTP_SERVER_PORT (123)
 
-#define NTPSIZE (3 * sizeof(struct sockaddr))
+#ifdef LWIP_IPV6
+#define NTPSIZE (3 * sizeof(struct sockaddr_in6))
+#else
+#define NTPSIZE (3 * sizeof(struct sockaddr_in))
+#endif
 #define OSI_WAIT_FOR_SNTP_TIME_UPDATE_MS   (50000)
 
 
@@ -76,41 +80,60 @@ void sntpWrapper_timeUpdateHook(void *p)
    osi_SyncObjSignal(&g_sntpSemTimeUpdate);
 }
 
+/* Store one NTP server address (IPv4 or IPv6) into g_storedNtpServers.
+ * Returns the number of bytes written, or 0 on failure. */
+static int32_t store_one_server(uint8_t *dst, const char *ip)
+{
+#ifdef LWIP_IPV6
+    if (strchr(ip, ':') != NULL) {
+        struct sockaddr_in6 addr6;
+        memset(&addr6, 0, sizeof(addr6));
+        addr6.sin6_family = AF_INET6;
+        addr6.sin6_port   = NTP_SERVER_PORT;
+        if (inet_pton(AF_INET6, ip, &addr6.sin6_addr) != 1) {
+            SNTP_PRINT_REPORT_ERROR("\n\rERROR! SNTP: invalid IPv6 address: %s", ip);
+            return 0;
+        }
+        os_memcpy(dst, &addr6, sizeof(struct sockaddr_in6));
+        return sizeof(struct sockaddr_in6);
+    }
+#endif
+    {
+        struct sockaddr_in addr4;
+        memset(&addr4, 0, sizeof(addr4));
+        addr4.sin_family = AF_INET;
+        addr4.sin_port   = NTP_SERVER_PORT;
+        if (inet_pton(AF_INET, ip, &addr4.sin_addr) != 1) {
+            SNTP_PRINT_REPORT_ERROR("\n\rERROR! SNTP: invalid IPv4 address: %s", ip);
+            return 0;
+        }
+        os_memcpy(dst, &addr4, sizeof(struct sockaddr_in));
+        return sizeof(struct sockaddr_in);
+    }
+}
+
 //defines the NTP servers ip addresses
 void sntpWrapper_store_servers(uint32_t numOfServers,char* sntpServer1IP,char* sntpServer2Ip, char* sntpServer3Ip )
 {
-    struct sockaddr_in ntpAddr;
     int32_t currPos = 0;
+    int32_t written;
 
     SNTP_PRINT_REPORT("\n\rConfigure the  NTP servers : num of servers %d : ", numOfServers);
 
-    /* the test is performed on IPV$ socket) */
     if(numOfServers > 0)
     {
-        /* NTP address 1 */
-        ntpAddr.sin_family = AF_INET;
-        ntpAddr.sin_port = NTP_SERVER_PORT;//htons(NTP_SERVER_PORT);
-        inet_pton(AF_INET, sntpServer1IP, &ntpAddr.sin_addr);
-        os_memcpy((g_storedNtpServers + currPos), &ntpAddr, sizeof(struct sockaddr_in));
-        currPos += sizeof(struct sockaddr);
-        SNTP_PRINT_REPORT("%s ",sntpServer1IP);
+        written = store_one_server(g_storedNtpServers + currPos, sntpServer1IP);
+        if (written > 0) { currPos += written; SNTP_PRINT_REPORT("%s ", sntpServer1IP); }
     }
     if(numOfServers > 1)
     {
-        /* NTP address 2 */
-        inet_pton(AF_INET, sntpServer2Ip, &ntpAddr.sin_addr);
-        os_memcpy((g_storedNtpServers + currPos), &ntpAddr, sizeof(struct sockaddr_in));
-        currPos += sizeof(struct sockaddr);
-        SNTP_PRINT_REPORT("%s ",sntpServer2Ip);
+        written = store_one_server(g_storedNtpServers + currPos, sntpServer2Ip);
+        if (written > 0) { currPos += written; SNTP_PRINT_REPORT("%s ", sntpServer2Ip); }
     }
     if(numOfServers > 2)
     {
-        /* NTP address 3 */
-        inet_pton(AF_INET, sntpServer3Ip, &ntpAddr.sin_addr);
-        os_memcpy((g_storedNtpServers + currPos), &ntpAddr, sizeof(struct sockaddr_in));
-        currPos += sizeof(struct sockaddr);
-        SNTP_PRINT_REPORT("%s ",sntpServer3Ip);
-
+        written = store_one_server(g_storedNtpServers + currPos, sntpServer3Ip);
+        if (written > 0) { currPos += written; SNTP_PRINT_REPORT("%s ", sntpServer3Ip); }
     }
 
     g_numOfStoredNtpServers = numOfServers;

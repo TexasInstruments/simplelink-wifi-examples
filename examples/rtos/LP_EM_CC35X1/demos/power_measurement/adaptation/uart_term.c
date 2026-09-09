@@ -58,6 +58,8 @@ extern int vsnprintf(char * s,
 //*****************************************************************************
 #define true                    1
 #define false                   0
+/* If the destination buffer resides in PSRAM, this value must be <= the UART2 inbound bounce buffer size configured in .syscfg */
+#define UART_READ_CHUNK_SIZE    1024
 
 //*****************************************************************************
 //                          LOCAL FUNCTIONS
@@ -135,7 +137,7 @@ typedef struct CompletionResult_t
 CompletionArray comp;
 
 //*****************************************************************************
-//
+//!
 //! Initialize the completion engine with the commands that should be 
 //! used to complete
 //!
@@ -329,15 +331,6 @@ void UART_writePolling(uint8_t *buffer, uint32_t len)
     }
 }
 
-//void UART_readPolling(UART_Handle handle, uint8_t *buffer, uint32_t len)
-//{
-//    uartTrans.buf = buffer;
-//    uartTrans.count = len;
-//
-//    UART_read(handle, &uartTrans);
-//}
-
-
 void writeStrWithLen(const char *s, size_t len)
 {
     osi_LockObjLock(&LockObj, OSI_WAIT_FOREVER);
@@ -365,29 +358,6 @@ void moveCursor(int8_t positionsToMove)
     Report("%c[%d%c", ESC, abs(positionsToMove), direction);
 }
 
-
-//*****************************************************************************
-//
-//! prints the formatted string on to the console
-//!
-//! \param[in]  format  - is a pointer to the character string specifying the
-//!                       format in the following arguments need to be
-//!                       interpreted.
-//! \param[in]  [variable number of] arguments according to the format in the
-//!             first parameters
-//!
-//! \return count of characters printed
-//
-//*****************************************************************************
-//TODO! if want to use static buffer for the report, which is better,
-//need to create buffer per thread
-//Using the same buffer with lock is not working well,
-//Because vsnprintf sometimes gets asserted if it is wrapped with lock
-//The reason is that the lock create high latency if it is been used
-//for long time.and the operating system can't wait long when priority inversion
-//is happening.it can be verified in stability tests, you can see that vsprintf
-//gets asserted.
-
 #define USE_HEAP_BUF
 #ifdef COLLECT_HEAP_DEBUG_INFO
 #define USE_HEAP_BUF
@@ -397,6 +367,27 @@ char gPcBuff[900];
 #endif
 #endif
 
+//*****************************************************************************
+//! @brief Printf-style formatted output function for terminal reporting
+//!
+//! @details Formats a variable argument list according to the format string and
+//!          outputs the result via the Message function. The function handles
+//!          buffer allocation dynamically (heap or static) and includes thread
+//!          safety via locking mechanisms. If the initial buffer is too small,
+//!         it will automatically resize (when USE_HEAP_BUF is defined).
+//!
+//! @param[in] pcFormat Printf-style format string
+//! @param[in] ...      Variable arguments corresponding to format specifiers
+//!
+//! @return Number of characters formatted (excluding null terminator) on success,
+//!         -1 on memory allocation failure or buffer overflow
+//!
+//! @note Thread-safe: Uses locking to prevent message interleaving
+//! @note When USE_HEAP_BUF is defined, buffer grows dynamically up to available memory
+//! @note When USE_HEAP_BUF is not defined, limited to 898 character static buffer
+//!
+//! @see Message()
+//*****************************************************************************
 int Report(const char *pcFormat,...)
 {
 
@@ -464,6 +455,21 @@ int Report(const char *pcFormat,...)
 #endif
 
     return(iRet);
+}
+
+/* Debug output with millisecond timestamp for scheduler diagnostics during static IP configuration */
+int ReportWithTime(const char *pcFormat, ...)
+{
+    char pcBuff[898];
+    struct os_reltime tNow;
+    va_list list;
+
+    va_start(list, pcFormat);
+    vsnprintf(pcBuff, sizeof(pcBuff), pcFormat, list);
+    va_end(list);
+
+    os_get_reltime(&tNow);
+    return Report("[%u.%06u] %s", (unsigned)tNow.sec, (unsigned)tNow.usec, pcBuff);
 }
 
 #ifdef COLLECT_HEAP_DEBUG_INFO
@@ -941,44 +947,47 @@ char getch(void)
     #define UART_CHAR_NOT_RECIEVED   (-1)
 
     uint8_t ch;
-#if 0
-    int8_t  ret = UART_CHAR_NOT_RECIEVED;
-    while( ret == UART_CHAR_NOT_RECIEVED)
-    {
-        if (UARTCharAvailable(UARTLIN0_BASE))
-        {
-            // Return the character.
-            ch = UARTGetCharNonBlocking(UARTLIN0_BASE);
-            ret = UART_CHAR_RECIEVED;
-        }
-        else
-        {
-            ret = UART_CHAR_NOT_RECIEVED;
-            osi_uSleep( 5 );
-        }
-    }
-    return ch;
-#endif
     size_t bytesRead;
-    UART2_read(uartHandle, &ch, 1, &bytesRead);
+    int16_t ret = 0;
+    ret = UART2_read(uartHandle, &ch, 1, &bytesRead);
+    if( ret < 0 )
+    {
+        Report("Error while reading from uart, error num: %d\r\n", ret);
+    }
     return ch;
 } 
 
 //*****************************************************************************
 //
-//! Read a bytes from the console
+//! Read bytes from the console in chunks of UART_READ_CHUNK_SIZE.
+//! Reading in chunks is required when the destination buffer resides in PSRAM,
+//! as UART2_read enforces a maximum read size equal to the UART2 inbound
+//! bounce buffer size configured in .syscfg.
 //!
-//! \param size size of bytes to read
-//! \param buffer of bytes 
-//!
-//! \return str
+//! \param size   total number of bytes to read
+//! \param buffer destination buffer to store the received bytes
 //
 //*****************************************************************************
 void getstr(uint32_t size, void* buffer)
 {
     size_t bytesRead;
-    UART2_read(uartHandle, buffer, size, &bytesRead);
-} 
+    int16_t ret = 0;
+    uint32_t remaining = size;
+    uint8_t *ptr = (uint8_t *)buffer;
+
+    while (remaining > 0)
+    {
+        uint32_t chunk = (remaining > UART_READ_CHUNK_SIZE) ? UART_READ_CHUNK_SIZE : remaining;
+        ret = UART2_read(uartHandle, ptr, chunk, &bytesRead);
+        if (ret < 0)
+        {
+            Report("Error while reading from uart, error num: %d\r\n", ret);
+            return;
+        }
+        ptr += bytesRead;
+        remaining -= bytesRead;
+    }
+}
 
 //*****************************************************************************
 //

@@ -20,10 +20,12 @@ ifeq ($(VERBOSE), 1)
   V :=
 endif
 
-OBJECTS = ble_cmd.obj cmd_parser.obj dhcpserver.obj lwip_iperf_examples.obj lwip_iperf_tcp_client.obj lwip_iperf_tcp_server.obj lwip_iperf_udp_client.obj lwip_iperf_udp_server.obj network_lwip.obj network_mbedtls.obj indigo.obj date_time_service.obj sntp_task.obj sntp_wrapper.obj nimble_host.obj wlan_cmd.obj socket_examples.obj lwip_ping.obj str.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscalls_stubs.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
+OBJECTS = ble_cmd.obj cmd_parser.obj dhcpserver.obj lwip_iperf_examples.obj lwip_iperf_tcp_client.obj lwip_iperf_tcp_server.obj lwip_iperf_udp_client.obj lwip_iperf_udp_server.obj tls_iperf_client.obj tls_iperf_server.obj network_lwip.obj network_mbedtls.obj indigo.obj date_time_service.obj sntp_task.obj sntp_wrapper.obj nimble_host.obj wlan_cmd.obj lwip_ping.obj str.obj crc.obj nvocmp_cc35xx.obj adaptation_osi_dpl.obj adaptation_osi_filesystem.obj adaptation_uart_term.obj adaptation_syslog.obj freertos_main_freertos.obj syscall_stubs.obj syscall_stubs_specific.obj stdlib_override.obj $(patsubst %.c,%.obj,$(notdir $(SYSCFG_C_FILES)))
 
 NAME = indigo
 
+
+DFLAGS += -gstrict-dwarf
 
 CFLAGS += -I../.. \
     -I. \
@@ -35,6 +37,7 @@ CFLAGS += -I../.. \
     -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE=\"config-psa-crypto-hsm.h\" \
     -O3 \
     -DCC35XX \
+    -DDeviceFamily_CC35XX \
     -DNVOCMP_POSIX_MUTEX \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
     -D_REENT_SMALL \
@@ -51,6 +54,7 @@ CFLAGS += -I../.. \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_common" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/drivers/net/wifi/wifi_host_driver/inc_adapt" \
+    "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/tools/TI_Containers" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-stack/src/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/ti_config/lwip-port/osi/include" \
     "-I$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/third_party/lwip/lwip-contrib" \
@@ -72,15 +76,22 @@ CFLAGS += -I../.. \
     -ffunction-sections \
     -fdata-sections \
     -g \
-    -gstrict-dwarf \
     -Wall \
     "-I$(GCC_ARMCOMPILER)/arm-none-eabi/include/newlib-nano" \
     "-I$(GCC_ARMCOMPILER)/arm-none-eabi/include"
+
+
+ifneq ($(CONFIG),RELEASE)
+# Add debug flags by default (excluded only when CONFIG=RELEASE)
+CFLAGS += $(DFLAGS)
+endif
 
 LFLAGS += -Wl,-T,../../freertos/gcc/linker_GNU.lds \
     "-Wl,-Map,$(NAME).map" \
     -mcpu=cortex-m33 \
     "-L$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source" \
+    -Wl,--wrap=memcpy \
+    -Wl,--wrap=memset \
     -fno-lto \
     -Wl,--start-group \
     "$(SIMPLELINK_WIFI_SDK_INSTALL_DIR)/source/ti/net/wifi_stack/lib/gcc/wifi_stack.a" \
@@ -167,6 +178,14 @@ lwip_iperf_udp_server.obj: ../../lwip_iperf_udp_server.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
+tls_iperf_client.obj: ../../tls_iperf_client.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+tls_iperf_server.obj: ../../tls_iperf_server.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
 network_lwip.obj: ../../network_lwip.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
@@ -196,10 +215,6 @@ nimble_host.obj: ../../nimble_host.c $(SYSCFG_H_FILES)
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
 wlan_cmd.obj: ../../wlan_cmd.c $(SYSCFG_H_FILES)
-	@ echo Building $@
-	$(V) $(CC) $(CFLAGS) $< -c -o $@
-
-socket_examples.obj: ../../socket_examples.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
@@ -239,7 +254,15 @@ freertos_main_freertos.obj: ../../freertos/main_freertos.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 
-syscalls_stubs.obj: ../../syscalls_stubs.c $(SYSCFG_H_FILES)
+syscall_stubs.obj: ../../syscall_stubs.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+syscall_stubs_specific.obj: ../../syscall_stubs_specific.c $(SYSCFG_H_FILES)
+	@ echo Building $@
+	$(V) $(CC) $(CFLAGS) $< -c -o $@
+
+stdlib_override.obj: ../../stdlib_override.c $(SYSCFG_H_FILES)
 	@ echo Building $@
 	$(V) $(CC) $(CFLAGS) $< -c -o $@
 

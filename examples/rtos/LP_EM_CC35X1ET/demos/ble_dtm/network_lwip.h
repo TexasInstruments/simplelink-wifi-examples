@@ -148,7 +148,21 @@ int8_t network_stack_get_if_ip(WlanRole_e role, uint32_t *ip, uint32_t *netmask,
 
 int8_t network_stack_set_dynamic_ip_if_ap(uint32_t ip, uint32_t netmask, uint32_t gw);
 
-void network_stack_register_extra_status_callback(void (*callback)(WlanRole_e, uint32_t));
+void network_stack_register_extra_status_callback(void (*callback)(WlanRole_e, uint32_t, uint32_t[4], uint32_t[4]));
+
+#include "lwip/netif.h"
+/*!
+    \brief Find the netif that owns a given IPv6 address.
+
+    Searches all active netifs for one whose IPv6 address matches ip6_bytes.
+    Use the returned netif for zone assignment (ip6_addr_assign_zone) or as
+    sin6_scope_id (netif->num + 1) so that link-local addresses are routed
+    to the correct interface. Falls back to the STA netif if no match.
+
+    \param[in]  ip6_bytes  16-byte IPv6 address in network byte order
+    \return     pointer to the matching netif, or the STA netif
+*/
+struct netif *network_netif_find_by_ip6(const uint8_t *ip6_bytes);
 
 #define HEAP_THRESHOLD_FOR_TX (20000)
 

@@ -353,9 +353,9 @@ int32_t cmdDtmRxCallback(void *arg)
     }
 
     /* Validate parameters */
-    if(rxParams.channel > DTM_CHANNEL_MAX)
+    if(rxParams.channel > DTM_RF_CHANNEL_MAX)
     {
-        UART_PRINT("\n\r[DTM] Invalid channel: %d (valid: 0-%d)\n\r", rxParams.channel, DTM_CHANNEL_MAX);
+        UART_PRINT("\n\r[DTM] Invalid channel: %d (valid: 0-%d)\n\r", rxParams.channel, DTM_RF_CHANNEL_MAX);
         return -1;
     }
 
@@ -372,8 +372,8 @@ int32_t cmdDtmRxCallback(void *arg)
     }
 
     UART_PRINT("\n\r[DTM] Starting RX Test V2 (0x2033)\n\r");
-    UART_PRINT("[DTM] Channel: %d, PHY: %d, Mod Index: %d\n\r",
-               rxParams.channel, rxParams.phy, rxParams.modulation_index);
+    UART_PRINT("[DTM] RF Channel: %d (%d MHz), PHY: %d, Mod Index: %d\n\r",
+               rxParams.channel, DTM_RF_CHANNEL_BASE_FREQ_MHZ + (rxParams.channel * 2), rxParams.phy, rxParams.modulation_index);
 
     /* Build HCI command */
     hciCmd[0] = HCI_CMD_PACKET;
@@ -446,9 +446,9 @@ int32_t cmdDtmTxCallback(void *arg)
     }
 
     /* Validate parameters */
-    if(txParams.channel > DTM_CHANNEL_MAX)
+    if(txParams.channel > DTM_RF_CHANNEL_MAX)
     {
-        UART_PRINT("\n\r[DTM] Invalid channel: %d (valid: 0-%d)\n\r", txParams.channel, DTM_CHANNEL_MAX);
+        UART_PRINT("\n\r[DTM] Invalid channel: %d (valid: 0-%d)\n\r", txParams.channel, DTM_RF_CHANNEL_MAX);
         return -1;
     }
 
@@ -465,8 +465,8 @@ int32_t cmdDtmTxCallback(void *arg)
     }
 
     UART_PRINT("\n\r[DTM] Starting TX Test V2 (0x2034)\n\r");
-    UART_PRINT("[DTM] Channel: %d, Length: %d, Payload: %d, PHY: %d\n\r",
-               txParams.channel, txParams.data_len, txParams.payload, txParams.phy);
+    UART_PRINT("[DTM] RF Channel: %d (%d MHz), Length: %d, Payload: %d, PHY: %d\n\r",
+               txParams.channel, DTM_RF_CHANNEL_BASE_FREQ_MHZ + (txParams.channel * 2), txParams.data_len, txParams.payload, txParams.phy);
 
     /* Build HCI command */
     hciCmd[0] = HCI_CMD_PACKET;
@@ -535,7 +535,9 @@ int32_t printDtmRxUsage(void *arg)
     UART_PRINT("%sStart Enhanced Receiver Test (HCI 0x2033)\n\r", descriptionStr);
     UART_PRINT("\n\r");
     UART_PRINT("Options:\n\r");
-    UART_PRINT("  -c channel     : RX channel (0-39), default: 0\n\r");
+    UART_PRINT("  -c channel     : RF channel index (0-39), freq = %d + (index * 2) MHz\n\r", DTM_RF_CHANNEL_BASE_FREQ_MHZ);
+    UART_PRINT("                   e.g. 0=2402MHz (adv ch37), 1=2404MHz (data ch0), 12=2426MHz (adv ch38)\n\r");
+    UART_PRINT("                   default: 0\n\r");
     UART_PRINT("  -p phy         : PHY type, default: 1\n\r");
     UART_PRINT("                   1 = 1M PHY\n\r");
     UART_PRINT("                   2 = 2M PHY\n\r");
@@ -557,7 +559,9 @@ int32_t printDtmTxUsage(void *arg)
     UART_PRINT("%sStart Enhanced Transmitter Test (HCI 0x2034)\n\r", descriptionStr);
     UART_PRINT("\n\r");
     UART_PRINT("Options:\n\r");
-    UART_PRINT("  -c channel     : TX channel (0-39), default: 0\n\r");
+    UART_PRINT("  -c channel     : RF channel index (0-39), freq = %d + (index * 2) MHz\n\r", DTM_RF_CHANNEL_BASE_FREQ_MHZ);
+    UART_PRINT("                   e.g. 0=2402MHz (adv ch37), 1=2404MHz (data ch0), 12=2426MHz (adv ch38)\n\r");
+    UART_PRINT("                   default: 0\n\r");
     UART_PRINT("  -l length      : Test data length (0-255), default: 37\n\r");
     UART_PRINT("  -d payload     : Payload pattern, default: 0\n\r");
     UART_PRINT("                   0 = PRBS9 sequence\n\r");

@@ -40,8 +40,6 @@
 /****************************************************************************
               TYPE DEFINITIONS
  ****************************************************************************/
- //#define TCPIP_IF_ZERO_COPY 
- 
 /* interface states */
 typedef enum 
 {
@@ -151,13 +149,5 @@ int TCPIP_IF_getIp4Addr(void *hNetIf, ip4addr_t *pIp4Addr, ip4addr_t *pIp4Mask, 
 */
 int   TCPIP_IF_receive(void *hNetIf, void *hPkt, uint16_t pktLen);
 
-#ifdef TCPIP_IF_ZERO_COPY
-/* if implemented by the TCPIP, the App can use the following so RX will 
-   use the netwoork stack specific buffer memory */
-void *TCPIP_IF_pktAlloc(uint16_t pktSize);
-void  TCPIP_IF_pktFree(void *hPkt);
-void *TCPIP_IF_pktPayload(void *hPkt);
-int   TCPIP_IF_pktLength(void *hPkt);
-#endif
 
 #endif // TCPIP_IF_H

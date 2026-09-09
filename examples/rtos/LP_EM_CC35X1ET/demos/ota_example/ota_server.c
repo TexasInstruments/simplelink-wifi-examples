@@ -32,7 +32,7 @@
 
 /*!
     \file   ota_server.c
-    \brief  Server interaction over HTTPS — query for updates and download
+    \brief  Server interaction over HTTPS - query for updates and download
             firmware images for the OTA example.
 
     This module handles querying an HTTPS server for available firmware
@@ -637,9 +637,9 @@ int OTA_SERVER_queryUpdates(const char *pServerBaseUrl,
                                ? pEntries[i].slot1Id : pEntries[i].slot2Id;
             int slotNum = (activeSlotId % 2) + 1;
 
-            snprintf(activeStr, sizeof(activeStr), "%d.%d.%d.%d (S%d)",
+            snprintf(activeStr, sizeof(activeStr), "%d.%d.%d.%lu (S%d)",
                      primaryVer.major, primaryVer.minor,
-                     primaryVer.patch, primaryVer.build, slotNum);
+                     primaryVer.patch, (unsigned long) primaryVer.build, slotNum);
             status = isServerVersionNewer(pEntries[i].version, &primaryVer)
                      ? "[NEW]" : "[OK]";
         }
@@ -705,7 +705,7 @@ int OTA_SERVER_downloadUpdate(const char *pServerBaseUrl,
         psa_fwu_cancel(targetId);
         return -1;
     }
-    UART_PRINT("[OTA] psa_fwu_finish() OK — image is CANDIDATE\n\r");
+    UART_PRINT("[OTA] psa_fwu_finish() OK - image is CANDIDATE\n\r");
     UART_PRINT("[OTA] Use 'Install' to stage all candidates, then 'Request reboot'\n\r");
 
     return 0;

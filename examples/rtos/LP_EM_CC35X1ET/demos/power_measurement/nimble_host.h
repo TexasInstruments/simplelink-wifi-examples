@@ -57,7 +57,7 @@ int nimble_host_ext_connect_params(uint8_t* bd_addr, uint8_t addr_type, uint8 ph
 
 int nimble_host_gap_update_params(uint16 connHandle, uint32 interval_min_us, uint32 interval_max_us, uint32 supervision_timeout_us, uint32 latency, uint16 min_ce_len, uint16 max_cle_len);
 
-int nimble_host_ext_disconnect(uint8_t* bd_addr, uint8_t addr_type);
+int nimble_host_ext_disconnect(uint8_t* bd_addr);
 
 int nimble_host_connected_peers(void);
 

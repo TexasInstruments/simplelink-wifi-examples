@@ -95,7 +95,8 @@ char *trimLeadingWhitespace(char *str)
 char calibratorSetPowerModeActionStr[] =            "power_mode";
 char calibratorChannelTuneActionStr[] =             "tune_channel";
 char calibratorStartTxActionStr[] =                 "start_tx";
-char calibratorStartTxToneActionStr[] =             "start_tx_tone";
+char calibratorStartTxToneActionStr[] =             "tx_tone_start";
+char calibratorStopTxToneActionStr[] =              "tx_tone_stop";
 char calibratorStopTxActionStr[] =                  "stop_tx";
 char calibratorStartRxActionStr[] =                 "start_rx";
 char calibratorStopRxActionStr[] =                  "stop_rx";
@@ -116,6 +117,8 @@ char calibratorSetTransmitOMIActionStr[] =          "trans_omi";
 const char calibratorSetBAEnableActionStr[] =       "ba_enable";
 const char calibratorLinkAdaptActionStr[] =         "la";
 const char calibratorSetManualCalibActionStr[] =    "set_manual_calib";
+const char calibratorGetTemperatureStr[] =          "temperature_get";
+const char calibratorLinkRobustnessBitmapStr[] =    "link_robustness_bitmap";
 
 
 
@@ -169,8 +172,9 @@ char *calibratorFirstDetailsStr         = "Calibrator - a tool for testing.\r\n"
                                           "\t\tpower_mode\r\n"
                                           "\t\ttune_channel\r\n"
                                           "\t\tstart_tx\r\n"
-                                          "\t\tstart_tx_tone\r\n"
                                           "\t\tstop_tx\r\n"
+                                          "\t\ttx_tone_start\r\n"
+                                          "\t\ttx_tone_stop\r\n"
                                           "\t\tstart_rx\r\n"
                                           "\t\tstop_rx\r\n"
                                           "\t\tget_rx_stats\r\n"
@@ -205,11 +209,13 @@ char *calibratorTuneChannel_bandwidth_optionDetailsStr = "\r\n\tbandwidth\tRequs
 char *calibratorStartTxUsageStr = " [-help]\r\n";
 char *calibratorStartTxDetailsStr = "Start Calibrator TX.\r\n";
 
-char *calibratorStartTxToneFirstUsageStr = " [-help] <mode> <offset MHz> <output_power dBm>\r\n";
+char *calibratorStartTxToneFirstUsageStr = " [-help] <mode> <offset MHz>\r\n";
 char *calibratorStartTxToneSecondUsageStr = "\t <mode (0=silence (n/a), 1=carrier_feedthrough (n/a), 2=single_tone>\r\n";
 char *calibratorStartTxToneThirdUsageStr = "\t <offset MHz (-10 to +10, step 0.25)>\r\n";
-char *calibratorStartTxToneFourthUsageStr = "\t <output_power dBm (0 or 1)>\r\n";
 char *calibratorStartTxToneDetailsStr = "Start Calibrator TX TONE.\r\n";
+
+char *calibratorStopTxToneUsageStr = " [-help]\r\n";
+char *calibratorStopTxToneDetailsStr = "Stop Calibrator TX TONE.\r\n";
 
 char *calibratorStopTxUsageStr = " [-help]\r\n";
 char *calibratorStopTxDetailsStr = "Stop Calibrator TX.\r\n";
@@ -439,6 +445,7 @@ const char *calibratorSetManualCalibDetailStr = "Set Manual Calibration for Rx/T
     "\texample: set_manual_calib -rx 1 -tx 1\r\n"
     "\tcalibrate rx: range: 0-1 (False/True)\r\n"
     "\tcalibrate tx:  range 0-1 (False/True)\r\n";
+
 
 
 /*************************************************
@@ -2039,6 +2046,61 @@ int32_t parseCalibratorSetManualCalib(void *arg, uint16* calibration_bitmap)
     return ret;
 }
 
+/*!
+    \brief       Parse calibrator link robustness bitmap command.
+
+    This routine parses the calibrator`s link robustness bitmap command. It receives a buffer
+    to read from, parses the requested parameter and fills it in the link robustness bitmap
+    parameter struct.
+
+    \param        arg                           -   Points to command line buffer.
+                                                    Contains the command line typed by user.
+
+    \param        linkRobustnessBitmapParams    -   Pointer received from caller, to be filled
+                                                    in this routine with the requested bitmap.
+
+    \return       Upon successful completion, the function shall return 0.
+                  In case of failure, this function would return -1.
+                  It's the callback's responsibility to check the return value,
+                  and print the help for this command.
+
+    \sa           cmdCalibratorCallback
+ */
+int32_t parseCalibratorLinkRobustnessBitmap(void *arg, CalibratorLinkRobustnessBitmap_t *linkRobustnessBitmapParams)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    int32_t ret = 0;
+    int8_t paramCount = 0;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    while (token)
+    {
+        if (!strcmp(token, help_optionStr))
+        {
+            return -1;
+        }
+        else if (0 == paramCount)
+        {
+            linkRobustnessBitmapParams->bitmap = (uint8_t)strtoul(token, NULL, 0);
+        }
+
+        paramCount++;
+        token = strtok(NULL, space_str);
+    }
+
+    if (paramCount != 1)
+    {
+        Report("\r\nWrong amount of arguments for calibrator link robustness bitmap. Expected 1, got %d", paramCount);
+        ret = -1;
+    }
+
+    return ret;
+}
+
 
 /*!
     \brief       Parse calibrator set psm command.
@@ -2367,20 +2429,18 @@ int32_t parseCalibratorStartTxTone(void *arg, CalibratorStartTxToneParams_t *sta
         {
             startTxToneParams->offset = (int8_t ) floor((atof(token) / 0.25));
         }
-        else if (2 == paramCount)
-        {
-            startTxToneParams->output_power = (int8_t )atoi(token);
-        }
 
         paramCount++;
         token = strtok(NULL, space_str);
     }
 
-    if (paramCount != 3)
+    if (paramCount != 2)
     {
-        Report("\r\nWrong amount of arguments for calibrator start tone tx. Expected 3, got %d", paramCount);
+        Report("\r\nWrong amount of arguments for calibrator start tone tx. Expected 2, got %d", paramCount);
         ret = -1;
     }
+
+    startTxToneParams->output_power = 1;
 
     if ((startTxToneParams->mode < 0) || (startTxToneParams->mode > 2))
     {
@@ -2394,15 +2454,8 @@ int32_t parseCalibratorStartTxTone(void *arg, CalibratorStartTxToneParams_t *sta
         return -1;
     }
 
-    if ((startTxToneParams->output_power < -10) || (startTxToneParams->output_power > 15))
-    {
-        Report("\r\noutput_power value can be -10 to +15 dBm\r\n");
-        return -1;
-    }
-
     Report("\r\nTx Tone mode: %d\r\n", startTxToneParams->mode);
     Report("\r\nTx Tone offset: (%d) %.2f MHz\r\n", startTxToneParams->offset, (startTxToneParams->offset * 0.25));
-    Report("\r\nTx Tone output_power: %d dBm\r\n", startTxToneParams->output_power);
     return ret;
 }
 
@@ -2459,6 +2512,10 @@ int32_t parseCalibratorAction(void *arg, CalibratorAction_e *calibratorAction)
     else if (!strcmp(token, calibratorStartTxToneActionStr))
     {
         *calibratorAction = CALIBRATOR_ACTION_TX_TONE_START;
+    }
+    else if (!strcmp(token, calibratorStopTxToneActionStr))
+    {
+        *calibratorAction = CALIBRATOR_ACTION_TX_TONE_STOP;
     }
     else if (!strcmp(token, calibratorStopTxActionStr))
     {
@@ -2539,6 +2596,14 @@ int32_t parseCalibratorAction(void *arg, CalibratorAction_e *calibratorAction)
     else if (!strcmp(token, calibratorSetManualCalibActionStr))
     {
         *calibratorAction = CALIBRATOR_ACTION_MANUAL_CALIBRATION;
+    }
+    else if (!strcmp(token, calibratorGetTemperatureStr))
+    {
+        *calibratorAction = CALIBRATOR_ACTION_GET_TEMPERATURE;
+    }
+    else if (!strcmp(token, calibratorLinkRobustnessBitmapStr))
+    {
+        *calibratorAction = CALIBRATOR_ACTION_LINK_ROBUSTNESS_BITMAP;
     }
     else
     {
@@ -2676,10 +2741,21 @@ void printCalibratorStartTxToneUsage()
     UART_PRINT(calibratorStartTxToneActionStr);
     UART_PRINT(calibratorStartTxToneFirstUsageStr);
     UART_PRINT(calibratorStartTxToneSecondUsageStr);
-    UART_PRINT(calibratorStartTxToneThirdUsageStr);    
-    UART_PRINT(calibratorStartTxToneFourthUsageStr);
+    UART_PRINT(calibratorStartTxToneThirdUsageStr);
     UART_PRINT(descriptionStr);
     UART_PRINT(calibratorStartTxToneDetailsStr);
+    UART_PRINT(help_optaionDetails);
+    UART_PRINT(lineBreak);
+}
+
+void printCalibratorStopTxToneUsage()
+{
+    UART_PRINT(lineBreak);
+    UART_PRINT(usageStr);
+    UART_PRINT(calibratorStopTxToneActionStr);
+    UART_PRINT(calibratorStopTxToneUsageStr);
+    UART_PRINT(descriptionStr);
+    UART_PRINT(calibratorStopTxToneDetailsStr);
     UART_PRINT(help_optaionDetails);
     UART_PRINT(lineBreak);
 }
@@ -2878,6 +2954,8 @@ void printCalibratorSetManualCalibUsage()
 
 }
 
+
+
 void printCalibratorSetUplinkMuUsage()
 {
     UART_PRINT(lineBreak);
@@ -3069,7 +3147,21 @@ int32_t cmdCalibratorCallback(void *arg)
     
             ret = Wlan_Set(WLAN_SET_CALIBRATOR_TX_TONE_START, &calibratorCmdWrapper);
         }
-            break;    
+            break;
+    case (CALIBRATOR_ACTION_TX_TONE_STOP):
+
+        arg += strlen(calibratorStopTxToneActionStr);
+        ret = ParseCmd(arg);
+        if (ret < 0)
+        {
+            printCalibratorStopTxToneUsage();
+            return ret;
+        }
+
+        calibratorCmdWrapper.calibratorCommandParams = NULL;
+
+        ret = Wlan_Set(WLAN_SET_CALIBRATOR_TX_TONE_STOP, &calibratorCmdWrapper);
+        break;
     case (CALIBRATOR_ACTION_TX_STOP):
 
         arg += strlen(calibratorStopTxActionStr);
@@ -3457,6 +3549,46 @@ int32_t cmdCalibratorCallback(void *arg)
         calibratorCmdWrapper.calibratorCommandParams = (void *)(&setTransmitOmiParams);
 
         ret = Wlan_Set(WLAN_SET_CALIBRATOR_TRANSMIT_OSI, &calibratorCmdWrapper);
+    }
+        break;
+    case(CALIBRATOR_ACTION_GET_TEMPERATURE):
+    {
+        CalibratorGetTemperature_t getTemperatureParams = {0};
+
+        arg += strlen(calibratorGetTemperatureStr);
+        ret = ParseCmd(arg);
+        if (ret < 0)
+        {
+            return ret;
+        }
+
+        calibratorCmdWrapper.calibratorCommandParams = (void *)(&getTemperatureParams);
+
+        ret = Wlan_Get(WLAN_GET_CALIBRATOR_TEMPERATURE, &calibratorCmdWrapper);
+        if (ret < 0)
+        {
+            Report("\r\nFailure getting temperature");
+            return -1;
+        }
+
+        Report("\r\nMeasured temperature:    %d\r\n", getTemperatureParams.measuredTemp);
+        Report("\r\nCompensated temperature: %d\r\n", getTemperatureParams.compensatedTemp);
+    }
+        break;
+    case(CALIBRATOR_ACTION_LINK_ROBUSTNESS_BITMAP):
+    {
+        CalibratorLinkRobustnessBitmap_t linkRobustnessBitmapParams = {0};
+
+        arg += strlen(calibratorLinkRobustnessBitmapStr);
+        ret = parseCalibratorLinkRobustnessBitmap(arg, &linkRobustnessBitmapParams);
+
+        if (ret < 0)
+        {
+            return -1;
+        }
+
+        calibratorCmdWrapper.calibratorCommandParams = (void *)(&linkRobustnessBitmapParams);
+        ret = Wlan_Set(WLAN_SET_CALIBRATOR_LINK_ROBUSTNESS_BITMAP, &calibratorCmdWrapper);
     }
         break;
     default:

@@ -39,7 +39,9 @@
 #include "wlan_cmd.h"
 #include "ble_cmd.h"
 #include "uart_term.h"
+#ifndef CC35XX
 #include "socket_examples.h"
+#endif
 #include "lwip_ping.h"
 
 #include "network_terminal.h"
@@ -130,12 +132,19 @@ int32_t ParseScanCmd(void *arg, ScanCmd_t *scanParams)
             {
                 scanParams->numOfentries = (uint8_t)atoi(token);
             }
-
+#ifdef CC35XX
             if(scanParams->numOfentries > MAX_SSID_ENTRIES ||
                (0 == scanParams->numOfentries))
             {
                 scanParams->numOfentries = MAX_SSID_ENTRIES;
             }
+#else
+            if(scanParams->numOfentries > DEFAULT_MAX_SSID_ENTRIES ||
+               (0 == scanParams->numOfentries))
+            {
+                scanParams->numOfentries = DEFAULT_MAX_SSID_ENTRIES;
+            }
+#endif
         }
         else
         {
@@ -306,18 +315,6 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
         {
             hidden = strtok(NULL, space_str);
         }
-#if 0 /* TODO: Add enterprise profile support */
-        else if(!strcmp(token, ent_optionStr))
-        {
-            SHOW_WARNING(-1, CMD_ENT_ERROR);
-            help = TRUE;
-            break;
-            /* For future use: process the enterprise user name
-            char *entUserName = NULL;
-            entUserName = strtok(NULL,  "\" ");
-            */
-        }
-#endif
         else
         {
             SHOW_WARNING(-1, CMD_ERROR);
@@ -445,11 +442,27 @@ int32_t ParseProfileCmd(void *arg, ProfileCmd_t *ProfileParams)
     {
         ProfileParams->secParams.Type = WLAN_SEC_TYPE_WPA2_WPA3;
     }
+    else if (!strcmp(security, WPA2FT_str))
+    {
+        ProfileParams->secParams.Type = 20; /* CME_SEC_TYPE_WPA2_FT */
+    }
+    else if (!strcmp(security, WPA2_PLUS_FT_str))
+    {
+        ProfileParams->secParams.Type = 21; /* CME_SEC_TYPE_WPA2_PLUS_FT */
+    }
+    else if (!strcmp(security, WPA3FT_str))
+    {
+        ProfileParams->secParams.Type = 22; /* CME_SEC_TYPE_WPA3_FT */
+    }
+    else if (!strcmp(security, WPA2WPA3FT_str))
+    {
+        ProfileParams->secParams.Type = 23; /* CME_SEC_TYPE_WPA2_WPA3_FT */
+    }
     else
     {
         Report(
             "\r\n [Cmd Parser] : Parser expected password "
-            "parameters [OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPS].\n\r");
+            "parameters [OPEN, WPA, WPA2, WPA2_PLUS, WPA3, WPS, WPA2/WPA3, WPA2/FT, WPA2_PLUS/FT, WPA3/FT, WPA2/WPA3/FT].\n\r");
         return(-1);
     }
 
@@ -537,6 +550,212 @@ int32_t ParseDisconnectCmd(void *arg, uint32_t *RoleId)
         Report("\r\n[Cmd Parser] : Invalid RoleId. Range [0-3]\n\r");
         return(-1);
     }
+    return(0);
+}
+
+/*!
+    \brief          Parses wlan_set_tx_power command line arguments.
+
+    \param          arg              -   Points to command line buffer.
+    \param          txPowerParams    -   Points to SetTxPowerCmd_t structure.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would print error,
+                    and return -1.
+
+    \sa             cmdWlanSetTxPowerCallback
+*/
+int32_t ParseSetTxPowerCmd(void *arg, WlanTxPowerSet_t *txPowerParams)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    char *strRoleId = NULL;
+    char *strTxPower = NULL;
+    uint8_t help = FALSE;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, help_optionStr))
+        {
+            help = TRUE;
+            break;
+        }
+        else if(!strcmp(token, i_optionStr))
+        {
+            strRoleId = strtok(NULL, space_str);
+            if(strRoleId == NULL)
+            {
+                Report("\r\n [Cmd Parser] : Missing role ID after -i option.\n\r");
+                help = TRUE;
+                break;
+            }
+        }
+        else if(!strcmp(token, txpow_optionStr))
+        {
+            strTxPower = strtok(NULL, space_str);
+            if(strTxPower == NULL)
+            {
+                Report("\r\n [Cmd Parser] : Missing TX power value after -txp option.\n\r");
+                help = TRUE;
+                break;
+            }
+        }
+        else
+        {
+            SHOW_WARNING(-1, CMD_ERROR);
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        return(-1);
+    }
+
+    /* Parse role ID */
+    if(strRoleId != NULL)
+    {
+        uint32_t roleId = atoi((const char*)strRoleId);
+        if(roleId == 0)
+        {
+            txPowerParams->role = WLAN_ROLE_STA;
+        }
+        else if(roleId == 2)
+        {
+            txPowerParams->role = WLAN_ROLE_AP;
+        }
+        else
+        {
+            Report("\r\n [Cmd Parser] : Invalid role ID %d. "
+                   "Valid values: 0 (STA), 2 (AP).\n\r", roleId);
+            return(-1);
+        }
+    }
+    else
+    {
+        Report("\r\n [Cmd Parser] : Role ID parameter (-i) is required.\n\r");
+        return(-1);
+    }
+
+    /* Parse TX power */
+    if(strTxPower != NULL)
+    {
+        int tx_power = atoi((const char*)strTxPower);
+
+        if(tx_power < WLAN_MIN_TX_POWER_DBM || tx_power > WLAN_MAX_TX_POWER_DBM)
+        {
+            Report("\r\n [Cmd Parser] : Invalid TX power %d dBm. "
+                   "Valid range: %d to %+d dBm.\n\r", tx_power,
+                   WLAN_MIN_TX_POWER_DBM, WLAN_MAX_TX_POWER_DBM);
+            return(-1);
+        }
+
+        txPowerParams->tx_power_dbm = (int8_t)tx_power;
+    }
+    else
+    {
+        Report("\r\n [Cmd Parser] : TX power parameter (-txp) is required.\n\r");
+        return(-1);
+    }
+
+    return(0);
+}
+
+/*!
+    \brief          Parses wlan_get_tx_power command line arguments.
+
+    \param          arg              -   Points to command line buffer.
+    \param          txPowerParams    -   Points to GetTxPowerCmd_t structure.
+
+    \return         Upon successful completion, the function shall return 0.
+                    In case of failure, this function would print error,
+                    and return -1.
+
+    \sa             cmdWlanGetTxPowerCallback
+*/
+int32_t ParseGetTxPowerCmd(void *arg, WlanTxPowerGet_t *txPowerParams)
+{
+    char cmdStr[CMD_BUFFER_LEN + 1];
+    char *token = NULL;
+    char *strRoleId = NULL;
+    uint8_t help = FALSE;
+
+    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if(token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while(token)
+    {
+        if(!strcmp(token, help_optionStr))
+        {
+            help = TRUE;
+            break;
+        }
+        else if(!strcmp(token, i_optionStr))
+        {
+            strRoleId = strtok(NULL, space_str);
+            if(strRoleId == NULL)
+            {
+                Report("\r\n [Cmd Parser] : Missing role ID after -i option.\n\r");
+                help = TRUE;
+                break;
+            }
+        }
+        else
+        {
+            SHOW_WARNING(-1, CMD_ERROR);
+            help = TRUE;
+            break;
+        }
+        token = strtok(NULL, space_str);
+    }
+
+    if(help)
+    {
+        return(-1);
+    }
+
+    /* Parse role ID */
+    if(strRoleId != NULL)
+    {
+        uint32_t roleId = atoi((const char*)strRoleId);
+        if(roleId == 0)
+        {
+            txPowerParams->role = WLAN_ROLE_STA;
+        }
+        else if(roleId == 2)
+        {
+            txPowerParams->role = WLAN_ROLE_AP;
+        }
+        else
+        {
+            Report("\r\n [Cmd Parser] : Invalid role ID %d. "
+                   "Valid values: 0 (STA), 2 (AP).\n\r", roleId);
+            return(-1);
+        }
+    }
+    else
+    {
+        Report("\r\n [Cmd Parser] : Role ID parameter (-i) is required.\n\r");
+        return(-1);
+    }
+
     return(0);
 }
 
@@ -1417,6 +1636,7 @@ int32_t ParseRoleUpStaCmd(void *arg, RoleUpStaCmd_t *RoleUpStaParams)
 
     \sa             cmdWlanRoleUpApCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
 {
     char    cmdStr[CMD_BUFFER_LEN + 1];
@@ -1445,7 +1665,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
     /* Set default parameters */
     RoleUpApParams->sta_limit = 4;
     RoleUpApParams->hidden = FALSE;
-    RoleUpApParams->tx_pow = 0;
+    RoleUpApParams->tx_pow = WLAN_MAX_TX_POWER_DBM;
     RoleUpApParams->channel = 1;
 #ifdef CC33XX	
     RoleUpApParams->countryDomain[0] = '\0';
@@ -1458,6 +1678,9 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
     RoleUpApParams->countryDomain[0] = '0';
     RoleUpApParams->countryDomain[1] = '0';
     RoleUpApParams->countryDomain[2] = '\0';
+
+    /* Initialize default ap_max_inactivity (0 = use default 300 sec) */
+    RoleUpApParams->apMaxInactivity = 0;
 #endif
 
     while(token)
@@ -1537,12 +1760,13 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
                 RoleUpApParams->tx_pow = atoi(token);
             }
 
-            if(RoleUpApParams->tx_pow > 15)
+            if(RoleUpApParams->tx_pow < WLAN_MIN_TX_POWER_DBM || RoleUpApParams->tx_pow > WLAN_MAX_TX_POWER_DBM)
             {
                 Report(
-                   "\r\n [Cmd Parser] : invalid Parameter for tx power option."
-                   " Using default (0).\n\r");
-                RoleUpApParams->tx_pow = 0;
+                   "\r\n [Cmd Parser] : invalid Parameter for tx power option (%d dBm)."
+                   " Valid range: %d to %+d dBm. Using default (%d).\n\r",
+                   RoleUpApParams->tx_pow, WLAN_MIN_TX_POWER_DBM, WLAN_MAX_TX_POWER_DBM, WLAN_MAX_TX_POWER_DBM);
+                RoleUpApParams->tx_pow = WLAN_MAX_TX_POWER_DBM;
             }
         }
         else if(!strcmp(token, l_optionStr))
@@ -1620,6 +1844,21 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
             if (token)
             {
                 RoleUpApParams->transitionDisable = atoi(token);
+            }
+        }
+        else if(!strcmp(token, i_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if(token)
+            {
+                RoleUpApParams->apMaxInactivity = atoi(token);
+                if (RoleUpApParams->apMaxInactivity < 5)  /* WLAN_AP_MIN_INACTIVITY */
+                {
+                    Report("\r\n [Cmd Parser] : invalid inactivity value (%u sec)."
+                            " Minimum: 5 seconds. Using default (300 sec).\n\r",
+                            RoleUpApParams->apMaxInactivity);
+                    RoleUpApParams->apMaxInactivity = 0;  /* Use default */
+                }
             }
         }
 #endif
@@ -1721,6 +1960,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
 
     return(0);
 }
+#endif
 
 /*!
     \brief          Free role up AP command.
@@ -1735,6 +1975,7 @@ int32_t ParseRoleUpApCmd(void *arg, RoleUpApCmd_t *RoleUpApParams)
 
     \sa             cmdWlanStartApCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 void FreeRoleUpApCmd(RoleUpApCmd_t *RoleUpApParams)
 {
     if(RoleUpApParams->ssid != NULL)
@@ -1751,6 +1992,7 @@ void FreeRoleUpApCmd(RoleUpApCmd_t *RoleUpApParams)
 
     return;
 }
+#endif
 
 #ifdef CC35XX
 /*!
@@ -2486,126 +2728,8 @@ int32_t ParseCmd(void *arg)
 
     \sa             cmdEnableWoWLANCallback
  */
-#if 0 // RazB - LWip implemntation
-int32_t ParseEnableWoWLANCmd(void *arg,
-                             WoWLANEnableCmd_t *WoWLANEnableParams)
-{
-    char cmdStr[CMD_BUFFER_LEN + 1];
-    char                          *token = NULL;
-    uint16_t offset = 0;
-    uint8_t actionID = 0;
-    uint8_t help = FALSE;
-    uint8_t wowStr = FALSE;
 
-    strncpy(cmdStr, (char*)arg, CMD_BUFFER_LEN);
-    cmdStr[CMD_BUFFER_LEN] = '\0';
-    token = strtok(cmdStr, space_str);
 
-    if(token == NULL)
-    {
-        help = TRUE;
-    }
-
-    while(token)
-    {
-        if(!strcmp(token, (char*)help_optionStr))
-        {
-            help = TRUE;
-        }
-        else if(!strcmp(token, (char*)v_optionStr))
-        {
-            token = strtok(NULL, (char*)space_str);
-            if(token)
-            {
-                if(*token != '"')
-                {
-                    Report(
-                        "\n\r[cmd parser] : enablewowlan expects the pattern"
-                        " value in quotation marks (/"
-                        ").\r\n");
-                    help = TRUE;
-                    break;
-                }
-
-                token++;
-
-                WoWLANEnableParams->rule.Header.Args.Value.Pattern.Length =
-                    (strlen(token) - 1);
-                if(WoWLANEnableParams->rule.Header.Args.Value.Pattern.Length <=
-                   16)
-                {
-                    os_memcpy(
-                        &WoWLANEnableParams->rule.Header.Args.Value.Pattern.
-                        Value,
-                        token,
-                        WoWLANEnableParams->rule.Header.Args.Value.Pattern.
-                        Length);
-                }
-                else
-                {
-                    SHOW_WARNING(-1, CMD_ERROR);
-                    help = TRUE;
-                    break;
-                }
-                /* This mask determines which filters would be triggered */
-                memset(&WoWLANEnableParams->rule.Header.Args.Mask, 0xFF, 16);
-                wowStr = TRUE;
-            }
-        }
-        else if(!strcmp(token, (char*)i_optionStr))
-        {
-            token = strtok(NULL, (char*)space_str);
-
-            if(token)
-            {
-                offset = (uint16_t)atol((const char*)token);
-                WoWLANEnableParams->rule.Header.Args.Value.Pattern.Offset =
-                    offset;
-            }
-            else
-            {
-                WoWLANEnableParams->rule.Header.Args.Value.Pattern.Offset = 0;
-            }
-
-            WoWLANEnableParams->rule.Header.Args.Value.Pattern.Reserved = 0;
-        }
-        else if(!strcmp(token, (char*)u_optionStr))
-        {
-            token = strtok(NULL, (char*)space_str);
-
-            if(token)
-            {
-                /* this sets the action as Host event,
-                and UserId sets the bit corresponding to the filter */
-                WoWLANEnableParams->action.UserId = (uint8_t)atol(token);
-                actionID = TRUE;
-            }
-        }
-        else
-        {
-            SHOW_WARNING(-1, CMD_ERROR);
-            help = TRUE;
-            break;
-        }
-        token = strtok(NULL, " ");
-    }
-
-    if(!wowStr || !actionID)
-    {
-        help = TRUE;
-    }
-
-    if(help)
-    {
-        printEnableWoWLANUsage(arg);
-        return(-1);
-    }
-
-    return(0);
-}
-#endif
-
-#ifdef CC35XX
 /*!
     \brief          Parse Ping command.
 
@@ -2641,6 +2765,7 @@ int32_t ParsePingCmd(void *arg,
     uint8_t help = FALSE;
     int8_t ret = 0;
     char cmdStr[CMD_BUFFER_LEN + 1];
+    uint8_t ipv6 = FALSE;
 
     if (pingParams == NULL)
     {
@@ -2672,14 +2797,23 @@ int32_t ParsePingCmd(void *arg,
     }
     else
     {
+        ipv6 = FALSE;
         ret = inet_pton(AF_INET, targetIpAddress, &pingParams->target_ip.ipv4);
         if (ret == 0)
         {
-            Report("\n\r[Cmd Parser]: Invalid target IP address %s\n\r", targetIpAddress);
-            printPingStartUsage(arg);
-            return -1;
+            ret = inet_pton(AF_INET6, targetIpAddress, pingParams->target_ip.ipv6);
+            if (ret == 0)
+            {
+                Report("\n\r[Cmd Parser]: Invalid target IP address %s\n\r", targetIpAddress);
+                printPingStartUsage(arg);
+                return -1;
+            }
+            ipv6 = TRUE;
         }
-        pingParams->target_ip.ipv4 = lwip_ntohl(pingParams->target_ip.ipv4);
+        else
+        {
+            pingParams->target_ip.ipv4 = lwip_ntohl(pingParams->target_ip.ipv4);
+        }
     }
 
     token = strtok(NULL, " ");
@@ -2752,6 +2886,10 @@ int32_t ParsePingCmd(void *arg,
         {
             sourceIpAddress = strtok(NULL, space_str);
         }
+        else if (!strcmp(token, "-6"))
+        {
+            ipv6 = TRUE;
+        }
         else
         {
             SHOW_WARNING(-1, CMD_ERROR);
@@ -2764,17 +2902,34 @@ int32_t ParsePingCmd(void *arg,
     if (!sourceIpAddress)
     {
         /* Default behavior is to use any IP address */
+        pingParams->ipv6 = ipv6;
         pingParams->source_ip.ipv4 = IPADDR_ANY;
     }
     else
     {
-        ret = inet_pton(AF_INET, sourceIpAddress, &pingParams->source_ip.ipv4);
-        if (ret == 0)
+        if (ipv6)
         {
-            Report("\n\r[Cmd Parser]: Invalid source IP address\n\r");
-            help = TRUE;
+            ret = inet_pton(AF_INET6, sourceIpAddress, pingParams->source_ip.ipv6);
+            if (ret == 0)
+            {
+                Report("\n\r[Cmd Parser]: Invalid source IPv6 address\n\r");
+                help = TRUE;
+            }
         }
-        pingParams->source_ip.ipv4 = lwip_htonl(pingParams->source_ip.ipv4);
+        else
+        {
+            ret = inet_pton(AF_INET, sourceIpAddress, &pingParams->source_ip.ipv4);
+            if (ret == 0)
+            {
+                Report("\n\r[Cmd Parser]: Invalid source IP address\n\r");
+                help = TRUE;
+            }
+            else
+            {
+                pingParams->source_ip.ipv4 = lwip_htonl(pingParams->source_ip.ipv4);
+            }
+        }
+        pingParams->ipv6 = ipv6;
     }
 
     if (help)
@@ -2858,6 +3013,7 @@ int32_t ParsePingStopCmd(void *arg, int8_t *sessionId)
     return(0);
 }
 
+#ifdef CC35XX
 /*!
     \brief          Parse wlan regulatory domain entry set command.
 
@@ -4079,6 +4235,10 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
                 IperfCmdParams->bandwidth = atol(token);
             }
         }
+        else if(!strcmp(token, V_optionStr))
+        {
+            IperfCmdParams->ipv6 = TRUE;
+        }
 
         token = strtok(NULL, space_str);
     }
@@ -4182,38 +4342,50 @@ int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams)
     {
         Report("Server\n\r");
         Report("Server IP: ");
-
+        if(IperfCmdParams->ipv6)
+        {
+            uint8_t zeros[16] = {0};
+            if (memcmp(IperfCmdParams->ipAddr.ipv6, zeros, 16) == 0)
+                Report("any");
+            else
+                PrintIPAddress(TRUE, (void*)&IperfCmdParams->ipAddr.ipv6);
+        }
+        else
+        {
+            if (IperfCmdParams->ipAddr.ipv4 == 0)
+                Report("any");
+            else
+                PrintIPAddress(FALSE, (void*)&IperfCmdParams->ipAddr.ipv4);
+        }
     }
     else
     {
         Report("Client\n\r");
         Report("Client IP: ");
-    }
-
-
-    if(IperfCmdParams->ipv6)
-    {
-        PrintIPAddress(IperfCmdParams->ipv6,
-                       (void*)&IperfCmdParams->ipAddr.ipv6);
-    }
-    else
-    {
-        PrintIPAddress(IperfCmdParams->ipv6,
-                       (void*)&IperfCmdParams->ipAddr.ipv4);
+        if(IperfCmdParams->ipv6)
+            PrintIPAddress(TRUE, (void*)&IperfCmdParams->ipAddr.ipv6);
+        else
+            PrintIPAddress(FALSE, (void*)&IperfCmdParams->ipAddr.ipv4);
     }
 
     Report(lineBreak);
     Report("Dest Port: %d\n\r", IperfCmdParams->destOrLocalPortNumber);
     Report("timeout: %ld\n\r", IperfCmdParams->timeout);
-    Report("period: %ld\n\r", IperfCmdParams->period);
-    Report("bandwidth: %ld Mbps\n\r", IperfCmdParams->bandwidth);
+    if (IperfCmdParams->period)
+        Report("period: %ld sec\n\r", IperfCmdParams->period);
+    else
+        Report("period: none\n\r");
+    if (IperfCmdParams->bandwidth)
+        Report("bandwidth: %ld Mbps\n\r", IperfCmdParams->bandwidth);
+    else
+        Report("bandwidth: default\n\r");
     Report("------------------------------------------------------------\n\r");
     Report("\n\r");
 
     return(0);
 }
 
-#ifdef CC35XX
+
 /*!
     \brief          Parse Set Country Code command.
 
@@ -4286,7 +4458,205 @@ int32_t ParseStopTestIperfCmd(void *arg, stopCmd_t *stopCmd)
 
     return(0);
 }
-#endif
+
+int32_t ParseTlsIperfCmd(void *arg, RecvCmd_t *params)
+{
+    char    cmdStr[CMD_BUFFER_LEN + 1];
+    char   *token   = NULL;
+    char   *ip      = NULL;
+    char   *clientIp = NULL;
+    int8_t  help    = FALSE;
+    int32_t ret     = 0;
+
+    /* defaults */
+    params->server               = FALSE;
+    params->udpFlag              = FALSE;
+    params->ipv6                 = FALSE;
+    params->destOrLocalPortNumber = 5555;
+    params->timeout              = 99999; /* endless */
+    params->period               = 0;
+    params->packetLength         = 0;
+
+    strncpy(cmdStr, (char *)arg, CMD_BUFFER_LEN);
+    cmdStr[CMD_BUFFER_LEN] = '\0';
+    token = strtok(cmdStr, space_str);
+
+    if (token == NULL)
+    {
+        help = TRUE;
+    }
+
+    while (token)
+    {
+        if (!strcmp(token, help_optionStr))
+        {
+            help = TRUE;
+        }
+        else if (!strcmp(token, s_optionStr))
+        {
+            params->server = TRUE;
+        }
+        else if (!strcmp(token, c_optionStr))
+        {
+            ip = strtok(NULL, space_str);
+            if (ip != NULL && clientIp == NULL)
+            {
+                clientIp = os_malloc(strlen(ip) + 1);
+                os_memcpy(clientIp, ip, strlen(ip) + 1);
+            }
+            else
+            {
+                Report("\n\r[cmd Parser] : Invalid IP\n\r");
+                if (clientIp)
+                    os_free(clientIp);
+                return -1;
+            }
+        }
+        else if (!strcmp(token, p_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->destOrLocalPortNumber = (uint32_t)atoi(token);
+            }
+        }
+        else if (!strcmp(token, t_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->timeout = (uint32_t)atol(token);
+            }
+        }
+        else if (!strcmp(token, i_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->period = (uint8_t)atoi(token);
+            }
+        }
+        else if (!strcmp(token, l_optionStr))
+        {
+            token = strtok(NULL, space_str);
+            if (token)
+            {
+                params->packetLength = (uint32_t)atol(token);
+            }
+        }
+        else if (!strcmp(token, V_optionStr))
+        {
+            params->ipv6 = TRUE;
+        }
+
+        token = strtok(NULL, space_str);
+    }
+
+    if (help)
+    {
+        printTestTlsIperfUsage(arg);
+        return -1;
+    }
+
+    if (params->ipv6)
+    {
+        if (!IS_IPV6G_ACQUIRED(app_CB.Status) &&
+            !IS_IPV6L_ACQUIRED(app_CB.Status) &&
+            !IS_STA_CONNECTED(app_CB.Status) &&
+            !IS_AP_CONNECTED(app_CB.Status))
+        {
+            Report("\n\r[cmd Parser] : (error) Cannot send data if device is disconnected.\n\r");
+            if (clientIp) os_free(clientIp);
+            return -1;
+        }
+    }
+    else
+    {
+        if (!IS_IP_ACQUIRED(app_CB.Status) &&
+            !IS_STA_CONNECTED(app_CB.Status) &&
+            !IS_AP_CONNECTED(app_CB.Status))
+        {
+            Report("\n\r[cmd Parser] : (error) Cannot send data if device is disconnected.\n\r");
+            if (clientIp) os_free(clientIp);
+            return -1;
+        }
+    }
+
+    if (!params->server && clientIp == NULL)
+    {
+        Report("\n\r[cmd Parser] : (error) use -s (server) or -c <ip> (client)\n\r");
+        return -1;
+    }
+
+    if (clientIp != NULL)
+    {
+        if (params->ipv6) {
+            ret = ipv6AddressParse(clientIp, (uint8_t *)&params->ipAddr.ipv6);
+        } else {
+            ret = ipv4AddressParse(clientIp, (uint32_t *)&params->ipAddr.ipv4);
+        }
+        os_free(clientIp);
+
+        if (ret < 0)
+        {
+            Report("\n\r[cmd Parser] : Invalid IP\n\r");
+            return -1;
+        }
+    }
+
+    Report("\n\r");
+    Report("------------------------------------------------------------\n\r");
+    Report("Protocol : TLS\n\r");
+    if (params->server)
+    {
+        Report("Mode     : Server\n\r");
+        Report("Bind IP  : ");
+        if (params->ipv6)
+        {
+            uint8_t zeros[16] = {0};
+            if (memcmp(params->ipAddr.ipv6, zeros, 16) == 0)
+                Report("any");
+            else
+                PrintIPAddress(TRUE, (void *)&params->ipAddr.ipv6);
+        }
+        else
+        {
+            if (params->ipAddr.ipv4 == 0)
+                Report("any");
+            else
+                PrintIPAddress(FALSE, (void *)&params->ipAddr.ipv4);
+        }
+        Report(lineBreak);
+    }
+    else
+    {
+        Report("Mode     : Client\n\r");
+        Report("Server IP: ");
+        if (params->ipv6)
+            PrintIPAddress(TRUE, (void *)&params->ipAddr.ipv6);
+        else
+            PrintIPAddress(FALSE, (void *)&params->ipAddr.ipv4);
+        Report(lineBreak);
+    }
+    Report("Port     : %u\n\r", (unsigned)params->destOrLocalPortNumber);
+    Report("Duration : %u sec\n\r", (unsigned)params->timeout);
+    if (!params->server)
+    {
+        if (params->packetLength)
+            Report("Chunk    : %u bytes\n\r", (unsigned)params->packetLength);
+        else
+            Report("Chunk    : default\n\r");
+    }
+    if (params->period)
+        Report("Interval : %u sec\n\r", (unsigned)params->period);
+    else
+        Report("Interval : none\n\r");
+    Report("------------------------------------------------------------\n\r");
+    Report("\n\r");
+
+    return 0;
+}
+
 
 
 
@@ -4708,83 +5078,6 @@ int32_t ParseSetDhcpServerCmd(char *arg,
 
     return 0;
 }
-/*!
-    \brief          Parse Role Down AP command.
-
-    This routine takes a RoleDownApCmd_t structure, and fill it's content with
-    parameters taken from command line. It checks the parameters validity.
-    In case of a parsing error or invalid parameters,
-    this function prints help menu.
-
-    \param          arg            -   Points to command line buffer.
-                                       Contains the command line typed by user.
-
-    \param          RoleDownApParams - Points to command structure provided
-                                       by the connect callback.
-                                       This structure will later be read by
-                                       the Role Down AP callback.
-
-    \return         Upon successful completion, the function shall return 0.
-                    In case of failure, this function would print error,
-                    and show the set Start AP command help menu.
-
-    \sa             printWlanRoleDownApUsage
- */
-//int32_t ParseRoleDownApCmd(void *arg, RoleDownApCmd_t *RoleDownApParams)
-//{
-//    char    cmdStr[CMD_BUFFER_LEN + 1];
-//    char    *token;
-//    char    *ssid = NULL;
-//
-//    strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
-//    cmdStr[CMD_BUFFER_LEN] = '\0';
-//    token = strtok(cmdStr, space_str);
-//
-//    if(token == NULL)
-//    {
-//        help = TRUE;
-//    }
-//
-//    while(token)
-//    {
-//        if(!strcmp(token, help_optionStr))
-//        {
-//            help = TRUE;
-//        }
-//        else if(!strcmp(token, s_optionStr))
-//        {
-//            ssid = strtok(NULL, "\"");
-//        }
-//        else
-//        {
-//            SHOW_WARNING(-1, CMD_ERROR);
-//            help = TRUE;
-//            break;
-//        }
-//        token = strtok(NULL, space_str);
-//    }
-//    if(help)
-//    {
-//        printWlanRoleDownApUsage(arg);
-//        return(-1);
-//    }
-//
-//    if((NULL == ssid) || (strlen(ssid) >= SL_WLAN_SSID_MAX_LENGTH))
-//    {
-//        Report(
-//            "\r\n [Cmd Parser] : invalid Parameter for SSID - Should be max"
-//            " 31 characters.\n\r");
-//        printWlanRoleDownApUsage(arg);
-//        return(-1);
-//    }
-//    else
-//    {
-//        RoleDownApParams->ssid = (uint8_t *)os_zalloc(strlen(ssid)+1,sizeof(uint8_t));
-//        strcpy((char *)StartApParams->ssid, ssid);
-//    }
-//
-//    return(0);
-//}
 
 
 /*!
@@ -5200,16 +5493,20 @@ int32_t ParseBleConnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type)
 
     if(!addrTypeStr)
     {
-        UART_PRINT("\r\n[Cmd Parser] : Invalid address type. Format PUBLIC or RANDOM\n\r");
-        return (-1);
+        *addr_type = 0xFF; //UNKNOWN
     }
     else if(!strcmp(addrTypeStr, PUBLIC_str))
     {
-        *addr_type = 0;
+        *addr_type = 0; //PUBLIC
     }
     else if(!strcmp(addrTypeStr, RANDOM_str))
     {
-        *addr_type = 1;
+        *addr_type = 1; //RANDOM
+    }
+    else
+    {
+        UART_PRINT("\r\n[Cmd Parser] : Invalid address type. Format PUBLIC or RANDOM\n\r");
+        return (-1);
     }
 
     return(0);
@@ -5230,12 +5527,11 @@ int32_t ParseBleConnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type)
 
     \sa             cmdBleDisconnectCallback
  */
-int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type)
+int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr)
 {
     char       cmdStr[CMD_BUFFER_LEN + 1];
     char       *token = NULL;
     char       *bdAddressStr = NULL;
-    char       *addrTypeStr = NULL;
     int16_t    ret = 0;
     uint8_t    help = FALSE;
 
@@ -5254,10 +5550,6 @@ int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type)
         if(!strcmp(token, b_optionStr))
         {
             bdAddressStr = strtok(NULL, space_str);
-        }
-        else if(!strcmp(token, t_optionStr))
-        {
-            addrTypeStr = strtok(NULL, space_str);
         }
         else
         {
@@ -5278,20 +5570,6 @@ int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type)
     {
         UART_PRINT("\r\n[Cmd Parser] : Invalid BdAddress. Format xx:xx:xx:xx:xx:xx\n\r");
         return (-1);
-    }
-
-    if(!addrTypeStr)
-    {
-        UART_PRINT("\r\n[Cmd Parser] : Invalid address type. Format PUBLIC or RANDOM\n\r");
-        return (-1);
-    }
-    else if(!strcmp(addrTypeStr, PUBLIC_str))
-    {
-        *addr_type = 0;
-    }
-    else if(!strcmp(addrTypeStr, RANDOM_str))
-    {
-        *addr_type = 1;
     }
 
     return(0);
@@ -6137,6 +6415,7 @@ int32_t macAddressParse(char *str,
 
     \sa             cmdStartApWpsCallback
  */
+#ifndef TI_STA_ONLY_BUILD
 int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession)
 {
     char    cmdStr[CMD_BUFFER_LEN + 1];
@@ -6243,6 +6522,9 @@ int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession)
 
     \sa             cmdSetWpsApPinCallback
  */
+#endif
+
+#ifndef TI_STA_ONLY_BUILD
 int32_t ParseSetWpsApPinCmd(void *arg, WlanSetWpsApPinParam_t *wpsApPin)
 {
     char    cmdStr[CMD_BUFFER_LEN + 1];
@@ -6307,6 +6589,7 @@ int32_t ParseSetWpsApPinCmd(void *arg, WlanSetWpsApPinParam_t *wpsApPin)
 
     return(0);
 }
+#endif
 #endif
 
 #ifdef SNTP_SUPPORT
@@ -6468,9 +6751,14 @@ int32_t ParseSetDateTimeCmd(void *arg, uint32_t* pYear, uint32_t* pMonth,
             {
                 dateTimeStr = os_zalloc(DATE_TIME_STR_SIZE);
                 os_memcpy(dateTimeStr , pDateTime, DATE_TIME_STR_SIZE);
-                sscanf(dateTimeStr, "%d-%d-%dT%d:%d:%d", (int *)pYear, (int *)pMonth, (int *)pDay,
+                int parsed = sscanf(dateTimeStr, "%d-%d-%dT%d:%d:%d", (int *)pYear, (int *)pMonth, (int *)pDay,
                        (int *)pHour, (int *)pMinute, (int *)pSecond);
                 os_free(dateTimeStr);
+                if (parsed != 6)
+                {
+                    Report("\n\r[cmd Parser] : Invalid date/time format\n\r");
+                    return(-1);
+                }
 
             }
             else
@@ -6559,7 +6847,7 @@ int32_t ParseLoadCartificateCmd(void *arg, LoadCertiCmd_t *loadCertificate)
     char    *token = NULL;
     uint8_t help = FALSE;
     uint8_t type;
-    uint32_t size;
+    uint32_t size = 0;
 
     strncpy(cmdStr, (char*) arg, CMD_BUFFER_LEN);
     cmdStr[CMD_BUFFER_LEN] = '\0';

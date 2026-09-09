@@ -58,53 +58,6 @@
     #define APPLICATION_VERSION     (version_upper_mac)
 #endif
 
-#define FRAME_LENGTH                (1000)
-#define OPEN_SOCK_ONCE              (-2)
-#define ALWAYS_OPEN_SOCK            (-1)
-
-/* IP Address Configuration */
-#define STATIC_IP                   (0)
-#define DHCP_MODE                   (1)
-
-/* USER's defines */
-/* options-> UseCase_SLEEP, UseCase_AlwaysConnected */
-#define PM_USECASE                  UseCase_AlwaysConnected
-
-/* options-> UseCase_Normal, UseCase_CustomDTIM */
-#define AC_USECASE                  UseCase_Normal
-
-/* options -> SocketType_UDP , SocketType_TCP */
-#define SOCKET_TYPE                 SocketType_UDP
-#define PORT                        (5001)
-#define DEST_IP_ADDR                "192.168.1.100"
-
-/* relevant for Static IP mode */
-#define SRC_IP_ADDR                 "192.168.1.10"
-#define GATEWAY_IP_ADDR             "192.168.1.1"
-#define SUBNET_MASK                 "255.255.255.0"
-
-#define NUM_OF_PKT                  (1)
-
-/* options -> STATIC_IP, DHCP_MODE */
-#define IP_ADDR_ALLOC_MODE          DHCP_MODE
-
-#define NOT_ACTIVE_DURATION_MSEC    (5000)  /* 5 seconds */
-#define SLEEP_IDLE_TIME_MSEC        (5000)  /* 5 seconds */
-#define LSI_MIN_DURATION_IN_MSEC    (100)
-#define LSI_MAX_DURATION_IN_MSEC    (2000)
-#define ELP_MIN_DURATION_IN_MSEC    (100)
-#define ELP_MAX_DURATION_IN_MSEC    (255000)
-
-/* Tag setting defines */
-#define CCA_BYPASS                  (1)
-#define TAG_FRAME_TRANSMIT_RATE     (6)
-#define TAG_FRAME_TRANSMIT_POWER    (7)
-#define TAG_CHANNEL                 (1)
-
-/* Stack size in bytes */
-#define TASKSTACKSIZE               (4096)
-#define SPAWN_TASK_PRIORITY         (9)
-
 //*****************************************************************************
 // Typedefs
 //*****************************************************************************
@@ -145,6 +98,7 @@ typedef struct _PowerMeasure_AppData_t_
     uint16_t                       securityType;       /* WiFi security type (WLAN_SEC_TYPE_*) */
     /* BLE parameters */
     uint32_t                       bleAdvInterval_us;  /* BLE advertisement interval in us */
+    bool                           bleDeleteBonds;     /* Delete all bond info on BLE start */
 }PowerMeasure_AppData;
 
 //*****************************************************************************
@@ -152,7 +106,7 @@ typedef struct _PowerMeasure_AppData_t_
 //*****************************************************************************
 
 void *mainThread(void *arg0);
-void NetworkStatusCallback(WlanRole_e roleid, uint32_t address);
+void NetworkStatusCallback(WlanRole_e roleid, uint32_t address, uint32_t local_ipv6[4], uint32_t global_ipv6[4]);
 void WlanStackEventHandler(WlanEvent_t *pWlanEvent);
 int32_t displayBanner(void);
 void startMeasureBanner(void);

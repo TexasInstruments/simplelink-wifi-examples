@@ -52,9 +52,14 @@
 #include "lwip/dhcp.h"
 #include "lwip/autoip.h"
 #include "lwip/pbuf.h"
+#include "lwip/sockets.h"
+#include "lwip/nd6.h"
+#include "lwip/ip6_addr.h"
+NETIF_DECLARE_EXT_CALLBACK(netif_ipv6_callback)
 
 /* lwIP netif includes */
 #include "lwip/etharp.h"
+#include "lwip/ethip6.h"
 #include "netif/ethernet.h"
 
 #include "lwip/dhcp.h"
@@ -214,16 +219,62 @@ const char static_mask[4]   = {255,255,255,0};
 
 
 struct netif staif = {0};
-struct netif apif = { .ip_addr.addr = PP_HTONL(LWIP_MAKEU32(10, 0, 0, 3)),
-                      .netmask.addr = PP_HTONL(LWIP_MAKEU32(255, 255, 255, 0)),
-                      .gw.addr      = PP_HTONL(LWIP_MAKEU32(10, 0, 0, 3)) };
+struct netif apif = { .ip_addr.u_addr.ip4.addr = PP_HTONL(LWIP_MAKEU32(10, 0, 0, 3)),
+                      .netmask.u_addr.ip4.addr = PP_HTONL(LWIP_MAKEU32(255, 255, 255, 0)),
+                      .gw.u_addr.ip4.addr      = PP_HTONL(LWIP_MAKEU32(10, 0, 0, 3)) };
 extern appControlBlock app_CB;
 
+/* Tracks whether STA has acquired an IP address. For STATIC mode: set to 1 when IP configured
+ * via menu to prevent erroneous DHCP restart on link-up. For DHCP: set to 0 on true disconnect
+ * (link_callback DOWN) to allow DHCP restart on reconnect. WPA3 EAP rekey link flaps occur at
+ * driver level and do NOT trigger link_callback, so isIpAcquired remains stable during rekey. */
 static uint32_t isIpAcquired;
 static uint8_t sta_ip_mode = IP_DHCP;
+static uint32_t last_reported_ipv4;  /* Track last reported IPv4 to suppress duplicate status prints */
+static uint8_t last_dhcp_waiting_printed;  /* Suppress repetitive "Waiting for DHCP" messages */
 static uint8_t ap_ip_mode = IP_DHCP;
-static void (*extra_status_callback)(WlanRole_e roleid, uint32_t address);
+static void (*extra_status_callback)(WlanRole_e roleid, uint32_t address, uint32_t local_ipv6[4], uint32_t global_ipv6[4]);
+static uint8_t ipv6_callback_registered = 0;
 
+static sys_sem_t sta_ip_config_done;
+
+/* Deferred gratuitous ARP callback: fires after EAPOL HW blocks are freed.
+ * Used when static IP is already set before connection, or as a reliable
+ * fallback on link-up. The delay ensures EAPOL TX completes first. */
+#define GRAT_ARP_DEFER_MS         200
+#define STA_IP_CONFIG_TIMEOUT_MS  15000  /* max wait for IP config signal before returning to caller */
+static void deferred_gratuitous_arp_cb(void *arg)
+{
+    struct netif *netif = (struct netif *)arg;
+    if (netif && netif_is_up(netif) && netif_is_link_up(netif) &&
+        !ip4_addr_isany(netif_ip4_addr(netif)))
+    {
+        etharp_gratuitous(netif);
+    }
+}
+static uint8_t sta_ip_config_sem_initialized = 0;
+static uint8_t waiting_for_sta_ip_config = 0;
+static sys_mutex_t sta_ip_config_mutex;
+static uint8_t sta_ip_config_mutex_initialized = 0;
+
+struct netif *network_netif_find_by_ip6(const uint8_t *ip6_bytes)
+{
+    /* Link-local addresses (fe80::/10) are scoped to a single interface.
+     * Search all netifs for the one that owns the given IPv6 address.
+     * Returns that netif so the caller can use it for zone assignment
+     * (ip6_addr_assign_zone) or scope_id (sin6_scope_id = netif->num + 1).
+     * Falls back to the STA netif if no match is found. */
+    struct netif *n;
+    int idx;
+    for (n = netif_list; n != NULL; n = n->next) {
+        for (idx = 0; idx < LWIP_IPV6_NUM_ADDRESSES; idx++) {
+            if (memcmp(n->ip6_addr[idx].u_addr.ip6.addr, ip6_bytes, 16) == 0) {
+                return n;
+            }
+        }
+    }
+    return (struct netif *)network_get_sta_if();
+}
 
 int update_arp(void* ip_addr)
 {
@@ -271,63 +322,211 @@ int update_arp(void* ip_addr)
     return result;
 }
 
+#define IPV6_RA_TIMEOUT_MS  10000
+
+static void ipv6_ra_timeout(void *arg)
+{
+    struct netif *netif = (struct netif *)arg;
+    int i;
+    for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+        if ((netif->ip6_addr_state[i] & IP6_ADDR_VALID) &&
+            !ip6_addr_islinklocal(netif_ip6_addr(netif, i))) {
+            return; /* global address already assigned - no need to warn */
+        }
+    }
+    Report("\r\nIPv6: No Router Advertisement received - router may not support IPv6\r\n");
+    Report("IPv6: Only link-local address available, no global IPv6 address will be assigned\r\n");
+
+    /* Signal completion for DHCP mode when RA timeout (no global address) */
+    if (netif == network_get_sta_if() && waiting_for_sta_ip_config &&
+        sta_ip_config_sem_initialized && sta_ip_mode == IP_DHCP) {
+        sys_sem_signal(&sta_ip_config_done);
+        waiting_for_sta_ip_config = 0;
+    }
+}
+
+static void ipv6_addr_state_callback(struct netif *netif,
+                                     netif_nsc_reason_t reason,
+                                     const netif_ext_callback_args_t *args)
+{
+    if (reason & LWIP_NSC_IPV6_ADDR_STATE_CHANGED) {
+        s8_t idx = args->ipv6_addr_state_changed.addr_index;
+        if (netif->ip6_addr_state[idx] & IP6_ADDR_VALID) {
+            char ipv6_str[INET6_ADDRSTRLEN];
+            const char *if_name = (netif == network_get_ap_if()) ? "AP" : "STA";
+            inet_ntop(AF_INET6, (struct in6_addr*)&netif->ip6_addr[idx], ipv6_str, INET6_ADDRSTRLEN);
+            if (ip6_addr_islinklocal(netif_ip6_addr(netif, idx))) {
+                /* On static IP reconnect, status_callback prints IPv4 before link_callback
+                 * initializes IPv6. Reprint the full block with IPv6 now that it is ready. */
+                if (netif == network_get_sta_if() && last_reported_ipv4 != 0) {
+                    Report("\r\n========== IP Configuration ==========\r\n");
+                    Report("Status: CONNECTED (role: STA)\r\n");
+                    Report("IPv4: %s\r\n", ip4addr_ntoa(netif_ip4_addr(netif)));
+                    Report("IPv6: %s (link-local)\r\n", ipv6_str);
+                    Report("=======================================\r\n");
+                } else {
+                    Report("\r\n%s IPv6 Link-local Address: %s\r\n", if_name, ipv6_str);
+                }
+                /* AP is the router - it will never receive an RA from itself, no need to warn */
+                if (netif != network_get_ap_if()) {
+                    /* cancel any pending RA timer before scheduling a new one - state callbacks
+                     * can fire multiple times (tentative->deprecated->preferred) and duplicate
+                     * timers exhaust the MEMP_SYS_TIMEOUT pool */
+                    sys_untimeout(ipv6_ra_timeout, netif);
+                    sys_timeout(IPV6_RA_TIMEOUT_MS, ipv6_ra_timeout, netif);
+                }
+            } else {
+                sys_untimeout(ipv6_ra_timeout, netif);
+                Report("\r\n%s IPv6 Global Address (SLAAC): %s\r\n", if_name, ipv6_str);
+            }
+
+            /* Signal completion when IPv6 global SLAAC address arrives (IPv4 is in DHCP mode) */
+            if (netif == network_get_sta_if() && sta_ip_config_sem_initialized && waiting_for_sta_ip_config &&
+                sta_ip_mode == IP_DHCP && !ip6_addr_islinklocal(netif_ip6_addr(netif, idx))) {
+                sys_sem_signal(&sta_ip_config_done);
+                waiting_for_sta_ip_config = 0;
+            }
+        }
+    }
+}
+
 void status_callback(struct netif *state_netif)
 {
     WlanRole_e roleid = WLAN_ROLE_NONE;
     if(network_get_sta_if() == state_netif)
     {
-        roleid = WLAN_ROLE_STA;
-    }
-    else if (network_get_ap_if() == state_netif)
-    {
-        if (GET_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED))
-        {
-            roleid = WLAN_ROLE_STA;
-        }
-        else
+       //Note: there is no support for STA and P2P CL at the same time.
+       if (GET_STATUS_BIT(app_CB.Status, STATUS_BIT_P2P_GROUP_STARTED) && app_CB.P2pGroupType == P2P_GROUP_TYPE_CLIENT)
         {
             roleid = WLAN_ROLE_AP;
         }
+        else
+        {
+            roleid = WLAN_ROLE_STA;
+        }
+    }
+    else if (network_get_ap_if() == state_netif)
+    {
+        roleid = WLAN_ROLE_AP;
     }
     if (netif_is_up(state_netif))
     {
         const ip4_addr_t *temp;
+        ip6_addr_t local_ipv6 = {0};
+        ip6_addr_t global_ipv6 = {0};
 
         WlanMacAddress_t macAddressParams;
         memset(&macAddressParams, 0, sizeof(WlanMacAddress_t));
 
         macAddressParams.roleType = roleid;
-      
+
         Wlan_Get(WLAN_GET_MACADDRESS, (void *)&macAddressParams);
 
         memcpy(state_netif->hwaddr, macAddressParams.pMacAddress, sizeof (macAddressParams.pMacAddress));
 
         state_netif->hwaddr_len = 6;
+
+        /* Remember whether IPv6 link-local was already configured before this callback.
+         * Used below to signal the DHCP semaphore on re-DHCP cycles where the RA timer
+         * is not re-armed (IPv6 state never transitions through INVALID again). */
+        int ipv6_was_valid = (roleid == WLAN_ROLE_STA) &&
+                             !ip6_addr_isinvalid(netif_ip6_addr_state(state_netif, 0));
+
+        if (roleid == WLAN_ROLE_STA &&
+            ip6_addr_isinvalid(netif_ip6_addr_state(state_netif, 0))) {
+            /* Check address STATE (not value) to catch invalid IPv6 after rekey, where the
+             * address bytes (fe80::) may persist but state is marked INVALID by driver.
+             * EUI-64 is derived from unique MAC so collision is impossible; skip DAD. */
+            netif_create_ip6_linklocal_address(state_netif, 1);
+            netif_ip6_addr_set_state(state_netif, 0, IP6_ADDR_PREFERRED);
+        }
         temp = netif_ip4_addr(state_netif);
+        
+
         if (temp->addr)
         {
             isIpAcquired = 1;
-            Report("\r\nstatus_callback==UP, local interface IP is %s\r\n", ip4addr_ntoa(netif_ip4_addr(state_netif)));
+            /* Print IP config only on IP change. Since link-down always resets last_reported_ipv4
+             * (never triggered by brief rekey flaps), any reconnect with same static IP will still
+             * print because last_reported_ipv4 will be 0 after the disconnect. */
+            if (temp->addr != last_reported_ipv4) {
+                last_reported_ipv4 = temp->addr;
+                last_dhcp_waiting_printed = 0;
+                Report("\r\n========== IP Configuration ==========\r\n");
+                Report("Status: CONNECTED (role: %s)\r\n", roleid == WLAN_ROLE_STA ? "STA" : "AP");
+                Report("IPv4: %s\r\n", ip4addr_ntoa(netif_ip4_addr(state_netif)));
+                if (roleid == WLAN_ROLE_STA) {
+                    int idx, found = 0;
+                    for (idx = 0; idx < LWIP_IPV6_NUM_ADDRESSES; idx++) {
+                        if (netif_ip6_addr_state(state_netif, idx) & IP6_ADDR_VALID) {
+                            char ipv6_str[INET6_ADDRSTRLEN];
+                            inet_ntop(AF_INET6, (struct in6_addr*)&state_netif->ip6_addr[idx], ipv6_str, INET6_ADDRSTRLEN);
+                            if (ip6_addr_islinklocal(netif_ip6_addr(state_netif, idx))) {
+                                os_memcpy(local_ipv6.addr, state_netif->ip6_addr[idx].u_addr.ip6.addr, sizeof(ip6_addr_t));
+                                if (!found) Report("IPv6: ");
+                                Report("%s (link-local)", ipv6_str);
+                            } else {
+                                os_memcpy(global_ipv6.addr, state_netif->ip6_addr[idx].u_addr.ip6.addr, sizeof(ip6_addr_t));
+                                if (!found) Report("IPv6: ");
+                                Report("%s (global)", ipv6_str);
+                            }
+                            if (idx < LWIP_IPV6_NUM_ADDRESSES - 1) Report(" | ");
+                            found = 1;
+                        }
+                    }
+                    if (found) Report("\r\n");
 
+                    /* For STATIC mode, signal when IPv6 is also configured (created in status_callback) */
+                    if (waiting_for_sta_ip_config && sta_ip_config_sem_initialized && sta_ip_mode == IP_STATIC) {
+                        sys_sem_signal(&sta_ip_config_done);
+                        waiting_for_sta_ip_config = 0;
+                    }
+                    /* For DHCP mode on re-DHCP cycles: IPv6 was already valid so ipv6_addr_state_callback
+                     * will not fire for link-local and the RA timer will not be re-armed. Signal here
+                     * directly once the new DHCP address is acquired - IPv6 setup is already complete. */
+                    else if (waiting_for_sta_ip_config && sta_ip_config_sem_initialized &&
+                             sta_ip_mode == IP_DHCP && ipv6_was_valid) {
+                        sys_sem_signal(&sta_ip_config_done);
+                        waiting_for_sta_ip_config = 0;
+                    }
+                }
+                Report("=======================================\r\n");
+            }
+            if (roleid == WLAN_ROLE_STA)
+            {
+                netif_set_default(state_netif);
+            }
             if (app_CB.CON_CB.dhcpIprecvSyncObj)
             {
                 osi_SyncObjSignal(&app_CB.CON_CB.dhcpIprecvSyncObj);
             }
+
         }
         else
         {
-            Report("\n\rIp address was not received!! \r\n");
+            if (!last_dhcp_waiting_printed && sta_ip_mode != IP_STATIC) {
+                Report("\n\rWaiting for DHCP IP address...\r\n");
+                last_dhcp_waiting_printed = 1;
+            }
             isIpAcquired = 0;
+            last_reported_ipv4 = 0;
         }
 
         if (extra_status_callback)
         {
-            extra_status_callback(roleid, temp->addr);
+            extra_status_callback(roleid, temp->addr, local_ipv6.addr, global_ipv6.addr);
         }
     }
     else
     {
-        Report("\n\rstatus_callback==DOWN\r\n");
+        Report("\n\rLink DOWN - Interface disconnected (role: %s)\r\n", roleid == WLAN_ROLE_STA ? "STA" : roleid == WLAN_ROLE_AP ? "AP" : "NONE");
+
+        /* Signal completion for STA when going DOWN in STATIC mode (e.g., invalid IP 0.0.0.0) */
+        if (roleid == WLAN_ROLE_STA && waiting_for_sta_ip_config &&
+            sta_ip_config_sem_initialized && sta_ip_mode == IP_STATIC) {
+            sys_sem_signal(&sta_ip_config_done);
+            waiting_for_sta_ip_config = 0;
+        }
     }
 }
 
@@ -371,19 +570,15 @@ void network_recv(WlanRole_e roleId, uint8_t *inBuf, uint32_t inLen)
         return;
     }
 
-    //printBuffer(inBuf,inLen);
     packet = pbuf_alloc(PBUF_RAW , inLen, PBUF_POOL);
     if(!packet){
-        //Report("\n\rRx pbuf_alloc: no storage for allocating packets, DROP");
         return;
     }
     memcpy(packet->payload,inBuf,inLen);
     packet->len = inLen;
     packet->tot_len = inLen;
 
-
     if ((err = tcpip_input(packet, pIf)) != 0) {
-        //Report("\n\rRx pbuf_queue is full: err:%d, DROP", err);
         pbuf_free(packet);
         return;
     }
@@ -391,21 +586,25 @@ void network_recv(WlanRole_e roleId, uint8_t *inBuf, uint32_t inLen)
 
 void link_callback(struct netif *state_netif)
 {
+    struct netif *newif = state_netif;
     WlanRole_e roleid = WLAN_ROLE_NONE;
-    err_t err;
-    if (network_get_sta_if() == state_netif)
+    err_t err = ERR_OK;
+    if (network_get_sta_if() == newif)
     {
         roleid = WLAN_ROLE_STA;
     }
-    else if (network_get_ap_if() == state_netif)
+    else if (network_get_ap_if() == newif)
     {
         roleid = WLAN_ROLE_AP;
     }
-    if (netif_is_link_up(state_netif))
+    if (netif_is_link_up(newif))
     {
         Wlan_EtherPacketRecvRegisterCallback(roleid, network_recv);
         if (roleid == WLAN_ROLE_STA)
         {
+        	/* Only restart DHCP if IP was not acquired. This prevents redundant DHCP requests
+        	 * on spurious link events while connected, but allows recovery after transient
+        	 * link drops (e.g., WPA3 EAP rekeying) where isIpAcquired is cleared on link-down. */
         	if (!isIpAcquired)
         	{
             	Report("\n\r link_callback==UP starting DHCP");
@@ -417,23 +616,71 @@ void link_callback(struct netif *state_netif)
                 if (sta_ip_mode == IP_DHCP)
             	{
             	    err = dhcp_start(state_netif);
-#endif
             	    Report("\n\r DHCP is %d\n\n\r", err);
             	}
-         	}
+                else if (sta_ip_mode == IP_STATIC)
+                {
+                    /* Static IP not yet assigned via set_if_ip (called after connection).
+                     * Schedule deferred ARP anyway - deferred_gratuitous_arp_cb() guards
+                     * against zero IP at fire time, so it only fires after the IP is set.
+                     * This covers the case where network_stack_set_static_ip_if_sta()
+                     * post-config ARP arrives too late relative to the ping window. */
+                    sys_untimeout(deferred_gratuitous_arp_cb, state_netif);
+                    sys_timeout(GRAT_ARP_DEFER_MS, deferred_gratuitous_arp_cb, state_netif);
+                }
+#endif
+        	}
          	else
          	{
-            	etharp_gratuitous(state_netif);
+         	    /* IP already configured (set_if_ip called before connection or on reconnect).
+         	     * isIpAcquired=1 path: but note status_callback often clears isIpAcquired=0
+         	     * before link_callback fires, so in practice this branch may rarely run.
+         	     * The !isIpAcquired+IP_STATIC branch above is the reliable path. */
+         	    if (sta_ip_mode == IP_STATIC &&
+         	        !ip4_addr_isany(netif_ip4_addr(state_netif)))
+         	    {
+         	        sys_untimeout(deferred_gratuitous_arp_cb, state_netif);
+         	        sys_timeout(GRAT_ARP_DEFER_MS, deferred_gratuitous_arp_cb, state_netif);
+         	    }
          	}
-         	
+
+        	/* Reinitialize IPv6 link-local if invalid. Runs for both DHCP and STATIC modes.
+        	 * Checks address STATE (not value) so it correctly fires after rekey, where
+        	 * link-down invalidated the state but left the old fe80:: address value intact. */
+        	if (ip6_addr_isinvalid(netif_ip6_addr_state(state_netif, 0))) {
+        	    netif_create_ip6_linklocal_address(state_netif, 1);
+        	    netif_ip6_addr_set_state(state_netif, 0, IP6_ADDR_PREFERRED);
+        	}
+        	/* Enable IPv6 autoconfiguration now that link is up */
+        	netif_set_ip6_autoconfig_enabled(state_netif, 1);
+
 
         }
         else if (roleid == WLAN_ROLE_AP)
         {
             Report("\n\rlink_callback==UP starting DHCP Server\n\r");
-            dhcps_start(state_netif->ip_addr.addr, state_netif);
-            dhcp_inform(state_netif);
-            etharp_gratuitous(state_netif);
+            dhcps_start(newif->ip_addr.u_addr.ip4.addr, newif);
+            dhcp_inform(newif);
+            etharp_gratuitous(newif);
+
+            if (ip6_addr_isany(netif_ip6_addr(newif, 0))) {
+                /* Link is now up - safe to send MLD reports. EUI-64 is derived from
+                 * the AP's own MAC so collision is impossible; skip DAD. */
+                netif_create_ip6_linklocal_address(newif, 1);
+                netif_ip6_addr_set_state(newif, 0, IP6_ADDR_PREFERRED);
+            }
+
+            char ap_ipv4_str[16];
+            inet_ntop(AF_INET, &state_netif->ip_addr.u_addr.ip4, ap_ipv4_str, sizeof(ap_ipv4_str));
+            Report("\n\r=== Network Configuration (AP) ===\n\r");
+            Report("AP IPv4 Address: %s\n\r", ap_ipv4_str);
+            if (netif_ip6_addr_state(state_netif, 0) & IP6_ADDR_VALID) {
+                char ap_ipv6_str[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET6, (struct in6_addr*)&state_netif->ip6_addr[0], ap_ipv6_str, sizeof(ap_ipv6_str));
+                Report("AP IPv6 Address: %s\n\r", ap_ipv6_str);
+            }
+            Report("Use this address to connect to device servers\n\r");
+            Report("===================================\n\r");
         }
 
        // err = autoip_start(state_netif);
@@ -441,11 +688,36 @@ void link_callback(struct netif *state_netif)
     }
     else
     {
+        sys_untimeout(deferred_gratuitous_arp_cb, state_netif);
         Wlan_EtherPacketRecvRegisterCallback(roleid, NULL);
         if (roleid == WLAN_ROLE_STA)
         {
             dhcp_stop(state_netif);
+            /* Clear isIpAcquired only for DHCP mode to allow DHCP restart on link-up after
+             * transient drops (e.g., WPA3 EAP rekeying). For STATIC mode, keep it set so
+             * link-up takes the else branch (etharp_gratuitous) instead of restarting DHCP. */
+            if (sta_ip_mode == IP_DHCP)
+            {
+                isIpAcquired = 0;
+            }
+            /* Always reset IP tracking on true disconnect. link_callback DOWN is never triggered
+             * by brief rekey flaps (those are handled at higher layers), so any DOWN here is a
+             * real disconnect. Clearing tracking ensures IP config reprints on reconnect, even
+             * if reconnecting with the same static IP address. */
+            last_reported_ipv4 = 0;
+            last_dhcp_waiting_printed = 0;
             Report("DHCP stopped\r\n");
+
+            /* Clear all IPv6 addresses on link-down to prevent stale state after transient
+             * link flaps. Invalidates pre-rekeying IPv6 addresses and cancels pending RA
+             * timeouts to ensure clean IPv6 initialization on link-up. */
+            sys_untimeout(ipv6_ra_timeout, newif);
+            {
+                int idx;
+                for (idx = 0; idx < LWIP_IPV6_NUM_ADDRESSES; idx++) {
+                    netif_ip6_addr_set_state(newif, idx, IP6_ADDR_INVALID);
+                }
+            }
         }
         else if (roleid == WLAN_ROLE_AP)
         {
@@ -511,10 +783,10 @@ err_t network_send(struct netif *netif, struct pbuf *p)
             role = WLAN_ROLE_AP;
         }
 
-        Wlan_EtherPacketSend(role,buff,total_len,0);
-#ifdef CC33XX		
+        Wlan_EtherPacketSend(role, buff, total_len, 0);
+#ifdef CC33XX
         osi_uSleep(10);
-#endif // CC33XX		
+#endif // CC33XX
     }
     if (buff != currentPacket->payload)
     {
@@ -589,6 +861,12 @@ signed char _role_sta_up(struct netif *newif)
     newif->flags               |=  NETIF_FLAG_BROADCAST |
                                    NETIF_FLAG_ETHARP |
                                    NETIF_FLAG_IGMP;
+    newif->output_ip6           = ethip6_output;
+    newif->flags               |=  NETIF_FLAG_MLD6;
+    if (!ipv6_callback_registered) {
+        netif_add_ext_callback(&netif_ipv6_callback, ipv6_addr_state_callback);
+        ipv6_callback_registered = 1;
+    }
 
     if (app_CB.CON_CB.staRoleupSyncObj != NULL)
     {
@@ -617,6 +895,12 @@ signed char _role_ap_up(struct netif *newif)
     newif->flags               |=  NETIF_FLAG_BROADCAST |
                                    NETIF_FLAG_ETHARP |
                                    NETIF_FLAG_IGMP;
+    newif->output_ip6           = ethip6_output;
+    newif->flags               |=  NETIF_FLAG_MLD6;
+    if (!ipv6_callback_registered) {
+        netif_add_ext_callback(&netif_ipv6_callback, ipv6_addr_state_callback);
+        ipv6_callback_registered = 1;
+    }
 
     return 0;
 }
@@ -642,10 +926,33 @@ void tcpip_network_stack_add_if_sta(void *ctx)
 void tcpip_network_stack_remove_if_sta(void *ctx)
 {
     struct netif *pNetIf = &staif;
-    tcpinternal_network_set_down(pNetIf); 
+    tcpinternal_network_set_down(pNetIf);
+
+    /* Clear IP from lwIP after the netif is down so the address change does not trigger
+     * status_callback (lwIP only fires it when netif is UP). Covers both static and DHCP. */
+    dhcp_release_and_stop(pNetIf);
+    netif_set_addr(pNetIf, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+
+    sta_ip_mode = IP_DHCP;
+    isIpAcquired = 0;
+    last_reported_ipv4 = 0;
+    last_dhcp_waiting_printed = 0;
+    waiting_for_sta_ip_config = 0;
+
+    sys_untimeout(ipv6_ra_timeout, pNetIf);
+    if (!netif_is_up(&apif)) {
+        netif_remove_ext_callback(&netif_ipv6_callback);
+        ipv6_callback_registered = 0;
+    }
     etharp_cleanup_netif(pNetIf);
     netif_remove(pNetIf);
     osi_SyncObjSignal(&app_CB.CON_CB.staRoledownSyncObj);
+
+    if (netif_is_up(&apif))
+    {
+        netif_set_default(&apif);
+    }
+
 }
 
 void tcpip_network_stack_add_if_ap(void *ctx)
@@ -655,15 +962,22 @@ void tcpip_network_stack_add_if_ap(void *ctx)
     struct netif *pNetIf = network_get_ap_if();
     if (!netif_is_up(pNetIf))
     {
-        ipaddr.addr = pNetIf->ip_addr.addr;
-        netmask.addr = pNetIf->netmask.addr;
-        gw.addr = pNetIf->gw.addr;
+        ipaddr.addr = pNetIf->ip_addr.u_addr.ip4.addr;
+        netmask.addr = pNetIf->netmask.u_addr.ip4.addr;
+        gw.addr = pNetIf->gw.u_addr.ip4.addr;
 
         os_memset(pNetIf, 0, sizeof(struct netif));
 
         netif_add(pNetIf, &ipaddr, &netmask, &gw, NULL, _role_ap_up, tcpip_input);
         netif_set_addr(pNetIf, &ipaddr, &netmask, &gw);
         netif_set_ipaddr(pNetIf, &ipaddr);
+        netif_set_up(pNetIf);
+
+        if(!netif_is_up(&staif))
+        {
+            netif_set_default(pNetIf);
+        }
+
     }
 }
 
@@ -671,6 +985,11 @@ void tcpip_network_stack_remove_if_ap(void *ctx)
 {
     struct netif *pNetIf = &apif;
     tcpinternal_network_set_down(pNetIf);
+
+    if (!netif_is_up(&staif)) {
+        netif_remove_ext_callback(&netif_ipv6_callback);
+        ipv6_callback_registered = 0;
+    }
     netif_remove(pNetIf);
 }
 
@@ -783,6 +1102,10 @@ void network_stack_set_sta_ip_mode(uint32_t mode)
     sta_ip_mode = mode;
 }
 
+/* Set static IP address for STA interface with synchronous handshake.
+ * Blocks until lwIP completes the IP configuration (netif UP) to ensure
+ * address is stable before caller proceeds (e.g., wlan_set_if_ip command).
+ * This prevents ping failures where the address wasn't yet applied to the netif. */
 void network_stack_set_static_ip_if_sta(uint32_t ip, uint32_t netmask, uint32_t gw)
 {
     ip4_addr_t ip_addr = { .addr = ip };
@@ -792,15 +1115,64 @@ void network_stack_set_static_ip_if_sta(uint32_t ip, uint32_t netmask, uint32_t 
 
     if (pNetIf)
     {
+        /* Initialize semaphore and mutex for synchronizing static IP configuration handshake */
+        if (!sta_ip_config_sem_initialized) {
+            sys_sem_new(&sta_ip_config_done, 0);
+            sys_mutex_new(&sta_ip_config_mutex);
+            sta_ip_config_sem_initialized = 1;
+            sta_ip_config_mutex_initialized = 1;
+        }
+
+        /* Serialize concurrent callers - only one IP-config handshake in flight at a time */
+        sys_mutex_lock(&sta_ip_config_mutex);
+
         LOCK_TCPIP_CORE();
 
-        dhcp_release(pNetIf);
-        dhcp_stop(pNetIf);
+        /* Use atomic release_and_stop to prevent race between clearing DHCP state and IP application */
+        dhcp_release_and_stop(pNetIf);
+
+        /* When ip=0 (clearing the address between connections) restore DHCP mode so that
+         * the next link_callback UP calls dhcp_start, sending DHCP DISCOVER broadcasts.
+         * Those broadcasts are DATA frames that go through the AP's bridge and trigger
+         * source-learning, refreshing the FDB entry to the current 802.11 association.
+         * This restores the 3.0.10.25 behaviour where DHCP mode was always active at
+         * link-up time because sta_ip_mode tracking did not exist yet.
+         * When ip!=0 (assigning a real address) we switch to STATIC as before. */
+        network_stack_set_sta_ip_mode(ip != 0 ? IP_STATIC : IP_DHCP);
+
+        /* isIpAcquired=1 prevents link-up from restarting DHCP on reconnect with static IP.
+         * isIpAcquired=0 allows link-up to start DHCP (sends DISCOVERs that refresh AP FDB). */
+        isIpAcquired = (ip != 0) ? 1 : 0;
+
+        /* Signal status_callback to expect IP config notification for this call */
+        if (ip != 0) {
+            waiting_for_sta_ip_config = 1;
+        }
+
+        /* dhcp_release_and_stop() returns early (no-op) when DHCP state is already OFF, which
+         * is the case after a previous static IP call. If the desired IP is the same as the
+         * current one, lwIP will skip the status_callback because it detects no address change,
+         * and the semaphore will never be signaled. Clear the address first to force a real
+         * address transition that fires the callback. */
+        if (ip != 0 && netif_ip4_addr(pNetIf)->addr == ip) {
+            netif_set_addr(pNetIf, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+        }
+
         netif_set_addr(pNetIf, &ip_addr, &netmask_addr, &gw_addr);
 
-        network_stack_set_sta_ip_mode(IP_STATIC);
-
         UNLOCK_TCPIP_CORE();
+
+        /* Synchronous wait: block until status_callback signals static IP is applied (netif UP).
+         * This ensures netif address is stable before returning to caller (e.g., ping after connect).
+         * Skip for ip=0 (clearing IP during potential link-down) to prevent deadlock. */
+        if (ip != 0) {
+            if (sys_arch_sem_wait(&sta_ip_config_done, STA_IP_CONFIG_TIMEOUT_MS) == SYS_ARCH_TIMEOUT) {
+                Report("\r\n[ERROR] set_static_ip: timed out waiting for IP config signal\r\n");
+                waiting_for_sta_ip_config = 0;
+            }
+        }
+
+        sys_mutex_unlock(&sta_ip_config_mutex);
     }
 }
 
@@ -809,6 +1181,17 @@ void network_stack_set_dynamic_ip_if_sta()
     struct netif *pNetIf = network_get_sta_if();
     if (pNetIf)
     {
+        /* Initialize semaphore and mutex if not already done */
+        if (!sta_ip_config_sem_initialized) {
+            sys_sem_new(&sta_ip_config_done, 0);
+            sys_mutex_new(&sta_ip_config_mutex);
+            sta_ip_config_sem_initialized = 1;
+            sta_ip_config_mutex_initialized = 1;
+        }
+
+        /* Serialize concurrent callers - only one IP-config handshake in flight at a time */
+        sys_mutex_lock(&sta_ip_config_mutex);
+
         LOCK_TCPIP_CORE();
 
         dhcp_stop(pNetIf);
@@ -816,11 +1199,38 @@ void network_stack_set_dynamic_ip_if_sta()
 
         netif_set_addr(pNetIf, NULL, NULL, NULL);
 
+        network_stack_set_sta_ip_mode(IP_DHCP);
+        waiting_for_sta_ip_config = 1;
+
         dhcp_start(pNetIf);
 
-        network_stack_set_sta_ip_mode(IP_DHCP);
-
         UNLOCK_TCPIP_CORE();
+
+        if (!netif_is_link_up(pNetIf))
+        {
+            Report("\n\rDHCP mode configured. Device is not connected to an AP yet.\n\r");
+            Report("DHCP will start automatically when you connect to an AP.\n\r");
+            sys_mutex_unlock(&sta_ip_config_mutex);
+            return;
+        }
+        /* Wait for IPv4 DHCP to acquire an address. IPv6 uses SLAAC (RA-based), not DHCP. */
+        if (sys_arch_sem_wait(&sta_ip_config_done, STA_IP_CONFIG_TIMEOUT_MS) == SYS_ARCH_TIMEOUT) {
+            Report("\r\n[ERROR] set_dynamic_ip: timed out waiting for IPv4 DHCP config signal\r\n");
+            waiting_for_sta_ip_config = 0;
+        }
+
+        /* Send gratuitous ARP only after STA is connected and DHCP address is stable.
+         * By the time sys_sem_wait() returns here, the 4-way handshake is complete and
+         * EAPOL HW blocks are free - DHCP acquisition takes several seconds post-connect. */
+        if (netif_is_up(pNetIf) && netif_is_link_up(pNetIf) &&
+            !ip4_addr_isany(netif_ip4_addr(pNetIf)))
+        {
+            LOCK_TCPIP_CORE();
+            etharp_gratuitous(pNetIf);
+            UNLOCK_TCPIP_CORE();
+        }
+
+        sys_mutex_unlock(&sta_ip_config_mutex);
     }
 }
 
@@ -836,7 +1246,8 @@ void network_stack_set_static_ip_if_ap(uint32_t ip, uint32_t netmask, uint32_t g
         LOCK_TCPIP_CORE();
 
         netif_set_addr(pNetIf, &ip_addr, &netmask_addr, &gw_addr);
-                
+        network_stack_set_ap_ip_mode(IP_STATIC);
+
         UNLOCK_TCPIP_CORE();
     }
 }
@@ -874,16 +1285,18 @@ int8_t network_stack_set_dhcp_server_if_ap(int enable)
     {
         return -1;
     }
-    
+
     LOCK_TCPIP_CORE();
 
     if (enable)
     {
-        dhcps_start(pNetIf->ip_addr.addr, pNetIf);
+        dhcps_start(pNetIf->ip_addr.u_addr.ip4.addr, pNetIf);
+        Report("\n\rDHCP Server: IPv4 DHCP enabled\n\r");
     }
     else
     {
         dhcps_stop();
+        Report("\n\rDHCP Server: IPv4 DHCP disabled\n\r");
     }
 
     UNLOCK_TCPIP_CORE();
@@ -951,7 +1364,7 @@ int8_t network_stack_get_if_ip(WlanRole_e role, uint32_t *ip, uint32_t *netmask,
     return 0;
 }
 
-void network_stack_register_extra_status_callback(void (*callback)(WlanRole_e, uint32_t))
+void network_stack_register_extra_status_callback(void (*callback)(WlanRole_e, uint32_t, uint32_t[4], uint32_t[4]))
 {
     extra_status_callback = callback;
 }

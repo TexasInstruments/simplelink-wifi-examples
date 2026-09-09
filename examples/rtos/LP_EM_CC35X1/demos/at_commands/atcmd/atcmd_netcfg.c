@@ -1047,8 +1047,8 @@ int32_t ATCmdNetcfg_setDhcpServerCallback(void *arg)
     }
 
     lease.enable = TRUE;
-    lease.start_ip.addr = htonl(startIp);
-    lease.end_ip.addr = htonl(endIp);
+    lease.start_ip.u_addr.ip4.addr = htonl(startIp);
+    lease.end_ip.u_addr.ip4.addr = htonl(endIp);
     
     ret = wifi_softap_set_dhcps_lease(&lease);
     if (ret == TRUE) // Address config succeeded - now set lease time
@@ -1165,8 +1165,8 @@ int32_t ATCmdNetcfg_getDhcpServerCallback(void *arg)
     }
 
     params->leaseTime = wifi_softap_get_dhcps_lease_time();
-    params->startAddress = lease.start_ip.addr;
-    params->endAddress = lease.end_ip.addr;
+    params->startAddress = lease.start_ip.u_addr.ip4.addr;
+    params->endAddress = lease.end_ip.u_addr.ip4.addr;
 
     ATCmd_okResult();
     ATCmd_commandResult(ATCmdNetcfg_getDhcpServerResults, params, 0);

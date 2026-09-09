@@ -96,9 +96,10 @@
 #define DTM_MOD_INDEX_STANDARD                 (0x00)
 #define DTM_MOD_INDEX_STABLE                   (0x01)
 
-/* Channel range */
-#define DTM_CHANNEL_MIN                        (0)
-#define DTM_CHANNEL_MAX                        (39)
+/* RF channel range */
+#define DTM_RF_CHANNEL_MIN                     (0)
+#define DTM_RF_CHANNEL_MAX                     (39)
+#define DTM_RF_CHANNEL_BASE_FREQ_MHZ           (2402)
 
 /* Test data length range */
 #define DTM_DATA_LEN_MIN                       (0)

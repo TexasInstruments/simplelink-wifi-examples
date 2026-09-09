@@ -42,6 +42,9 @@
 #include "network_lwip.h"
 
 #include "lwip/opt.h"
+#if LWIP_ND6_TCP_REACHABILITY_HINTS
+#include "lwip/nd6.h"
+#endif
 #include "lwip/sys.h"
 #include "lwip/tcp.h"
 #include "lwip/tcpip.h"
@@ -49,17 +52,32 @@
 #include "lwip/tcp.h"
 #include "lwip/ip_addr.h"
 #include "lwip/tcpbase.h"
+#include "lwip/ip6_addr.h"
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 46
+#endif
 #include "lwip_iperf_examples.h"
 
-
-#ifdef CC35XX
 
 
 #define IPERF_LWIP_CLIENT_DURATION_MS 10000 // Test duration (10 seconds)
 
 #define IPERF_LWIP_MAX_FORMAT_RATE_LENGTH  20
 
-#define SEND_BUFFER_SIZE 1460
+#define SEND_BUFFER_SIZE      1460
+#define SEND_BUFFER_SIZE_IPV6 1440  /* 1500 MTU - 40 IPv6 - 20 TCP */
+
+/* iperf2 TCP client_hdr sent as the first 24 bytes of the stream.
+ * The server reads this before starting its measurement.
+ * All fields are big-endian (network byte order). */
+typedef struct {
+    int32_t  flags;        /* feature flags; 0 = plain client, no extended header */
+    int32_t  numThreads;   /* number of parallel streams */
+    int32_t  mPort;        /* destination port */
+    int32_t  bufferlen;    /* buffer length (0 = server default) */
+    int32_t  mWindowSize;  /* window size (0 = server default) */
+    int32_t  mAmount;      /* negative = timed test in 1/100 s units; positive = byte count */
+} iperf2_tcp_hdr_t;
 
 
 extern session_conn_t iperf_session[];
@@ -67,14 +85,17 @@ extern session_conn_t iperf_session[];
 // Forward declarations
 static err_t iperflwip_tcp_session_conected(void *arg, struct tcp_pcb *tpcb, err_t err);
 static err_t lwiperf_tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len);
+static err_t iperflwip_tcp_client_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 static void iperflwip_client_tcp_init(void *param);
+
 err_t iperflwip_tcp_client_tx(session_conn_t* session_con);
+static void iperf_report_timer_cb(TimerHandle_t t);
+static void iperflwip_report(void *arg);
 
 extern void format_bps(double bps, char *output, size_t size);
 extern void iperflwip_tcp_stop(void *arg, uint8_t isError);
 extern void iperflwip_tcp_err(void *arg, err_t err);
 extern err_t lwiperf_tcp_poll(void *arg, struct tcp_pcb *tpcb);
-static void iperflwip_client_tcp_os_timer_callback(union sigval sv);
 
 extern unsigned char send_buffer[];
 
@@ -87,23 +108,34 @@ static void iperflwip_client_tcp_init(void *param)
     session_con->actualTestdurationMs = 0;
     session_con->actualNumOfDurations = 0;
     session_con->conn_pcb_tcp = NULL;
-    session_con->os_timer = 0;
+    session_con->report_task_handle = NULL;
     session_con->total_bytes = 0;
     session_con->bytes_per_period = 0;
     session_con->poll_count = 0;
     session_con->previous_time = osi_GetTimeMS();
     session_con->start_time = osi_GetTimeMS();
 
-    session_con->dest_ip.addr = htonl((unsigned int )session_con->lwipConfig.ipAddr.ipv4);
-
-    session_con->conn_pcb_tcp = tcp_new_ip_type(IPADDR_TYPE_V4);
+    if (session_con->lwipConfig.ipv6) {
+        memcpy(&session_con->dest_ip.u_addr.ip6, session_con->lwipConfig.ipAddr.ipv6, 16);
+        session_con->dest_ip.type = IPADDR_TYPE_V6;
+        ip6_addr_assign_zone(&session_con->dest_ip.u_addr.ip6, IP6_UNICAST,
+                             network_netif_find_by_ip6((const uint8_t *)session_con->dest_ip.u_addr.ip6.addr));
+        session_con->conn_pcb_tcp = tcp_new_ip_type(IPADDR_TYPE_V6);
+    } else {
+        session_con->dest_ip.u_addr.ip4.addr = htonl((unsigned int )session_con->lwipConfig.ipAddr.ipv4);
+        session_con->conn_pcb_tcp = tcp_new_ip_type(IPADDR_TYPE_V4);
+    }
     if (session_con->conn_pcb_tcp == NULL) {
-        Report("\n\riperflwip_client: ERROR ! Failed to create pcb\n");
+        Report("\n\riperflwip_client: ERROR ! Failed to create pcb (free heap: %u bytes)\n", (unsigned)osi_GetFreeHeapSize());
         session_con->is_running = false;
         return;
     }
 
-    err = tcp_bind(session_con->conn_pcb_tcp, IP4_ADDR_ANY4, 0);
+    if (session_con->lwipConfig.ipv6) {
+        err = tcp_bind(session_con->conn_pcb_tcp, IP6_ADDR_ANY, 0);
+    } else {
+        err = tcp_bind(session_con->conn_pcb_tcp, &ip_addr_any, 0);
+    }
     if(err != ERR_OK){
         Report("\n\riperflwip_client: ERROR ! tcp_bind, port is in use\n");
         tcp_close(session_con->conn_pcb_tcp);
@@ -114,12 +146,10 @@ static void iperflwip_client_tcp_init(void *param)
     tcp_nagle_disable(session_con->conn_pcb_tcp);
     tcp_arg(session_con->conn_pcb_tcp, session_con);
     tcp_err(session_con->conn_pcb_tcp, iperflwip_tcp_err);
+    tcp_recv(session_con->conn_pcb_tcp, iperflwip_tcp_client_recv);
     tcp_sent(session_con->conn_pcb_tcp, lwiperf_tcp_client_sent);
     tcp_poll(session_con->conn_pcb_tcp, lwiperf_tcp_poll, 100U);
-
-    tcp_nagle_disable(session_con->conn_pcb_tcp);
-
-    tcp_setprio(session_con->conn_pcb_tcp, TCP_PRIO_MAX);       
+    tcp_setprio(session_con->conn_pcb_tcp, TCP_PRIO_MAX);
 
 
     err = tcp_connect(session_con->conn_pcb_tcp, &session_con->dest_ip, session_con->lwipConfig.destOrLocalPortNumber, iperflwip_tcp_session_conected);
@@ -134,8 +164,7 @@ static void iperflwip_client_tcp_init(void *param)
 err_t iperflwip_tcp_session_conected(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
     session_conn_t* session_con = arg;
-    struct sigevent         event;
-    char ip[INET_ADDRSTRLEN] = {0};
+    char ip[INET6_ADDRSTRLEN] = {0};
     uint32_t ipAddress = 0;
 
 
@@ -150,10 +179,20 @@ err_t iperflwip_tcp_session_conected(void *arg, struct tcp_pcb *tpcb, err_t err)
         return err;
     }
 
-    ipAddress = htonl((unsigned int )session_con->lwipConfig.ipAddr.ipv4);
-    inet_ntop(AF_INET, &ipAddress, ip, INET_ADDRSTRLEN);
+    if (session_con->lwipConfig.ipv6) {
+        /* TCP_MSS=1460 is configured for IPv4 (1500 - 20 IPv4 - 20 TCP).
+         * For IPv6 the header is 40 bytes, so max payload = 1440.
+         * Clamp the negotiated MSS so tcp_output never creates oversized frames. */
+        if (tpcb->mss > SEND_BUFFER_SIZE_IPV6) {
+            tpcb->mss = SEND_BUFFER_SIZE_IPV6;
+        }
+        inet_ntop(AF_INET6, (struct in6_addr*)session_con->lwipConfig.ipAddr.ipv6, ip, INET6_ADDRSTRLEN);
+    } else {
+        ipAddress = htonl((unsigned int )session_con->lwipConfig.ipAddr.ipv4);
+        inet_ntop(AF_INET, &ipAddress, ip, INET_ADDRSTRLEN);
+    }
     Report("\n\riperflwip_client: Connected to %s port %d\n\r", ip,
-           session_con->conn_pcb_tcp->local_port);
+           session_con->conn_pcb_tcp->remote_port);
 
 
     session_con->total_bytes = 0;
@@ -172,30 +211,63 @@ err_t iperflwip_tcp_session_conected(void *arg, struct tcp_pcb *tpcb, err_t err)
         session_con->actualTestdurationMs = session_con->lwipConfig.timeout*1000;//sec to ms
     }
 
-    event.sigev_notify = SIGEV_THREAD;
-    event.sigev_value.sival_ptr = session_con;
-    event.sigev_notify_function = iperflwip_client_tcp_os_timer_callback;
-    event.sigev_notify_attributes = NULL;
-
-
-    // Start test timer
-    timer_create(CLOCK_REALTIME, &event, &session_con->os_timer);
-
-
-    if (session_con->os_timer != 0) {
-        struct itimerspec       its = {0};
-        its.it_value.tv_sec = (session_con->actualTestdurationMs / 1000);
-        its.it_value.tv_nsec = (session_con->actualTestdurationMs % 1000)*1000000; // expiration
-        timer_settime(session_con->os_timer, 0, &its, NULL);
-    }
-    else {
-        Report("\n\riperflwip_client: ERROR ! fail to create timer");
+    if (session_con->lwipConfig.period > 0)
+    {
+        session_con->report_task_handle = xTimerCreate("tcp_cli_rpt",
+            pdMS_TO_TICKS(session_con->actualTestdurationMs),
+            pdTRUE, session_con, iperf_report_timer_cb);
+        if (session_con->report_task_handle)
+            xTimerStart(session_con->report_task_handle, 0);
     }
 
     session_con->previous_time = osi_GetTimeMS();
     session_con->start_time = osi_GetTimeMS();
+
+    {
+        iperf2_tcp_hdr_t hdr;
+        int32_t amount;
+
+        if (session_con->lwipConfig.timeout >= 99999) {
+            amount = htonl(-(int32_t)(IPERF_LWIP_CLIENT_DURATION_MS / 10));
+        } else {
+            amount = htonl(-(int32_t)(session_con->lwipConfig.timeout * 100));
+        }
+
+        hdr.flags       = htonl(0);
+        hdr.numThreads  = htonl(1);
+        hdr.mPort       = htonl((int32_t)session_con->lwipConfig.destOrLocalPortNumber);
+        hdr.bufferlen   = htonl(0);
+        hdr.mWindowSize = htonl(0);
+        hdr.mAmount     = amount;
+
+        /* Header must be the first bytes the server receives; abort if write fails. */
+        if (tcp_write(tpcb, &hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY) != ERR_OK) {
+            tcp_abort(tpcb);
+            session_con->conn_pcb_tcp = NULL;
+            session_con->is_running = false;
+            return ERR_ABRT;
+        }
+    }
+
     iperflwip_tcp_client_tx(session_con);
 
+    return ERR_OK;
+}
+
+
+/* Discard any data the server sends back (e.g. iperf headers or FIN).
+ * Without this callback lwIP calls tcp_abort, sending RST and triggering tcp_err. */
+static err_t iperflwip_tcp_client_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+{
+    session_conn_t *session_con = (session_conn_t *)arg;
+
+    if (p == NULL) {
+        /* Server closed connection */
+        iperflwip_tcp_stop(session_con, 0);
+        return ERR_OK;
+    }
+    tcp_recved(tpcb, p->tot_len);
+    pbuf_free(p);
     return ERR_OK;
 }
 
@@ -211,6 +283,14 @@ static err_t lwiperf_tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len)
 
     session_con->poll_count = 0;
 
+#if LWIP_IPV6 && LWIP_ND6_TCP_REACHABILITY_HINTS
+    /* tcp_in.c calls nd6_reachability_hint(ip6_current_src_addr()) but that address
+     * has no zone set (raw from packet header), so the destination cache lookup fails
+     * and the neighbor goes STALE.  Use the zoned address we stored at connect time. */
+    if (session_con->lwipConfig.ipv6) {
+        nd6_reachability_hint(&session_con->dest_ip.u_addr.ip6);
+    }
+#endif
 
     return iperflwip_tcp_client_tx(session_con);
 }
@@ -221,20 +301,24 @@ err_t iperflwip_tcp_client_tx(session_conn_t* session_con) {
     err_t err = ERR_OK;
     struct tcp_pcb * tpcb = session_con->conn_pcb_tcp;
 
+    if (!session_con->is_running || tpcb == NULL) {
+        return ERR_OK;
+    }
+
+    u16_t max_pkt = session_con->lwipConfig.ipv6 ? SEND_BUFFER_SIZE_IPV6 : SEND_BUFFER_SIZE;
     u16_t packetLength;
-    if (session_con->lwipConfig.packetLength > 0) 
+    if (session_con->lwipConfig.packetLength > 0)
     {
         packetLength = (u16_t)session_con->lwipConfig.packetLength;
 
-        if (packetLength > SEND_BUFFER_SIZE)
+        if (packetLength > max_pkt)
         {
-            packetLength = SEND_BUFFER_SIZE;
+            packetLength = max_pkt;
         }
     }
     else
     {
-        // Default length
-        packetLength = SEND_BUFFER_SIZE;
+        packetLength = max_pkt;
     }
 
     while (err == ERR_OK && tcp_sndbuf(tpcb) > 0) {
@@ -246,21 +330,29 @@ err_t iperflwip_tcp_client_tx(session_conn_t* session_con) {
             len = packetLength;
         }
 
-
-        err = tcp_write(tpcb, send_buffer, len, 0);
+        /* TCP_WRITE_FLAG_COPY is mandatory here: without it lwIP holds a
+         * pointer to send_buffer and may access it after this call returns,
+         * causing a data abort exception. */
+        err = tcp_write(tpcb, send_buffer, len, TCP_WRITE_FLAG_COPY);
         if (err == ERR_OK) {
             session_con->packet_count++;
             session_con->total_bytes += len;
             session_con->bytes_per_period += len;
-            // You can add optional logic here to track bytes sent
         } else if (err == ERR_MEM) {
             // Can't send more now, will try again in sent callback
+            break;
         }
     }
-    //tcp_output(tpcb);  // Flush the data
+
+    tcp_output(tpcb);
     return ERR_OK;
 }
 
+
+static void iperf_report_timer_cb(TimerHandle_t t)
+{
+    tcpip_callback(iperflwip_report, pvTimerGetTimerID(t));
+}
 
 // Timer expired -> test done
 static void iperflwip_report(void* arg)
@@ -270,6 +362,11 @@ static void iperflwip_report(void* arg)
     double secondsFromStart, durationInSecond;
     uint32_t current_time;
     double bps = 0.0;
+
+    char tag[24];
+    snprintf(tag, sizeof(tag), "[TCP:%u] [%d]",
+             (unsigned)session_con->lwipConfig.destOrLocalPortNumber,
+             session_con->process_num);
 
     if (session_con->is_running && session_con->conn_pcb_tcp != NULL) {
 
@@ -285,7 +382,7 @@ static void iperflwip_report(void* arg)
             }
 
             format_bps(bps,ratestr, sizeof(ratestr));
-            Report("\n\r[%d] %s",session_con->process_num,ratestr);
+            Report("\n\r%s %s", tag, ratestr);
 
         }
 
@@ -295,18 +392,12 @@ static void iperflwip_report(void* arg)
         if (!session_con->is_req_to_abort_test && ((session_con->lwipConfig.timeout >= 99999) ||
                 (session_con->lwipConfig.timeout*1000 > (session_con->actualTestdurationMs* session_con->actualNumOfDurations))))
         {
-            //trigger the timer again
-            struct itimerspec       its = {0};
-            its.it_value.tv_sec = (session_con->actualTestdurationMs / 1000);
-            its.it_value.tv_nsec = (session_con->actualTestdurationMs % 1000)*1000000; // expiration
-            timer_settime(session_con->os_timer, 0, &its, NULL);
+            /* timer is auto-reload - nothing to do */
         }
         else
         {
             uint32_t  curr_time = osi_GetTimeMS();
             secondsFromStart = ((double)(curr_time - session_con->start_time));
-            Report("\n\riperflwip: [%d] TCP client Test finished",session_con->process_num);
-
             if(secondsFromStart > 0)
             {
                 secondsFromStart=secondsFromStart/1000.0;
@@ -318,8 +409,13 @@ static void iperflwip_report(void* arg)
                 bps = 0;
                 snprintf(ratestr, sizeof(ratestr), "0 bps");
             }
-            Report("\n\riperf TCP client :  %lu total bytes duration :%lu sec", (unsigned long )session_con->total_bytes,(unsigned long )secondsFromStart);
-            Report("\t %s \n", ratestr);
+            Report("\n\r%s Test complete  %lu bytes  %.2f sec  %s",
+                   tag, (unsigned long)session_con->total_bytes, secondsFromStart, ratestr);
+            Report("\n\riperf TCP %s :  %lu total bytes duration :%lu sec  %.2f Mbps",
+                   session_con->is_server ? "server" : "client",
+                   (unsigned long)session_con->total_bytes,
+                   (unsigned long)secondsFromStart,
+                   bps / 1e6);
             iperflwip_tcp_close(session_con);
         }
     }
@@ -330,11 +426,6 @@ static void iperflwip_report(void* arg)
 
 }
 
-
-static void iperflwip_client_tcp_os_timer_callback(union sigval sv)
-{
-    tcpip_callback(iperflwip_report, sv.sival_ptr);
-}
 
 int32_t iperflwip_tcp_client_start(void* args)
 {
@@ -349,7 +440,7 @@ int32_t iperflwip_tcp_client_start(void* args)
             found = TRUE;//found not running process
             os_memset(&iperf_session[i], 0, sizeof(iperf_session[i]));
             iperf_session[i].is_server = 0;
-            iperf_session[i].is_udp = 0;
+            iperf_session[i].proto = IPERF_PROTO_TCP;
             iperf_session[i].process_num = i;
             iperf_session[i].iperf_reportFunc = iperflwip_report;
             iperf_session[i].is_req_to_abort_test = 0;
@@ -377,4 +468,4 @@ int32_t iperflwip_tcp_client_start(void* args)
 }
 
 
-#endif
+

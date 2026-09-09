@@ -11,12 +11,16 @@ const UART21                = UART2.addInstance();
 const LED                   = scripting.addModule("/ti/drivers/apps/LED", {}, false);
 const LED1                  = LED.addInstance();
 const Settings              = scripting.addModule("/ti/posix/freertos/Settings");
+const sps                   = scripting.addModule("/ti/common/sps");
 // @cliArgs --board /ti/boards/LP_EM_CC35X1ET --rtos freertos
 
+
+sps.enableSPS = true;
 /**
  * Write custom configuration values to the imported modules.
  */
 FreeRTOS.useTimeSlicing = true;
+FreeRTOS.timerTaskPriority = 9;
 
 /* Heap size set to 0x00050000 for TLS + OTA buffers */
 FreeRTOS.heapSize       = 0x00050000;

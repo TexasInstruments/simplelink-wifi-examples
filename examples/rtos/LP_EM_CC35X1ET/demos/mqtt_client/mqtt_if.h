@@ -35,48 +35,6 @@
 #include "osi_kernel.h"
 #include "ti_drivers_config.h"
 
-/* The following are example of client and connection structures settings.
- * Note: this is needed only in case the static configuration is not used
- *
- * MQTTClient_Will mqttWillParams =
- * {
- *     MQTT_WILL_TOPIC,    // will topic
- *     MQTT_WILL_MSG,      // will message
- *     MQTT_WILL_QOS,      // will QoS
- *     MQTT_WILL_RETAIN    // retain flag
- * };
-
- * char ClientId[13] = "clientId123";
-
- * MQTT_IF_ClientParams_t mqttClientParams =
- * {
- *     ClientId,                  // client ID
- *    MQTT_CLIENT_USERNAME,      // user name
- *    MQTT_CLIENT_PASSWORD,      // password
- *    MQTT_CLIENT_KEEPALIVE,     // keep-alive time
- *    MQTT_CLIENT_CLEAN_CONNECT, // clean connect flag
- *    MQTT_CLIENT_MQTT_V3_1,     // true = 3.1, false = 3.1.1
- *    MQTT_CLIENT_BLOCKING_SEND, // blocking send flag
- *     &mqttWillParams            // will parameters
- * };
- *
- * char *MQTTClient_secureFiles[1] = {"mosquitto.org.der"};
- *
- * #ifdef MQTT_SECURE_CLIENT
- * #else
- * MQTTClient_ConnParams mqttConnParams =
- * {
- *    MQTT_CONNECTION_FLAGS,         // connection flags
- *    MQTT_CONNECTION_ADDRESS,       // server address
- *    MQTT_CONNECTION_PORT_NUMBER,   // port number of MQTT server
- *    0,                             // method for secure socket
- *    0,                             // cipher for secure socket
- *    0,                             // number of files for secure connection
- *    NULL                           // secure files
- * };
- * #endif
- */
-
 #ifndef MQTT_QOS_0
 #define MQTT_QOS_0  (0)
 #endif

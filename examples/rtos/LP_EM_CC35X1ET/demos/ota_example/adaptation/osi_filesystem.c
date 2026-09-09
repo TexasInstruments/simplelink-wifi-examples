@@ -35,6 +35,12 @@
 #include "ti/common/nv/nvocmp.h"
 #include "ti_flash_map_config.h"
 
+#include "errors.h"
+
+#ifdef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+    #include "containers.h"
+#endif // WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+
 
 /*!
     \brief the below functions are needed for file management of the upper mac.
@@ -64,6 +70,7 @@ typedef enum
 {
     OSI_FILE_CONNECTIVITY_FW_SLOT_1,
     OSI_FILE_CONNECTIVITY_FW_SLOT_2,
+    OSI_FILE_WSOC_VENDOR_IMAGE_EMBEDDED,
     OSI_FILE_CONF,
     OSI_FILE_RAMBTLR,
     OSI_FILE_BLE_OUR_SEC,
@@ -115,6 +122,7 @@ typedef struct
     uint16_t itLen;
 } gpeTlvHeader_t;
 
+
 #define IS_OSI_FILE(osiFileType) ((osiFileType) == OSI_FILE_BLE_OUR_SEC || \
                                     (osiFileType) == OSI_FILE_BLE_PEER_SEC || \
                                     (osiFileType) == OSI_FILE_BLE_CCCD || \
@@ -124,11 +132,14 @@ typedef struct
 
 XMEM_Handle        fwHandle;
 XMEM_Handle        confFileHandle;
-NVINTF_nvFuncts_t *nvFptrs  = NULL;
-uint32_t           Fwslot   = OSI_FLASH_CONNECTIVITY_FW_SLOT_1;
 uint32_t           FwGpeDataOffset = 0x101c;
 uint32_t           confGpeDataOffset = 0;
 
+NVINTF_nvFuncts_t *nvFptrs  = NULL;
+
+#ifndef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+    uint32_t           Fwslot   = OSI_FLASH_CONNECTIVITY_FW_SLOT_1;
+#endif
 
 /******************************************************************************
 
@@ -427,34 +438,48 @@ int32_t getConfContent(XMEM_Handle flashHandle)
     return ret;
 }
 
-
 int ATTRIBUTE osi_fset(osiFileSetType containerType, void *params)
 {
-    if(containerType == OSI_FILESYSTEM_SET_CONNECTIVITY_FW_CONTAINER)
+#ifdef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+    // No meaning for setting/getting FW slot in this case.
+    // We can't OTA the WSOC FW image
+    return WlanError(WLAN_ERROR_SEVERITY__LOW,
+                        WLAN_ERROR_MODULE__COMMANDS,
+                        WLAN_ERROR_TYPE__CMD_NOT_SUPPORTED);
+#else
+    if (containerType == OSI_FILESYSTEM_SET_CONNECTIVITY_FW_CONTAINER)
     {
         osiFlashFwSlot_e osiFlashFwSlot = *(osiFlashFwSlot_e *)params;
-        if(osiFlashFwSlot == OSI_FLASH_CONNECTIVITY_FW_SLOT_1)
+        if (osiFlashFwSlot == OSI_FLASH_CONNECTIVITY_FW_SLOT_1)
         {
             Fwslot = OSI_FLASH_CONNECTIVITY_FW_SLOT_1;
         }
-        else if(osiFlashFwSlot == OSI_FLASH_CONNECTIVITY_FW_SLOT_2)
+        else if (osiFlashFwSlot == OSI_FLASH_CONNECTIVITY_FW_SLOT_2)
         {
             Fwslot = OSI_FLASH_CONNECTIVITY_FW_SLOT_2;
         }
     }
 
     return 0;
+#endif // WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
 }
 
 int ATTRIBUTE osi_fget(osiFileGetType containerType, void *params)
 {
-    if(containerType == OSI_FILESYSTEM_GET_CONNECTIVITY_FW_CONTAINER)
+#ifdef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+    // No meaning for setting/getting FW slot in this case
+    return WlanError(WLAN_ERROR_SEVERITY__LOW,
+                        WLAN_ERROR_MODULE__COMMANDS,
+                        WLAN_ERROR_TYPE__CMD_NOT_SUPPORTED);
+#else
+    if (containerType == OSI_FILESYSTEM_GET_CONNECTIVITY_FW_CONTAINER)
     {
         osiFlashFwSlot_e *osiFlashFwSlot = (osiFlashFwSlot_e *)params;
         *osiFlashFwSlot = Fwslot;
     }
 
     return 0;
+#endif // WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
 }
 
 int ATTRIBUTE osi_fclose(FILE *_fp)
@@ -462,7 +487,7 @@ int ATTRIBUTE osi_fclose(FILE *_fp)
     osiFileP_t *osiFile;
     osiFile = (osiFileP_t *)_fp;
 
-    if(NULL == osiFile)
+    if (NULL == osiFile)
     {
         return 0;
     }
@@ -475,15 +500,15 @@ int ATTRIBUTE osi_fclose(FILE *_fp)
     }
     else if((osiFile->ftype == OSI_FILE_BLE_OUR_SEC) || (osiFile->ftype == OSI_FILE_BLE_PEER_SEC) || (osiFile->ftype == OSI_FILE_BLE_CCCD))
     {
-        if(osiFile->ptr != NULL)
+        if (osiFile->ptr != NULL)
         {
             nvFptrs->deleteItem((*(NVINTF_itemID_t *)osiFile->ptr));
             os_free(osiFile->ptr);
         }
     }
-    else if((osiFile->ftype == OSI_FILE_WLAN_FAST_CONNECT) || (osiFile->ftype == OSI_FILE_WLAN_CONNECTION_POLICY) || (osiFile->ftype == OSI_FILE_WLAN_PROFILE))
+    else if ((osiFile->ftype == OSI_FILE_WLAN_FAST_CONNECT) || (osiFile->ftype == OSI_FILE_WLAN_CONNECTION_POLICY) || (osiFile->ftype == OSI_FILE_WLAN_PROFILE))
     {
-        if(osiFile->ptr != NULL)
+        if (osiFile->ptr != NULL)
         {
             os_free(osiFile->ptr);
         }
@@ -519,28 +544,37 @@ FILE * ATTRIBUTE osi_fopen(const char *_fname, const char *_mode)
     else if(strcmp("fw",_fname) == 0)
     {
         osiFile = os_malloc(sizeof(osiFileP_t));
-        if(Fwslot == OSI_FLASH_CONNECTIVITY_FW_SLOT_1)
+        if (!osiFile)
+        {
+            return NULL;
+        }
+
+#ifdef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+        osiFile->ftype = OSI_FILE_WSOC_VENDOR_IMAGE_EMBEDDED;
+        osiFile->ptr = (void *)gFWbuffer;
+#else
+        if (Fwslot == OSI_FLASH_CONNECTIVITY_FW_SLOT_1)
         {
             osiFile->ftype = OSI_FILE_CONNECTIVITY_FW_SLOT_1;
             params.regionBase =  wifi_connectivity_physical_slot_1_address;
             params.regionStartAddr = wifi_connectivity_logical_slot_1_address;
             params.regionSize = wifi_connectivity_slot_1_region_size;
-            params.deviceNum = 0;
-            fwHandle = XMEMWFF3_open(&params);
         }
-        else if(Fwslot == OSI_FLASH_CONNECTIVITY_FW_SLOT_2)
+        else if (Fwslot == OSI_FLASH_CONNECTIVITY_FW_SLOT_2)
         {
             osiFile->ftype = OSI_FILE_CONNECTIVITY_FW_SLOT_2;
             params.regionBase =  wifi_connectivity_physical_slot_2_address;
             params.regionStartAddr = wifi_connectivity_logical_slot_2_address;
             params.regionSize = wifi_connectivity_slot_2_region_size;
-            params.deviceNum = 0;
-            fwHandle = XMEMWFF3_open(&params);
         }
+        params.deviceNum = 0;
+        fwHandle = XMEMWFF3_open(&params);
         osiFile->ptr = (void *)fwHandle;
+#endif // WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+
         return (FILE *)(osiFile);
     }
-    else if(strcmp("cc35xx-conf",_fname) == 0)
+    else if (strcmp("cc35xx-conf",_fname) == 0)
     {
         osiFile = os_malloc(sizeof(osiFileP_t));
         if (!osiFile)
@@ -666,8 +700,17 @@ size_t ATTRIBUTE osi_fread(void *_ptr, size_t len, size_t offset, FILE *_fp)
         {
             return 0;
         }
+
         return len;
     }
+#ifdef WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
+    else if (osiFile->ftype == OSI_FILE_WSOC_VENDOR_IMAGE_EMBEDDED)
+    {
+        memcpy(_ptr, (void *)((uint32_t)(osiFile->ptr) + offset), len);
+
+        return len;
+    }
+#endif // WSOC_FW_EMBEDDED_IN_VENDOR_IMAGE
     else if ((osiFile->ftype == OSI_FILE_CONNECTIVITY_FW_SLOT_1) ||
              (osiFile->ftype == OSI_FILE_CONNECTIVITY_FW_SLOT_2))
     {
@@ -708,7 +751,6 @@ size_t osi_fwrite(const void *_ptr, size_t _size, size_t _count, FILE *_fp)
 
     if(IS_OSI_FILE(osiFile->ftype))
     {
-        nvFptrs->deleteItem((*(NVINTF_itemID_t *)osiFile->ptr));
         if(nvFptrs->writeItem((*(NVINTF_itemID_t *)osiFile->ptr), _size, (void *)_ptr) == 0)
         {
             return (_size);

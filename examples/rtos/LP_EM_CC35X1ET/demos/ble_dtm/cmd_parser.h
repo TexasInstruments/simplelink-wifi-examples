@@ -134,6 +134,8 @@ typedef struct
     int32_t flags;
     /* Ping stop callback function */
     void (*ping_deinit_callback)(void *args);
+    /* IPv6 flag */
+    uint8_t ipv6;
 }PingParams_t;
 
 typedef struct SendCmd
@@ -284,8 +286,10 @@ int32_t ParseScanCmd
 int32_t ParseGetMacAddressCmd(void *arg,uint32_t *RoleId);
 int32_t ParseConnectCmd (void *arg, ConnectCmd_t *ConnectParams,
         WlanEapConnectParams_t* eapConnectParams, uint8_t* isEnt);
+#ifndef TI_STA_ONLY_BUILD
 int32_t ParseRoleUpApCmd
     (void *arg, RoleUpApCmd_t *RoleUpApParams);
+#endif
 int32_t ParseRoleUpStaCmd
     (void *arg, RoleUpStaCmd_t *RoleUpStaParams);
 int32_t ParseSendCmd
@@ -298,9 +302,12 @@ int32_t ParseStopCmd
 
 int32_t ParseTestIperfCmd(void *arg,  RecvCmd_t *IperfCmdParams);
 int32_t ParseStopTestIperfCmd(void *arg, stopCmd_t *stopCmd);
+int32_t ParseTlsIperfCmd(void *arg, RecvCmd_t *params);
 
 
 int32_t ParseDisconnectCmd(void *arg, uint32_t *RoleId);
+int32_t ParseSetTxPowerCmd(void *arg, WlanTxPowerSet_t *txPowerParams);
+int32_t ParseGetTxPowerCmd(void *arg, WlanTxPowerGet_t *txPowerParams);
 int32_t ParseCmd(void *arg);
 int32_t ParseSetMacAddressCmd(void *arg, uint8_t *pMacAddress, uint32_t*  RoleId);
 int32_t ParseSetWsocPrimaryCmd(void *arg, WlanConnectivityFWSlot_t *WsocSlot);
@@ -311,7 +318,7 @@ int32_t ParseBleAdvEnableCmd(void *arg, ExtAdvEnable_t *advEnable);
 int32_t ParseBleScanCfgCmd(void *arg, ExtScanCfg_t *scanParams);
 int32_t ParseBleScanEnableCmd(void *arg, ExtScanEnable_t *scanEnable);
 int32_t ParseBleConnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type);
-int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr, uint8_t* addr_type);
+int32_t ParseBleDisconnectCmd(void *arg, uint8_t *bd_addr);
 int32_t ParseBleGetBdAddressCmd(void *arg, uint8_t* addr_type);
 int32_t ParseBleSetBdAddressCmd(void *arg, uint8_t* addr_type);
 int32_t ParseBleSetTxPowerCmd(void *arg, uint8_t* powerIndex);
@@ -341,7 +348,9 @@ int32_t ParseCsiSolicSetMacCmd(void *arg, WlanCfgCsiSolSetMac_t* csiSolMacSet);
 
 void FreeConnectCmd(ConnectCmd_t *ConnectParams);
 void FreeProfileCmd(ProfileCmd_t *ProfileParams);
+#ifndef TI_STA_ONLY_BUILD
 void FreeRoleUpApCmd(RoleUpApCmd_t *RoleUpApParams);
+#endif
 
 int32_t ipv6AddressParse(char *str,
                          uint8_t *ipv6ip);
@@ -356,16 +365,18 @@ int32_t macAddressParse(char *str,
                         uint8_t *mac);
 
 #ifdef CC35XX
+#ifndef TI_STA_ONLY_BUILD
 int32_t ParseStartApWpsSessionCmd(void *arg, wlanWpsSession_t *wpsSession);
 
 int32_t ParseSetWpsApPinCmd(void *arg, WlanSetWpsApPinParam_t *wpsApPin);
+#endif
+int32_t ParseRegDomEntrySetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryParams);
+int32_t ParseRegDomEntryGetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryParams);
+#endif
 
 int32_t ParsePingCmd(void *arg,
                      PingParams_t *pingParams);
 int32_t ParsePingStopCmd(void *arg, int8_t *session_id);
-int32_t ParseRegDomEntrySetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryParams);
-int32_t ParseRegDomEntryGetCmd(void *arg, WlanSetRegDomainCustomEntry_t *entryParams);
-#endif
 
 #ifdef CC35XX_INDIGO_APP
 //Indigo 

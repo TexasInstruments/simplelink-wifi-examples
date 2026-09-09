@@ -33,19 +33,15 @@
 #define __DHCPS_H__
 
 #include "lwipopts.h"
+#include "lwip/ip_addr.h"
 
 //#define USE_DNS
 
-/* This is the aligned version of ip_addr_t,
-   used as local variable, on the stack, etc. */
-struct ip_addr {
-  u32_t addr;
-};
-
 struct ip_info {
-    struct ip_addr ip;
-    struct ip_addr netmask;
-    struct ip_addr gw;
+    ip_addr_t ip;
+    ip_addr_t netmask;
+    ip_addr_t gw;
+    ip_addr_t ipv6;
 };
 
 typedef struct dhcps_state{
@@ -70,8 +66,10 @@ typedef struct dhcps_msg {
 #ifndef LWIP_OPEN_SRC
 struct dhcps_lease {
     BOOLEAN enable;
-    struct ip_addr start_ip;
-    struct ip_addr end_ip;
+    ip_addr_t start_ip;
+    ip_addr_t end_ip;
+    ip_addr_t ipv6_start;
+    ip_addr_t ipv6_end;
 };
 
 enum dhcps_offer_option{
@@ -92,11 +90,12 @@ typedef enum {
 } dhcps_state_t;
 
 struct dhcps_pool{
-    struct ip_addr ip;
+    ip_addr_t ip;
     uint8_t mac[6];
     uint32_t lease_timer;
     dhcps_type_t type;
     dhcps_state_t state;
+    ip_addr_t ipv6;
 
 };
 
@@ -159,5 +158,8 @@ BOOLEAN wifi_softap_set_dhcps_lease(struct dhcps_lease *please);
 BOOLEAN wifi_softap_set_dhcps_lease_time(uint32_t minute);
 BOOLEAN wifi_softap_get_dhcps_lease(struct dhcps_lease *please);
 uint32_t wifi_softap_get_dhcps_lease_time(void);
+
+void dhcps_set_ipv6_info(ip_addr_t ipv6);
+void dhcps_get_ipv6_info(ip_addr_t *ipv6);
 
 #endif
